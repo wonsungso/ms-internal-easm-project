@@ -40,6 +40,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.apply:
             cli.run("group", "delete", "--name", group["name"],
                     "--subscription", group["subscription_id"], "--yes")
+            remaining = cli.run("group", "list", "--subscription", group["subscription_id"])
+            if any(row["name"].lower() == group["name"].lower() for row in remaining):
+                raise RuntimeError("삭제 명령 후에도 샘플 그룹이 남아 있습니다.")
+            print(f"삭제 완료 재확인: {group['name']}")
     return 0
 
 

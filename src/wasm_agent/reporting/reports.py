@@ -17,6 +17,7 @@ from wasm_agent.reporting.presentation import (
     metric,
     readable,
 )
+from wasm_agent.reporting.workbook import write_workbook
 from wasm_agent.utils.evidence import redact
 
 
@@ -98,3 +99,4 @@ def write_reports(data: Collection, findings: list[Finding], output: Path, mode:
     document = customer_document(data, findings, output, mode)
     (output / "report.md").write_text("\n".join(document.markdown) + "\n", encoding="utf-8")
     (output / "report.html").write_text(html_document(document), encoding="utf-8")
+    write_workbook(data, findings, output / "report.xlsx", mode)

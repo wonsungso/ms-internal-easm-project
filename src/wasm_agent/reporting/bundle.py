@@ -12,10 +12,11 @@ from urllib.parse import quote
 
 from wasm_agent.evaluators.engine import evidence_refs
 from wasm_agent.models import Collection
+from wasm_agent.reporting.workbook import portable_workbook
 from wasm_agent.utils.evidence import redact
 
 RESULT_FILES = (
-    "report.html", "report.md", "customer_summary.csv", "customer_inventory.csv",
+    "report.html", "report.md", "report.xlsx", "customer_summary.csv", "customer_inventory.csv",
     "inventory.json", "inventory.csv", "collection.json", "findings.json", "summary.csv", "cost_monthly.csv",
 )
 
@@ -75,7 +76,9 @@ def create_bundle(data: Collection, output: Path, mode: str = "live") -> Path:
                 source = output / name
                 if source.is_symlink() or not source.is_file():
                     raise ValueError(f"필수 결과 파일을 확인할 수 없습니다: {name}")
-                if source.suffix == ".json":
+                if source.suffix == ".xlsx":
+                    payload = portable_workbook(source.read_bytes(), replacements)
+                elif source.suffix == ".json":
                     payload = json.dumps(
                         portable(redact(json.loads(source.read_text(encoding="utf-8")))),
                         ensure_ascii=False, indent=2,
@@ -98,6 +101,7 @@ def create_bundle(data: Collection, output: Path, mode: str = "live") -> Path:
                 "# EASM 진단 결과\n\n"
                 "- 압축을 푼 뒤 report.html을 여세요.\n"
                 "- customer_summary.csv와 customer_inventory.csv는 Excel에서 열 수 있습니다.\n"
+                "- report.xlsx는 체크리스트와 원시 데이터의 Excel 테이블입니다.\n"
                 "- evidence 폴더의 API 응답은 마스킹된 증적입니다.\n"
                 "- manifest.json에서 파일 해시와 첨부하지 않은 증거를 확인하세요.\n"
                 "- 인증서·개인키·로그인 캐시·환경 설정·이전 실행 결과는 포함하지 않습니다.\n"

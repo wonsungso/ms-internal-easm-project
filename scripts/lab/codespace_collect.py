@@ -1,0 +1,115 @@
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import shlex
+import subprocess
+import tempfile
+from pathlib import Path
+
+import yaml
+
+from scripts.lab.auth import TemporaryCertificate
+from scripts.lab.run import ROOT, save
+from wasm_agent.utils.settings import load_yaml
+
+WORKSPACE = "/workspaces/ms-internal-wasm-project"
+
+
+def gh(*arguments: str, allowed: tuple[int, ...] = (0,)) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(["gh", *arguments], capture_output=True, text=True, encoding="utf-8", check=False)
+    if result.returncode not in allowed:
+        raise RuntimeError(f"Codespaces 작업 실패: {arguments[0:2]}, exit={result.returncode}; 원문 비출력")
+    return result
+
+
+def run(codespace: str) -> None:
+    if not re.fullmatch(r"[a-z0-9-]+", codespace):
+        raise ValueError("유효한 Codespace 이름이 필요합니다.")
+    setup = json.loads((ROOT / "output" / "setup.json").read_text(encoding="utf-8"))
+    lab = json.loads((ROOT / "output" / "lab.json").read_text(encoding="utf-8"))
+    settings = load_yaml(ROOT / "config" / "config.yaml")
+    settings.update({
+        "tenant_id": setup["tenant_id"], "expected_principal_id": setup["principal_id"],
+        "subscriptions": [],
+        "evidence_dir": WORKSPACE + "/evidence",
+        "projects": [{"subscription_id": setup["subscription_ids"][0],
+                      "resource_id": lab["project_id"], "endpoint": lab["project_endpoint"]}],
+    })
+    for key in ("allowed_models_file", "criteria_file", "tag_conventions_file"):
+        settings[key] = WORKSPACE + "/config/" + Path(settings[key]).name
+    directory = gh("codespace", "ssh", "-c", codespace, "--",
+                   "umask 077; mktemp -d /home/vscode/wasm-agent-auth-XXXXXXXX").stdout.strip()
+    if not re.fullmatch(r"/home/vscode/wasm-agent-auth-[A-Za-z0-9]{8}", directory):
+        raise RuntimeError("Codespace의 보호된 임시 경로를 확인할 수 없습니다.")
+    remote_cleanup = False
+    code = None
+    try:
+        with tempfile.TemporaryDirectory(prefix="wasm-agent-config-") as local:
+            config = Path(local) / "collection.yaml"
+            config.write_text(yaml.safe_dump(settings, allow_unicode=True), encoding="utf-8")
+            with TemporaryCertificate(setup) as environment:
+                try:
+                    for source, name in [(Path(environment["AZURE_CLIENT_CERTIFICATE_PATH"]), "credential.pem"),
+                                         (config, "collection.yaml")]:
+                        gh("codespace", "cp", "-c", codespace, "--", "-O", str(source),
+                           "remote:" + directory + "/" + name)
+                    command = (
+                        f"set -eu; chmod 600 {directory}/credential.pem {directory}/collection.yaml; "
+                        f"cd {WORKSPACE}; set +e; env -u AZURE_CLIENT_SECRET -u AZURE_FEDERATED_TOKEN_FILE "
+                        f"-u AZURE_CLIENT_CERTIFICATE_PASSWORD "
+                        f"AZURE_TENANT_ID={shlex.quote(setup['tenant_id'])} "
+                        f"AZURE_CLIENT_ID={shlex.quote(setup['client_id'])} "
+                        f"AZURE_CLIENT_CERTIFICATE_PATH={directory}/credential.pem "
+                        f".venv/bin/wasm-agent collect --config {directory}/collection.yaml "
+                        "--all-subscriptions --output-dir output/codespace-e2e; "
+                        'code=$?; printf "\\nWASM_COLLECTION_EXIT=%s\\n" "$code"; '
+                        'test "$code" -eq 0 || test "$code" -eq 2'
+                    )
+                    result = gh("codespace", "ssh", "-c", codespace, "--", command)
+                    marker = re.search(r"^WASM_COLLECTION_EXIT=([02])$", result.stdout, re.MULTILINE)
+                    if marker is None:
+                        raise RuntimeError("Codespaces 수집 종료 상태를 확인하지 못했습니다.")
+                    code = int(marker[1])
+                    print(result.stdout, end="")
+                finally:
+                    gh("codespace", "ssh", "-c", codespace, "--",
+                       f"rm -f {directory}/credential.pem {directory}/collection.yaml; rmdir {directory}")
+                    remote_cleanup = True
+        # Download the exact result filenames returned by a directory listing, never arbitrary shell globs.
+        listing = gh("codespace", "ssh", "-c", codespace, "--",
+                     f"find {WORKSPACE}/output/codespace-e2e -maxdepth 1 -name 'wasm-agent-results-*.zip' -printf '%f\\n'")
+        names = [name for name in listing.stdout.splitlines()
+                 if re.fullmatch(r"wasm-agent-results-[0-9TZ]+-[0-9a-f]{6}\.zip", name)]
+        if not names:
+            raise RuntimeError("Codespaces의 실제 결과 ZIP을 찾을 수 없습니다.")
+        destination = ROOT / "output" / "codespace-e2e"
+        destination.mkdir(exist_ok=True)
+        for name in names:
+            gh("codespace", "cp", "-c", codespace, "--", "-O",
+               f"remote:{WORKSPACE}/output/codespace-e2e/{name}", str(destination / name))
+        save(ROOT / "output" / "codespace-e2e-verification.json", {
+            "codespace": codespace, "collection_exit_code": code, "all_subscriptions": True,
+            "remote_private_key_cleaned": remote_cleanup, "temporary_certificate_cleaned": True,
+            "archives": names, "administrator_collection_fallback": False,
+        })
+    finally:
+        if not remote_cleanup:
+            gh("codespace", "ssh", "-c", codespace, "--",
+               f"rm -f {directory}/credential.pem {directory}/collection.yaml; rmdir {directory}")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="승인된 단기 인증서로 Codespaces 실제 진단 및 인증 재료 정리")
+    parser.add_argument("--codespace", required=True)
+    parser.add_argument("--apply", action="store_true")
+    args = parser.parse_args()
+    if not args.apply:
+        parser.error("인증서 전달에는 승인 확인 --apply가 필요합니다.")
+    run(args.codespace)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -482,7 +482,8 @@ def html_document(doc: Document) -> str:
         ".record{padding-left:24px}summary{cursor:pointer;font-weight:600;overflow-wrap:anywhere}"
         "details{background:#f7f9fc;padding:16px;margin:12px 0}code{overflow-wrap:anywhere}"
         "a{color:#064faa}</style></head><body><main>"
-        "<nav aria-label='결과 파일'><a href='customer_summary.csv'>관리자용 SE 요약 CSV</a> | "
+        "<nav aria-label='결과 파일'><a href='report.xlsx'>Excel 체크리스트·원시 데이터</a> | "
+        "<a href='customer_summary.csv'>관리자용 SE 요약 CSV</a> | "
         "<a href='customer_inventory.csv'>관리자용 인벤토리 CSV</a> | "
         "<a href='report.md'>문서 보고서</a></nav>"
         + "\n".join(doc.html) + ("</section>" if doc.section_open else "")

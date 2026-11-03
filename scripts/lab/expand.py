@@ -156,7 +156,7 @@ def expand() -> None:
     cli = AzureCLI()
     if cli.run("account", "show")["tenantId"].lower() != setup["tenant_id"]:
         raise RuntimeError("관리자 테넌트가 승인한 셋업과 다릅니다.")
-    receipts = ROOT / "output" / "chatbot-expansion"
+    receipts = ROOT / "output" / "chatbot-expansion" / lab["lab_id"]
     receipts.mkdir(exist_ok=True)
     state_file = receipts / "state.json"
     state = json.loads(state_file.read_text(encoding="utf-8")) if state_file.is_file() else {"foundry": [], "hosts": []}

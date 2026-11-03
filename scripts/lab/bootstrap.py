@@ -103,7 +103,8 @@ def plan(setup: dict[str, Any], options: dict[str, Any]) -> dict[str, Any]:
     region = options["region"]
     if len(setup["subscription_ids"]) != 3:
         raise ValueError("승인된 3개 구독 설정이 필요합니다.")
-    lab_id = hashlib.sha256((setup["tenant_id"] + setup["client_id"]).encode()).hexdigest()[:10]
+    identity = setup["tenant_id"] + setup["client_id"] + str(options.get("generation", ""))
+    lab_id = hashlib.sha256(identity.encode()).hexdigest()[:10]
     groups = [
         {"subscription_id": sid, "name": f"{options['resource_group_prefix']}-{index:02d}",
          "id": f"/subscriptions/{sid}/resourceGroups/{options['resource_group_prefix']}-{index:02d}"}

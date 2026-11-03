@@ -28,7 +28,11 @@ def prepared(tmp_path: Path) -> tuple[Collection, Path, Path]:
         facts={"evidence_directory": str(evidence)},
     )
     for name in RESULT_FILES:
-        if name.endswith(".json"):
+        if name.endswith(".xlsx"):
+            from wasm_agent.reporting.workbook import write_workbook
+
+            write_workbook(data, [], output / name)
+        elif name.endswith(".json"):
             (output / name).write_text(json.dumps({"evidence_refs": [str(source.resolve())]}), encoding="utf-8")
         else:
             (output / name).write_text('<a href="../evidence/run/response.json">증거</a>', encoding="utf-8")
@@ -54,6 +58,15 @@ def test_bundle_is_portable_masked_and_excludes_authentication(tmp_path: Path) -
         assert all(entry["sha256"] for entry in manifest["files"])
         assert str(source).encode() not in bundle.read("inventory.json")
         assert bundle.testzip() is None
+        from io import BytesIO
+
+        from openpyxl import load_workbook
+
+        book = load_workbook(BytesIO(bundle.read("report.xlsx")))
+        values = [cell.value for sheet in book for row in sheet for cell in row if isinstance(cell.value, str)]
+        assert any("evidence/run/response.json" in value for value in values)
+        assert not any(str(source) in value for value in values)
+        assert not any("PRIVATE KEY" in value for value in values)
 
 
 def test_bundle_reports_external_or_missing_references(tmp_path: Path) -> None:

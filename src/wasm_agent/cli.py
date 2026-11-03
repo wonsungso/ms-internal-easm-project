@@ -25,7 +25,12 @@ def main(argv: list[str] | None = None) -> int:
     command = subparsers.add_parser("collect")
     command.add_argument("--config", type=Path, default=Path("config") / "config.yaml")
     command.add_argument("--setup-file", type=Path)
-    command.add_argument("--subscriptions", nargs="+")
+    scope = command.add_mutually_exclusive_group()
+    scope.add_argument("--subscriptions", nargs="+")
+    scope.add_argument(
+        "--all-subscriptions", action="store_true",
+        help="설정 구독 목록 대신 지정 테넌트에서 진단 계정이 접근 가능한 모든 활성 구독 수집",
+    )
     command.add_argument("--tenant-id")
     command.add_argument("--expected-principal-id")
     command.add_argument("--manual-agents", type=Path)
@@ -67,6 +72,8 @@ def main(argv: list[str] | None = None) -> int:
             settings.expected_principal_id = args.expected_principal_id
         if args.subscriptions:
             settings.subscriptions = args.subscriptions
+        elif args.all_subscriptions:
+            settings.subscriptions = []
         if args.manual_agents:
             settings.manual_agents = args.manual_agents
         settings = type(settings).model_validate(settings.model_dump())

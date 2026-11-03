@@ -106,6 +106,17 @@ def test_lab_plan_has_three_scoped_groups_and_no_secret() -> None:
     assert "PRIVATE KEY" not in json.dumps(result)
 
 
+def test_new_generation_changes_resource_names_without_changing_approved_scope() -> None:
+    options = load_yaml(ROOT / "config" / "lab.yaml")
+    original = plan(setup_values(), {key: value for key, value in options.items() if key != "generation"})
+    rebuilt = plan(setup_values(), {**options, "generation": "new-run"})
+    assert original["lab_id"] != rebuilt["lab_id"]
+    assert original["account_name"] != rebuilt["account_name"]
+    assert original["host_names"] != rebuilt["host_names"]
+    assert original["groups"] == rebuilt["groups"]
+    assert original["region"] == rebuilt["region"]
+
+
 def test_administrator_arm_blocks_writes_outside_sample_groups() -> None:
     arm = AdminARM(None, ["/subscriptions/fixture/resourceGroups/owned"])
     with pytest.raises(ValueError, match="승인된 리소스 그룹 밖"):

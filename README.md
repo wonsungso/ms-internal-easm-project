@@ -81,6 +81,7 @@ bash scripts/setup/manage.sh verify \
 ```
 
 - [실제 인증 화면과 연합 인증 안내](docs/sp-authentication.md)를 참고하세요.
+- 인증서가 없다면 [암호화 인증서 생성 명령](docs/sp-authentication.md#인증서-직접-만들기---codespaces-bash)을 사용합니다. 조직의 자체 서명 허용 여부를 먼저 확인하세요.
 - 사람의 Azure CLI 로그인은 `--use-device-code` 방식입니다.
 - 서비스 주체는 인증서/연합 인증으로 실행하며 디바이스 코드로 로그인하지 않습니다.
 
@@ -113,6 +114,17 @@ wasm-agent collect --setup-file output/setup.json \
   --output-dir output
 ```
 
+- 해당 테넌트의 전체 구독을 자동 열거하려면 아래 옵션을 사용합니다.
+  - 설정 파일의 구독 목록을 무시하고 **진단 계정이 접근 가능한 활성 구독 전체**를 수집합니다.
+  - 테넌트 소속이더라도 계정에 읽기 권한이 없는 구독은 발견하거나 수집할 수 없습니다.
+  - 테넌트 전체 가시성이 필요하면 관리자가 구독 목록과 진단 계정의 접근 범위를 대조해야 합니다.
+  - `--subscriptions`와 함께 사용할 수 없습니다.
+
+```bash
+wasm-agent collect --setup-file output/setup.json \
+  --all-subscriptions --output-dir output
+```
+
 - 다른 플랫폼의 수동 등록 정보를 합치려면 `--manual-agents templates/manual_agents.csv`를 추가합니다.
 - 수동 입력은 자동 API 실측과 구분합니다.
 - 전체 필드·수집원·필요 조건은 [수집 항목 목록](docs/collection-items.md)에 정리했습니다.
@@ -122,6 +134,8 @@ wasm-agent collect --setup-file output/setup.json \
 - 먼저 `output/report.html`을 엽니다.
   - Agent 목록, 평가 실행·문항 통과/실패, 판정 근거, 부족한 자료, 다음 조치를 확인합니다.
 - Excel에서는 아래 파일을 엽니다.
+  - `output/report.xlsx`: 체크리스트·Agent 원시 데이터·평가·모델·비용·로그·보안·이슈·증거 참조의 Excel 테이블.
+    - 진단 체크리스트에서 검토 상태와 메모를 직접 기록할 수 있습니다.
   - `output/customer_summary.csv`: 한글 진단 요약.
   - `output/customer_inventory.csv`: 한글 Agent 목록.
 - **다운로드할 파일은 `output/wasm-agent-results-*.zip`입니다.**

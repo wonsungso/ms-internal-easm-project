@@ -57,6 +57,8 @@ def collect_live(setup: dict, lab: dict, cli: AzureCLI, options: dict) -> int:
     with TemporaryCertificate(setup) as environment:
         command = ["-m", "wasm_agent.cli", "collect", "--config", str(config_path),
                    "--output-dir", str(ROOT / "output")]
+        if options.get("collect_all_subscriptions"):
+            command.append("--all-subscriptions")
         code = child(command, environment)
         if code == 1:
             time.sleep(15)

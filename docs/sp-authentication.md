@@ -1,5 +1,38 @@
 # SP 인증 준비 - 실제 화면 안내
 
+## 인증서 직접 만들기 - Codespaces Bash
+
+- 조직 발급 인증서가 있으면 그것을 우선 사용하세요.
+- 조직이 자체 서명 인증서를 허용한 경우만 아래 명령을 사용합니다.
+- 암호는 OpenSSL 프롬프트에 입력하며 명령줄·로그·저장소에 기록하지 않습니다.
+- 새 전용 폴더를 만들고 기존 인증서를 덮어쓰지 않습니다.
+
+```bash
+umask 077
+cert_dir="$(mktemp -d "$HOME/wasm-agent-auth-XXXXXXXX")"
+openssl req -x509 -newkey rsa:3072 -sha256 -days 90 \
+  -subj '/CN=wasm-agent-diagnostic' \
+  -keyout "$cert_dir/private-key.pem" \
+  -out "$cert_dir/public-cert.pem"
+cat "$cert_dir/private-key.pem" "$cert_dir/public-cert.pem" > "$cert_dir/diagnostic.pem"
+chmod 600 "$cert_dir/private-key.pem" "$cert_dir/diagnostic.pem"
+openssl x509 -in "$cert_dir/public-cert.pem" -noout -dates -fingerprint -sha256
+printf '공개 인증서 등록 파일: %s\n' "$cert_dir/public-cert.pem"
+```
+
+- 포털에는 `public-cert.pem`만 등록합니다. `private-key.pem`·`diagnostic.pem`은 업로드하지 않습니다.
+- 인증서 등록 후 환경을 연결합니다.
+
+```bash
+export AZURE_CLIENT_CERTIFICATE_PATH="$cert_dir/diagnostic.pem"
+read -r -s -p 'Certificate password: ' AZURE_CLIENT_CERTIFICATE_PASSWORD
+printf '\n'
+export AZURE_CLIENT_CERTIFICATE_PASSWORD
+```
+
+- 이 인증서는 자동으로 권한을 부여하지 않습니다. 앱의 공개 인증서 등록과 Reader 역할은 별도로 준비합니다.
+- 만료 전에 교체하고 Codespace 삭제 전에 조직의 승인된 방식으로 인증서를 보관하거나 폐기하세요.
+
 - 수집 대상: Microsoft Foundry, Azure 자체 호스팅 Agent, Azure Monitor, 비용·보안 권고.
 
 - **인증서와 연합 인증 중 한 가지만 준비합니다.** 관리자 셋업에서 생성하거나 지정한 진단 앱을 사용합니다.
