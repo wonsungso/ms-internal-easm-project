@@ -7,7 +7,7 @@
 - **승인**
   - 내용: Korea Central, 검증 USD 100, 합성 입력의 GlobalStandard 처리, 샘플 유지
 - **배포**
-  - 내용: 별도 리소스 그룹 3개. Foundry/모델 1곳, 실제 LangChain 도구 Agent 호스팅 2곳
+  - 내용: 별도 소유 태그가 있는 데모 리소스 그룹. Foundry와 자체 호스팅 Agent를 분리
 - **권한**
   - 내용: 관리자 bootstrap이 배포, 진단 SP는 Reader 및 필요한 제한적 읽기 역할만
 - **인증**
@@ -81,4 +81,4 @@ python -m scripts.lab.summarize
 python -m scripts.lab.cleanup
 ```
 
-- 실제 삭제는 별도 승인 후 `--apply --confirm-lab-id '<lab_id>'`를 명시해야 합니다. 설정에서 계산한 3개 그룹의 테넌트·소유 태그를 모두 검사한 뒤 해당 샘플 그룹만 삭제합니다. 기존 앱/SP·역할 정의와 다른 고객 리소스는 삭제하지 않습니다.
+- 실제 삭제는 별도 승인 후 `--apply --confirm-lab-id '<lab_id>'`를 명시해야 합니다. 설정에서 계산한 그룹의 테넌트·소유 태그를 모두 검사한 뒤 해당 샘플 그룹만 삭제합니다. 기존 앱/SP·역할 정의와 다른 고객 리소스는 삭제하지 않습니다.

@@ -35,7 +35,7 @@
 ```bash
 export WASM_AGENT_PYTHON=python
 bash scripts/setup/manage.sh verify \
-  --certificate-path 'C:\secure\diagnostic.pem'
+  --certificate-path "$HOME/.config/wasm-agent/diagnostic.pem"
 ```
 
 - 암호화 인증서의 암호 입력은 [셋업 안내](../scripts/setup/README.md#3-sp-인증---최초-1회-고객-작업)를 참고하세요. 테넌트·Client ID·Principal ID·구독은 `output/setup.json`에서 자동 전달합니다.

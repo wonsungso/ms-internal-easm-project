@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import hashlib
 import html
-import json
+import os
 import re
 from collections import Counter
 from pathlib import Path, PureWindowsPath
 from typing import Any
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 from wasm_agent.models import AgentEvidence, Collection, EvaluationRun, Finding
 from wasm_agent.utils.evidence import redact
@@ -244,10 +243,10 @@ class Document:
                                  f"<a href='{link}'>마스킹된 파일 열기</a></li>")
             else:
                 self.markdown.append(
-                    f"- 증거: <code>{html.escape(label)}</code> - 안전한 로컬 파일 연결 불가"
+                    f"- 증거: <code>{html.escape(label)}</code> - 파일 확인불가 - 안전한 로컬 파일 연결 불가"
                 )
                 self.html.append(f"<li><code>{html.escape(label)}</code>"
-                                 " - 안전한 로컬 파일 연결 불가</li>")
+                                 " - 파일 확인불가 - 안전한 로컬 파일 연결 불가</li>")
         self.markdown.append("")
         self.html.append("</ul>")
         self.end_details()
@@ -275,7 +274,7 @@ class EvidenceLinks:
         if reference in self.cache:
             return self.cache[reference]
         self.cache[reference] = None
-        if not self.safe(reference):
+        if self.root is None or not self.root.is_dir() or not self.safe(reference):
             return None
         path = Path(reference)
         # Reject Windows drive-relative paths, including on non-Windows test hosts.
@@ -283,26 +282,18 @@ class EvidenceLinks:
         if windows.drive and not windows.is_absolute():
             return None
         candidates = [path] if path.is_absolute() else [
-            self.output / path, *([self.root / path] if self.root else []),
+            self.output / path, self.root / path,
             Path.cwd() / path,
         ]
         for candidate in candidates:
-            resolved = candidate.resolve()
-            roots = [self.output, *([self.root] if self.root else [])]
-            if not any(resolved.is_relative_to(root) for root in roots):
-                continue
-            if resolved.suffix.lower() != ".json" or not resolved.is_file():
-                continue
             try:
-                payload = redact(json.loads(resolved.read_text(encoding="utf-8")))
-                digest = hashlib.sha256(str(resolved).encode()).hexdigest()[:24]
-                relative = f"evidence/{digest}.json"
-                target = self.output / "evidence" / f"{digest}.json"
-                # Do not follow a pre-existing output symlink outside the report.
-                if not target.resolve().is_relative_to(self.output):
-                    return None
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+                resolved = candidate.resolve()
+                if not resolved.is_relative_to(self.root):
+                    continue
+                if resolved.suffix.lower() != ".json" or not resolved.is_file():
+                    continue
+                # Only canonical, root-validated files can produce a parent-relative href.
+                relative = quote(Path(os.path.relpath(resolved, self.output)).as_posix(), safe="/")
             except (OSError, ValueError):
                 continue
             self.cache[reference] = relative
@@ -462,8 +453,9 @@ def customer_document(data: Collection, findings: list[Finding], output: Path, m
         "30일 비용 및 90일 사용 현황은 해당 기간의 관측 자료가 확보된 범위에서 확인합니다.",
         "배포 시각, 평가 완료 시각, Agent 버전 연결이 없으면 배포 전 평가 여부를 확정할 수 없습니다.",
         "공유 모델 사용량과 공유 리소스 비용은 개별 Agent의 실측으로 중복 귀속하지 않습니다.",
-        "증거 원본은 마스킹된 참조입니다. 안전하게 확인된 로컬 JSON만 보고서 하위에 다시 마스킹한 사본으로 "
-        "연결합니다. 외부 URL, 상위 경로 이동, 허용 폴더 밖 파일은 링크하지 않습니다.",
+        "증거 원본은 마스킹된 참조입니다. 지정된 증거 폴더 안에서 존재가 확인된 JSON 파일만 "
+        "보고서 기준 상대경로로 연결합니다. 외부 URL, 입력 경로의 상위 폴더 이동, "
+        "허용 폴더 밖 파일은 링크하지 않습니다.",
         "필요 역할은 수집기가 기록한 조회 역할 안내입니다.",
     ]:
         doc.paragraph(text)

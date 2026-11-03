@@ -78,10 +78,10 @@ bash scripts/setup/manage.sh apply --cost-reader
 
 ```bash
 bash scripts/setup/manage.sh verify \
-  --certificate-path 'C:\secure\diagnostic.pem'
+  --certificate-path "$HOME/.config/wasm-agent/diagnostic.pem"
 ```
 
-- Tenant ID·Client ID·Principal ID·구독은 결과 파일에서 자동 전달합니다. Windows Git Bash에서는 Windows Python이 읽을 수 있는 인증서 절대 경로를 사용하세요. 암호화 인증서만 다음 입력이 추가로 필요합니다. 실제 암호를 명령줄에 적지 마세요.
+- Tenant ID·Client ID·Principal ID·구독은 결과 파일에서 자동 전달합니다. Codespaces에서는 저장소 밖의 보호된 Linux 경로를 사용하세요. 암호화 인증서만 다음 입력이 추가로 필요합니다. 실제 암호를 명령줄에 적지 마세요.
 
 ```bash
 read -r -s -p 'Certificate password: ' AZURE_CLIENT_CERTIFICATE_PASSWORD
@@ -117,7 +117,7 @@ bash scripts/setup/manage.sh apply --create-principal
 - **확인 한계**
   - 내용: 할당 재조회는 전체 그룹·상속·PIM 감사가 아님. 부분 적용 후 동일 명령으로 재시도
 - **`verify` 결과**
-  - 내용: `output/permissions.json`, [docs/rbac.md](../../docs/rbac.md) 자동 생성
+  - 내용: `output/permissions.json`, `output/permissions.md` 생성
 - **종료 코드**
   - 내용: `verify`: 0 성공, 2 일부 거부/미제공/오류, 1 입력·인증 실패
 - **판정 한계**

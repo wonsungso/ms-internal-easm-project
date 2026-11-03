@@ -6,6 +6,7 @@ import re
 from html.parser import HTMLParser
 from pathlib import Path
 from unittest.mock import patch
+from urllib.parse import unquote
 
 import pytest
 
@@ -149,15 +150,18 @@ class LinkParser(HTMLParser):
             self.links.extend(value for key, value in attrs if key == "href" and value)
 
 
-def test_all_se_references_listed_with_safe_masked_local_copies(tmp_path: Path) -> None:
-    source = tmp_path / "source-evidence"
-    source.mkdir()
-    evidence = source / "original.json"
-    evidence.write_text(json.dumps({"api_key": "do-not-share", "response": {"count": 3}}))
+def test_all_se_references_link_existing_timestamped_files_without_aliases(tmp_path: Path) -> None:
+    timestamp = "20261103T063200Z-abcdef"
+    source = tmp_path / "evidence" / timestamp
+    source.mkdir(parents=True)
+    evidence = source / "0123456789abcdef-12345678.json"
+    masked = {"api_key": "[REDACTED]", "response": {"count": 3}}
+    evidence.write_text(json.dumps(masked))
+    original_bytes = evidence.read_bytes()
     data = report_data()
     data.facts["evidence_directory"] = str(source)
     references = [
-        str(evidence), "original.json", "https://example.invalid/remote.json",
+        str(evidence), evidence.name, "https://example.invalid/remote.json",
         "../original.json", r"..\original.json", "%2e%2e/original.json",
         "javascript:alert(1)", "//server/share/evidence.json",
         "file:///C:/sensitive.json", "missing.json", "'><script>alert(1)</script>",
@@ -172,18 +176,24 @@ def test_all_se_references_listed_with_safe_masked_local_copies(tmp_path: Path) 
     assert "<script>" not in content
     parser = LinkParser()
     parser.feed(content)
-    evidence_links = [link for link in parser.links if link.startswith("evidence/")]
+    evidence_links = [link for link in parser.links if timestamp in link]
     assert len(evidence_links) == 4
     assert len(set(evidence_links)) == 1
+    expected = f"../evidence/{timestamp}/{evidence.name}"
+    assert set(evidence_links) == {expected}
     for link in parser.links:
-        assert re.fullmatch(r"[a-zA-Z0-9_./-]+", link)
-        assert ".." not in link
         assert "://" not in link
-    saved = json.loads((output / evidence_links[0]).read_text(encoding="utf-8"))
-    assert saved == {"api_key": "[REDACTED]", "response": {"count": 3}}
-    assert "do-not-share" in evidence.read_text()  # Original evidence is never modified.
+        assert not re.search(r"evidence/[a-f0-9]{24}\.json", link)
+    for link in evidence_links:
+        target = (output / unquote(link)).resolve()
+        assert target == evidence.resolve()
+        assert target.is_relative_to(source.resolve())
+        assert target.is_file()
+        assert json.loads(target.read_text()) == masked
+    assert evidence.read_bytes() == original_bytes
+    assert not (output / "evidence").exists()
     markdown = (output / "report.md").read_text(encoding="utf-8")
-    assert markdown.count("[마스킹된 파일 열기](evidence/") == 4
+    assert markdown.count(f"[마스킹된 파일 열기]({expected})") == 4
 
 
 @pytest.mark.parametrize("reason, expected", [
@@ -227,6 +237,59 @@ def test_untrusted_files_are_not_linked_outside_evidence_root(tmp_path: Path) ->
     assert "안전한 로컬 파일 연결 불가" in (output / "report.html").read_text(encoding="utf-8")
 
 
+@pytest.mark.parametrize("filename", [
+    "0123456789abcdef-12345678.json", "실제 증거(1)'#.json",
+])
+def test_evidence_links_preserve_existing_names_and_encode_url_characters(
+    tmp_path: Path, filename: str,
+) -> None:
+    output = tmp_path / "report"
+    source = output / "evidence" / "20261103T063200Z-abcdef"
+    source.mkdir(parents=True)
+    evidence = source / filename
+    evidence.write_text('{"masked": true}')
+    data = report_data()
+    data.facts["evidence_directory"] = str(source)
+    finding = Finding(se_code="DS-SY-06", scope="partial", level="N/A", rationale="확인 필요",
+                      evidence_refs=[str(evidence)])
+    write_reports(data, [finding], output)
+    parser = LinkParser()
+    parser.feed((output / "report.html").read_text(encoding="utf-8"))
+    links = [link for link in parser.links if link.startswith("evidence/")]
+    assert len(links) == 1
+    assert (output / unquote(links[0])).resolve() == evidence.resolve()
+    assert "'" not in links[0] and "#" not in links[0] and " " not in links[0]
+    assert list(source.iterdir()) == [evidence]
+    assert list((output / "evidence").iterdir()) == [source]
+    assert f"[마스킹된 파일 열기]({links[0]})" in (output / "report.md").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("configured_root", [True, False])
+def test_missing_evidence_and_fixture_refs_never_create_links(
+    tmp_path: Path, configured_root: bool,
+) -> None:
+    output = tmp_path / "report"
+    root = tmp_path / "evidence" / "20261103T063200Z-abcdef"
+    root.mkdir(parents=True)
+    data = report_data()
+    data.evaluations = []
+    if configured_root:
+        data.facts["evidence_directory"] = str(root)
+    refs = [
+        "fixture://foundry", str(root / "0123456789abcdef-12345678.json"),
+        str(output / "inventory.json"),
+    ]
+    finding = Finding(se_code="DS-SY-06", scope="partial", level="N/A", rationale="확인 필요",
+                      evidence_refs=refs)
+    write_reports(data, [finding], output)
+    for filename in ("report.html", "report.md"):
+        content = (output / filename).read_text(encoding="utf-8")
+        assert content.count("파일 확인불가") == len(refs)
+        assert "마스킹된 파일 열기" not in content
+    assert not list(root.iterdir())
+    assert not (output / "evidence").exists()
+
+
 def test_agent_evaluation_history_matches_identity_version_project_and_subscription(
     tmp_path: Path,
 ) -> None:
@@ -237,7 +300,10 @@ def test_agent_evaluation_history_matches_identity_version_project_and_subscript
     # Even a stale pre-deploy flag must not imply a known deployment timestamp.
     agent.evaluated_before_deploy = True
     original = data.evaluations[0]
-    evidence = tmp_path / "evaluation.json"
+    evidence_directory = tmp_path / "evidence" / "20261103T063200Z-abcdef"
+    evidence_directory.mkdir(parents=True)
+    data.facts["evidence_directory"] = str(evidence_directory)
+    evidence = evidence_directory / "0123456789abcdef-12345678.json"
     evidence.write_text('{"status": "completed"}')
     original.evidence_refs = [str(evidence)]
     data.evaluations.extend([
