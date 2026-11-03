@@ -88,7 +88,7 @@ wasm-agent collect --setup-file .wasm-agent/setup.json \
 ## 결과 - 세 파일만 확인
 
 - **`output/report.html`**
-  - Agent 목록·진단 초안·개선 조치·마스킹된 원본 증거를 한 화면에서 봅니다.
+  - Azure 색상·상단 헤더 형식으로 Agent 목록·진단 초안·개선 조치·마스킹된 원본 증거를 한 화면에서 봅니다.
 - **`output/report.xlsx`**
   - 체크리스트·검토 상태·메모·Agent/평가/비용 등 원시 데이터의 Excel 테이블입니다.
 - **`output/results.zip`**

@@ -92,6 +92,29 @@ def report_data() -> Collection:
     )
 
 
+def test_report_uses_azure_palette_and_cover_without_adding_a_contents_menu(tmp_path: Path) -> None:
+    data = report_data()
+    write_reports(data, [], tmp_path, "fixture")
+    text = (tmp_path / "report.html").read_text(encoding="utf-8")
+    assert "<header class='topbar'>" in text
+    assert "<div class='brand'>Microsoft Azure</div>" in text
+    assert "<div class='project'>EASM · Agent 거버넌스 진단</div>" in text
+    assert "<header class='hero'><div class='container'>" in text
+    assert "Azure AI Governance Assessment" in text
+    assert text.count("<h1>") == 1
+    assert "목차" not in text
+    assert text.count("<nav ") == 1
+    for color in ("#0078D4", "#005A9E", "#DEECF9", "#F25022", "#7FBA00", "#00A4EF", "#FFB900"):
+        assert color in text
+    assert "'Segoe UI'" in text
+    assert "linear-gradient(135deg,#FFF 0%,var(--ms-blue-light) 100%)" in text
+    assert "@media (max-width:768px)" in text and "@media print" in text
+    assert "<script" not in text and "<link" not in text
+    assert "fonts.googleapis.com" not in text and "cdn.jsdelivr.net" not in text
+    assert "href='report.xlsx'" in text
+    assert "Agent 인벤토리 요약" in text and "SE 항목별 실측 및 판정 초안" in text
+
+
 def test_customer_reports_explain_states_metrics_and_observation_limits(tmp_path: Path) -> None:
     data = report_data()
     data.agents[0].mark_unknowns()

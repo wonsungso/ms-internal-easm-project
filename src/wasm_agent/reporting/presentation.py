@@ -177,10 +177,18 @@ class Document:
         self.markdown: list[str] = []
         self.html: list[str] = []
         self.section_open = False
+        self.cover_open = False
 
     def heading(self, title: str, level: int = 2) -> None:
         self.markdown.extend(["#" * level + " " + self.md(title), ""])
+        if level == 1:
+            self.html.append("<header class='hero'><div class='container'>"
+                             "<div class='eyebrow'>Azure AI Governance Assessment</div>")
+            self.cover_open = True
         if level == 2:
+            if self.cover_open:
+                self.html.append("</div></header>")
+                self.cover_open = False
             if self.section_open:
                 self.html.append("</section>")
             self.html.append("<section>")
@@ -497,14 +505,106 @@ def html_document(doc: Document) -> str:
     return (
         "<!doctype html><html lang='ko'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width, initial-scale=1'>"
-        "<title>EASM 거버넌스 진단 보고서</title><style>"
-        "body{font:16px/1.6 system-ui;margin:32px auto;padding:0 20px;max-width:1400px;color:#182230}"
-        "h2{border-bottom:2px solid #ccd3de;margin-top:36px}"
-        "li{margin:8px 0;overflow-wrap:anywhere}.notes{padding-left:24px}"
-        ".record{padding-left:24px}summary{cursor:pointer;font-weight:600;overflow-wrap:anywhere}"
-        "details{background:#f7f9fc;padding:16px;margin:12px 0}code{overflow-wrap:anywhere}"
-        "a{color:#064faa}</style></head><body><main>"
+        "<title>EASM 거버넌스 진단 보고서</title><style>" + REPORT_STYLES
+        + "</style></head><body>"
+        "<header class='topbar'>"
+        "<div class='logo' aria-hidden='true'><span class='s1'></span><span class='s2'></span>"
+        "<span class='s3'></span><span class='s4'></span></div>"
+        "<div class='brand'>Microsoft Azure</div><div class='divider' aria-hidden='true'></div>"
+        "<div class='project'>EASM · Agent 거버넌스 진단</div>"
         "<nav aria-label='결과 파일'><a href='report.xlsx'>Excel 체크리스트·원시 데이터</a></nav>"
+        "</header><main>"
         + "\n".join(doc.html) + ("</section>" if doc.section_open else "")
+        + ("</div></header>" if doc.cover_open else "")
         + "</main></body></html>"
     )
+
+
+REPORT_STYLES = """
+:root {
+  --ms-blue:#0078D4; --ms-blue-dark:#005A9E; --ms-blue-light:#DEECF9;
+  --ms-blue-lighter:#EFF6FC; --ms-red:#F25022; --ms-green-logo:#7FBA00;
+  --ms-cyan-logo:#00A4EF; --ms-yellow-logo:#FFB900;
+  --gray-10:#FAF9F8; --gray-20:#F3F2F1; --gray-30:#EDEBE9;
+  --gray-40:#E1DFDD; --gray-130:#605E5C; --gray-160:#323130;
+  --gray-190:#201F1E; --text:#242424; --text-secondary:#605E5C;
+}
+* { box-sizing:border-box; }
+html { scroll-padding-top:88px; }
+body {
+  margin:0; color:var(--text); background:#FFF; font-size:15px; line-height:1.55;
+  font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo',
+    'Malgun Gothic','맑은 고딕',sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.topbar {
+  position:sticky; top:0; z-index:100; background:#FFF;
+  border-bottom:1px solid var(--gray-30); padding:12px 32px;
+  display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+}
+.logo { display:grid; grid-template-columns:repeat(2,11px); gap:2px; flex-shrink:0; }
+.logo span { display:block; width:11px; height:11px; }
+.logo .s1 { background:var(--ms-red); }
+.logo .s2 { background:var(--ms-green-logo); }
+.logo .s3 { background:var(--ms-cyan-logo); }
+.logo .s4 { background:var(--ms-yellow-logo); }
+.topbar .brand { font-weight:600; font-size:15px; color:var(--gray-160); }
+.topbar .divider { width:1px; height:18px; background:var(--gray-40); }
+.topbar .project { font-size:14px; color:var(--text-secondary); }
+.topbar nav { margin-left:auto; font-size:13px; }
+.topbar nav a { display:inline-block; padding:7px 12px; border:1px solid var(--gray-40); border-radius:4px; }
+.container { max-width:1180px; margin:0 auto; padding:0 32px; }
+.hero {
+  background:linear-gradient(135deg,#FFF 0%,var(--ms-blue-light) 100%);
+  padding:56px 0 44px; border-bottom:1px solid var(--gray-30);
+}
+.eyebrow {
+  color:var(--ms-blue-dark); font-size:12px; font-weight:600;
+  letter-spacing:1.4px; text-transform:uppercase; margin-bottom:14px;
+}
+h1 { margin:0 0 24px; font-size:42px; font-weight:600; line-height:1.18; letter-spacing:-.5px; color:var(--gray-190); }
+.hero .notes { color:var(--gray-130); font-size:14px; margin:10px 0; padding-left:20px; max-width:960px; }
+main > section { max-width:1180px; margin:0 auto; padding:44px 32px; border-bottom:1px solid var(--gray-30); }
+h2 { color:var(--gray-190); font-size:28px; font-weight:600; letter-spacing:-.3px; margin:0 0 24px; }
+h3 { color:var(--ms-blue-dark); font-size:18px; font-weight:600; margin:24px 0 12px; }
+main > section:first-of-type { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:16px; }
+main > section:first-of-type > h2 { grid-column:1/-1; margin-bottom:8px; }
+main > section:first-of-type > .notes {
+  margin:0; padding:18px 20px; list-style:none; background:#FFF;
+  border:1px solid var(--gray-30); border-top:3px solid var(--ms-blue); border-radius:4px;
+}
+li { margin:8px 0; overflow-wrap:anywhere; }
+.notes,.record { padding-left:24px; }
+summary { cursor:pointer; font-weight:600; overflow-wrap:anywhere; color:var(--gray-160); }
+summary::marker { color:var(--ms-blue); }
+details {
+  background:var(--gray-10); border:1px solid var(--gray-30);
+  border-left:3px solid var(--ms-blue); border-radius:4px; padding:18px 22px; margin:12px 0;
+  scroll-margin-top:88px;
+}
+details[open] { background:#FFF; }
+details:target { outline:2px solid var(--ms-blue); outline-offset:2px; }
+code { overflow-wrap:anywhere; color:var(--ms-blue-dark); font-size:.9em; }
+pre { white-space:pre-wrap; overflow-wrap:anywhere; overflow:auto; max-height:560px; padding:16px; background:var(--gray-20); font-size:12px; }
+a { color:var(--ms-blue-dark); text-underline-offset:3px; }
+a:hover { color:var(--ms-blue); }
+a:focus-visible,summary:focus-visible { outline:2px solid var(--ms-blue); outline-offset:4px; }
+@media (max-width:768px) {
+  .topbar { padding:12px 20px; gap:12px; }
+  .topbar nav { width:100%; margin-left:0; }
+  .container { padding:0 20px; }
+  .hero { padding:40px 0 32px; }
+  h1 { font-size:30px; }
+  h2 { font-size:22px; }
+  main > section { padding:32px 20px; }
+  details { padding:16px; }
+}
+@media print {
+  .topbar { position:static; }
+  .topbar nav { display:none; }
+  .hero { padding:24px 0; print-color-adjust:exact; }
+  main > section { padding:24px 20px; }
+  details { break-inside:avoid; }
+  pre { max-height:none; overflow:visible; }
+}
+"""
