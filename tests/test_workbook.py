@@ -126,7 +126,8 @@ def test_snapshot_saved_reloaded_tables_types_and_checklist(tmp_path: Path) -> N
     assert book["모델배포 원시데이터"]["A2"].value.startswith("수집된 데이터 없음")
     guide = {row[0].value: row[1].value for row in book["읽는법"].iter_rows(min_row=2)}
     assert guide["수집 실패 집계 - 조회 권한 부족"] == 2
-    assert record(book["증거참조"])["evidence_ref"].value == r"C:\evidence\20261103\raw.json"
+    reference = record(book["증거참조"])["evidence_ref"].value
+    assert reference.startswith("evidence:") and len(reference.removeprefix("evidence:")) == 64
     with ZipFile(path) as archive:
         assert not any("externalLink" in name or "vbaProject" in name for name in archive.namelist())
         xml = "".join(archive.read(name).decode() for name in archive.namelist()

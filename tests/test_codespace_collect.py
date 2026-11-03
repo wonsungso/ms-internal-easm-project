@@ -20,13 +20,14 @@ def test_codespace_name_cannot_inject_shell() -> None:
 
 
 def test_remote_key_is_removed_on_collection_failure(tmp_path: Path) -> None:
-    output = tmp_path / "output"
+    output = tmp_path / ".wasm-agent"
     output.mkdir()
     (output / "setup.json").write_text(json.dumps({
         "tenant_id": "tenant", "client_id": "client", "principal_id": "reader",
         "subscription_ids": ["subscription"],
     }), encoding="utf-8")
-    (output / "lab.json").write_text(json.dumps({
+    (output / "demo").mkdir()
+    (output / "demo" / "lab.json").write_text(json.dumps({
         "project_id": "project", "project_endpoint": "https://example.test",
     }), encoding="utf-8")
     config = tmp_path / "config"
@@ -56,13 +57,14 @@ def test_remote_key_is_removed_on_collection_failure(tmp_path: Path) -> None:
 
 
 def test_codespace_download_uses_validated_ssh_stream(tmp_path: Path) -> None:
-    output = tmp_path / "output"
+    output = tmp_path / ".wasm-agent"
     output.mkdir()
     (output / "setup.json").write_text(json.dumps({
         "tenant_id": "tenant", "client_id": "client", "principal_id": "reader",
         "subscription_ids": ["subscription"],
     }), encoding="utf-8")
-    (output / "lab.json").write_text(json.dumps({
+    (output / "demo").mkdir()
+    (output / "demo" / "lab.json").write_text(json.dumps({
         "project_id": "project", "project_endpoint": "https://example.test",
     }), encoding="utf-8")
     config = tmp_path / "config"
@@ -74,7 +76,9 @@ def test_codespace_download_uses_validated_ssh_stream(tmp_path: Path) -> None:
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
         archive.writestr("report.html", "fixture report")
-    name = "wasm-agent-results-20261103T080000Z-abcdef.zip"
+        archive.writestr("report.xlsx", b"fixture workbook")
+        archive.writestr("data.json", "{}")
+    name = "results.zip"
     commands = []
 
     def cli(*args, **kwargs):
@@ -85,8 +89,6 @@ def test_codespace_download_uses_validated_ssh_stream(tmp_path: Path) -> None:
             text = "/home/vscode/wasm-agent-auth-12345678\n"
         elif "WASM_COLLECTION_EXIT" in command:
             text = "WASM_COLLECTION_EXIT=2\n"
-        elif command.startswith("find "):
-            text = name + "\n"
         elif command.startswith("base64 "):
             text = base64.b64encode(buffer.getvalue()).decode()
         return subprocess.CompletedProcess(args, 0, text, "")
@@ -96,7 +98,8 @@ def test_codespace_download_uses_validated_ssh_stream(tmp_path: Path) -> None:
     ) as certificate:
         certificate.return_value.__enter__.return_value = {"AZURE_CLIENT_CERTIFICATE_PATH": "fixture.pem"}
         remote.run("approved-codespace")
-    assert (output / "codespace-e2e" / name).read_bytes() == buffer.getvalue()
-    proof = json.loads((output / "codespace-e2e-verification.json").read_text(encoding="utf-8"))
+    assert (tmp_path / "output" / name).read_bytes() == buffer.getvalue()
+    assert set(path.name for path in (tmp_path / "output").iterdir()) == {"report.html", "report.xlsx", "results.zip"}
+    proof = json.loads((output / "demo" / "codespace-e2e-verification.json").read_text(encoding="utf-8"))
     assert proof["collection_exit_code"] == 2 and proof["remote_private_key_cleaned"]
     assert any(command[-1].startswith("base64 ") for command in commands)

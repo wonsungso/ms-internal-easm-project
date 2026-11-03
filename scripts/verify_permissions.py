@@ -184,8 +184,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--subscriptions", nargs="+", type=uuid_arg)
     parser.add_argument("--projects-file", type=Path)
     parser.add_argument("--foundry-profile", choices=["agents_v1", "classic_v1"], default="agents_v1")
-    parser.add_argument("--rbac-path", type=Path, default=Path("output") / "permissions.md")
-    parser.add_argument("--output", type=Path, default=Path("output") / "permissions.json")
+    parser.add_argument("--rbac-path", type=Path, default=Path(".wasm-agent") / "permissions.md")
+    parser.add_argument("--output", type=Path, default=Path(".wasm-agent") / "permissions.json")
     args = parser.parse_args(argv)
     from azure.core.exceptions import ClientAuthenticationError
     from azure.identity import DefaultAzureCredential

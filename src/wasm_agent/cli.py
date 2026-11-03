@@ -14,7 +14,7 @@ from wasm_agent.collect import collect
 from wasm_agent.evaluators.engine import evaluate
 from wasm_agent.models import Collection, Finding
 from wasm_agent.reporting.bundle import create_bundle
-from wasm_agent.reporting.reports import write_reports
+from wasm_agent.reporting.reports import load_result, write_reports
 from wasm_agent.utils.azure import AccessError
 from wasm_agent.utils.settings import load_settings, load_yaml
 
@@ -45,13 +45,10 @@ def main(argv: list[str] | None = None) -> int:
     logging.getLogger("azure.identity").setLevel(logging.ERROR)
     try:
         if args.command == "package":
-            data = Collection.model_validate_json((args.output_dir / "collection.json").read_text(encoding="utf-8"))
-            findings = [
-                Finding.model_validate(row) for row in json.loads(
-                    (args.output_dir / "findings.json").read_text(encoding="utf-8")
-                )
-            ]
-            recorded_mode = data.facts.get("data_mode")
+            result = load_result(args.output_dir)
+            data = Collection.model_validate(result["collection"])
+            findings = [Finding.model_validate(row) for row in result["findings"]]
+            recorded_mode = result.get("mode") or data.facts.get("data_mode")
             if recorded_mode and args.mode and recorded_mode != args.mode:
                 raise ValueError("수집한 데이터 구분과 지정한 mode가 다릅니다.")
             mode = recorded_mode or args.mode

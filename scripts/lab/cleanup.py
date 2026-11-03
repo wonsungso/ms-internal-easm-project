@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 from scripts.lab.bootstrap import plan
@@ -13,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="별도 승인 후 실행하는 샘플 전용 정리. 기본값은 dry-run.")
-    parser.add_argument("--setup-file", type=Path, default=ROOT / "output" / "setup.json")
+    parser.add_argument("--setup-file", type=Path, default=ROOT / ".wasm-agent" / "setup.json")
     parser.add_argument("--lab-config", type=Path, default=ROOT / "config" / "lab.yaml")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-lab-id")
@@ -44,6 +45,22 @@ def main(argv: list[str] | None = None) -> int:
             if any(row["name"].lower() == group["name"].lower() for row in remaining):
                 raise RuntimeError("삭제 명령 후에도 샘플 그룹이 남아 있습니다.")
             print(f"삭제 완료 재확인: {group['name']}")
+    if args.apply:
+        state = ROOT / ".wasm-agent" / "demo"
+        state.mkdir(parents=True, exist_ok=True)
+        proof = {
+            "lab_id": lab["lab_id"], "deleted_at": datetime.now(UTC).isoformat(),
+            "groups": [group["id"] for group in verified],
+            "diagnostic_account_retained": True, "codespaces_retained": True,
+        }
+        (state / "cleanup.json").write_text(json.dumps(proof, indent=2), encoding="utf-8")
+        existing_lab = state / "lab.json"
+        if existing_lab.is_file():
+            saved = json.loads(existing_lab.read_text(encoding="utf-8"))
+            if saved.get("lab_id") == lab["lab_id"]:
+                saved["resources_deleted"] = True
+                saved["deleted_at"] = proof["deleted_at"]
+                existing_lab.write_text(json.dumps(saved, ensure_ascii=False, indent=2), encoding="utf-8")
     return 0
 
 

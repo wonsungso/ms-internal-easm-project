@@ -8,6 +8,7 @@ import shlex
 import subprocess
 import tempfile
 import zipfile
+from io import BytesIO
 from pathlib import Path
 
 import yaml
@@ -29,13 +30,13 @@ def gh(*arguments: str, allowed: tuple[int, ...] = (0,)) -> subprocess.Completed
 def run(codespace: str) -> None:
     if not re.fullmatch(r"[a-z0-9-]+", codespace):
         raise ValueError("유효한 Codespace 이름이 필요합니다.")
-    setup = json.loads((ROOT / "output" / "setup.json").read_text(encoding="utf-8"))
-    lab = json.loads((ROOT / "output" / "lab.json").read_text(encoding="utf-8"))
+    setup = json.loads((ROOT / ".wasm-agent" / "setup.json").read_text(encoding="utf-8"))
+    lab = json.loads((ROOT / ".wasm-agent" / "demo" / "lab.json").read_text(encoding="utf-8"))
     settings = load_yaml(ROOT / "config" / "config.yaml")
     settings.update({
         "tenant_id": setup["tenant_id"], "expected_principal_id": setup["principal_id"],
         "subscriptions": [],
-        "evidence_dir": WORKSPACE + "/evidence",
+        "evidence_dir": WORKSPACE + "/.wasm-agent/evidence",
         "projects": [{"subscription_id": setup["subscription_ids"][0],
                       "resource_id": lab["project_id"], "endpoint": lab["project_endpoint"]}],
     })
@@ -65,7 +66,7 @@ def run(codespace: str) -> None:
                         f"AZURE_CLIENT_ID={shlex.quote(setup['client_id'])} "
                         f"AZURE_CLIENT_CERTIFICATE_PATH={directory}/credential.pem "
                         f".venv/bin/wasm-agent collect --config {directory}/collection.yaml "
-                        "--all-subscriptions --output-dir output/codespace-e2e; "
+                        "--all-subscriptions --output-dir output; "
                         'code=$?; printf "\\nWASM_COLLECTION_EXIT=%s\\n" "$code"; '
                         'test "$code" -eq 0 || test "$code" -eq 2'
                     )
@@ -79,28 +80,22 @@ def run(codespace: str) -> None:
                     gh("codespace", "ssh", "-c", codespace, "--",
                        f"rm -f {directory}/credential.pem {directory}/collection.yaml; rmdir {directory}")
                     remote_cleanup = True
-        # Download the exact result filenames returned by a directory listing, never arbitrary shell globs.
-        listing = gh("codespace", "ssh", "-c", codespace, "--",
-                     f"find {WORKSPACE}/output/codespace-e2e -maxdepth 1 -name 'wasm-agent-results-*.zip' -printf '%f\\n'")
-        names = [name for name in listing.stdout.splitlines()
-                 if re.fullmatch(r"wasm-agent-results-[0-9TZ]+-[0-9a-f]{6}\.zip", name)]
-        if not names:
-            raise RuntimeError("Codespaces의 실제 결과 ZIP을 찾을 수 없습니다.")
-        destination = ROOT / "output" / "codespace-e2e"
+        destination = ROOT / "output"
         destination.mkdir(exist_ok=True)
-        for name in names:
-            result = gh("codespace", "ssh", "-c", codespace, "--",
-                        f"base64 {WORKSPACE}/output/codespace-e2e/{name}")
-            payload = base64.b64decode("".join(result.stdout.split()), validate=True)
-            path = destination / name
-            path.write_bytes(payload)
-            with zipfile.ZipFile(path) as archive:
-                if archive.testzip() is not None:
-                    raise RuntimeError("Codespaces에서 받은 ZIP의 무결성 검사 실패")
-        save(ROOT / "output" / "codespace-e2e-verification.json", {
+        result = gh("codespace", "ssh", "-c", codespace, "--", f"base64 {WORKSPACE}/output/results.zip")
+        payload = base64.b64decode("".join(result.stdout.split()), validate=True)
+        with zipfile.ZipFile(BytesIO(payload)) as archive:
+            if archive.testzip() is not None or set(archive.namelist()) != {
+                "report.html", "report.xlsx", "data.json",
+            }:
+                raise RuntimeError("Codespaces에서 받은 ZIP의 무결성/구성 검사 실패")
+            for name in ("report.html", "report.xlsx"):
+                (destination / name).write_bytes(archive.read(name))
+        (destination / "results.zip").write_bytes(payload)
+        save(ROOT / ".wasm-agent" / "demo" / "codespace-e2e-verification.json", {
             "codespace": codespace, "collection_exit_code": code, "all_subscriptions": True,
             "remote_private_key_cleaned": remote_cleanup, "temporary_certificate_cleaned": True,
-            "archives": names, "administrator_collection_fallback": False,
+            "archives": ["results.zip"], "administrator_collection_fallback": False,
         })
     finally:
         if not remote_cleanup:

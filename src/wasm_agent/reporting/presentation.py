@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import json
 import os
 import re
 from collections import Counter
@@ -253,10 +254,13 @@ class Document:
 
 
 class EvidenceLinks:
-    def __init__(self, data: Collection, output: Path) -> None:
+    def __init__(
+        self, data: Collection, output: Path, evidence: dict[str, Any] | None = None,
+    ) -> None:
         self.output = output.resolve()
         directory = data.facts.get("evidence_directory")
-        self.root = Path(directory).resolve() if directory and self.safe(str(directory)) else None
+        self.root = Path(directory).absolute() if directory and self.safe(str(directory)) else None
+        self.evidence = evidence or {}
         self.cache: dict[str, str | None] = {}
 
     @staticmethod
@@ -271,9 +275,17 @@ class EvidenceLinks:
         )
 
     def local(self, reference: str) -> str | None:
+        if reference.startswith("evidence:"):
+            identifier = reference.removeprefix("evidence:")
+            return "#evidence-" + identifier if identifier in self.evidence else None
         if reference in self.cache:
             return self.cache[reference]
-        self.cache[reference] = None
+        source = self.source(reference)
+        relative = quote(Path(os.path.relpath(source, self.output)).as_posix(), safe="/") if source else None
+        self.cache[reference] = relative
+        return relative
+
+    def source(self, reference: str) -> Path | None:
         if self.root is None or not self.root.is_dir() or not self.safe(reference):
             return None
         path = Path(reference)
@@ -287,23 +299,25 @@ class EvidenceLinks:
         ]
         for candidate in candidates:
             try:
+                if any(part.is_symlink() for part in (candidate, *candidate.parents)):
+                    continue
                 resolved = candidate.resolve()
                 if not resolved.is_relative_to(self.root):
                     continue
                 if resolved.suffix.lower() != ".json" or not resolved.is_file():
                     continue
-                # Only canonical, root-validated files can produce a parent-relative href.
-                relative = quote(Path(os.path.relpath(resolved, self.output)).as_posix(), safe="/")
             except (OSError, ValueError):
                 continue
-            self.cache[reference] = relative
-            return relative
+            return resolved
         return None
 
 
-def customer_document(data: Collection, findings: list[Finding], output: Path, mode: str) -> Document:
+def customer_document(
+    data: Collection, findings: list[Finding], output: Path, mode: str,
+    evidence: dict[str, Any] | None = None,
+) -> Document:
     doc = Document()
-    links = EvidenceLinks(data, output)
+    links = EvidenceLinks(data, output, evidence)
     doc.heading("EASM 거버넌스 진단 보고서", 1)
     doc.paragraph("제품: EASM (Enterprise Agent Service Management) 거버넌스 진단/수집 툴")
     doc.paragraph("CLI: wasm-agent")
@@ -454,7 +468,8 @@ def customer_document(data: Collection, findings: list[Finding], output: Path, m
         "배포 시각, 평가 완료 시각, Agent 버전 연결이 없으면 배포 전 평가 여부를 확정할 수 없습니다.",
         "공유 모델 사용량과 공유 리소스 비용은 개별 Agent의 실측으로 중복 귀속하지 않습니다.",
         "증거 원본은 마스킹된 참조입니다. 지정된 증거 폴더 안에서 존재가 확인된 JSON 파일만 "
-        "보고서 기준 상대경로로 연결합니다. 외부 URL, 입력 경로의 상위 폴더 이동, "
+        "보고서 안에 원본 JSON으로 내장합니다. evidence:<id>는 ZIP data.json의 evidence 키와 연결됩니다. "
+        "외부 URL, 입력 경로의 상위 폴더 이동, 심볼릭 링크, "
         "허용 폴더 밖 파일은 링크하지 않습니다.",
         "필요 역할은 수집기가 기록한 조회 역할 안내입니다.",
     ]:
@@ -468,6 +483,13 @@ def customer_document(data: Collection, findings: list[Finding], output: Path, m
         ["L1-L5", "관리 성숙도 단계의 초안. 정책 및 운영 증거와 함께 해석해야 함"],
         ["증거 참조", "판정에 사용한 마스킹된 수집 자료의 위치. 참조만으로 적용 여부를 보장하지 않음"],
     ])
+    for identifier, payload in sorted((evidence or {}).items()):
+        doc.html.append(
+            f'<details id="evidence-{html.escape(identifier, quote=True)}">'
+            f"<summary>마스킹된 원본 JSON - evidence:{html.escape(identifier)}</summary>"
+            "<pre>" + html.escape(json.dumps(payload, ensure_ascii=False, indent=2))
+            + "</pre></details>"
+        )
     return doc
 
 
@@ -482,10 +504,7 @@ def html_document(doc: Document) -> str:
         ".record{padding-left:24px}summary{cursor:pointer;font-weight:600;overflow-wrap:anywhere}"
         "details{background:#f7f9fc;padding:16px;margin:12px 0}code{overflow-wrap:anywhere}"
         "a{color:#064faa}</style></head><body><main>"
-        "<nav aria-label='결과 파일'><a href='report.xlsx'>Excel 체크리스트·원시 데이터</a> | "
-        "<a href='customer_summary.csv'>관리자용 SE 요약 CSV</a> | "
-        "<a href='customer_inventory.csv'>관리자용 인벤토리 CSV</a> | "
-        "<a href='report.md'>문서 보고서</a></nav>"
+        "<nav aria-label='결과 파일'><a href='report.xlsx'>Excel 체크리스트·원시 데이터</a></nav>"
         + "\n".join(doc.html) + ("</section>" if doc.section_open else "")
         + "</main></body></html>"
     )

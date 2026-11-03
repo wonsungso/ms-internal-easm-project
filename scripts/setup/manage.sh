@@ -17,7 +17,7 @@ case "$command" in
   help|-h|--help)
     printf '%s\n' \
       'Usage: bash scripts/setup/manage.sh <login|plan|apply|verify> [options]' \
-      'Default config: output/setup.json (no secrets).' \
+      'Default config: .wasm-agent/setup.json (no secrets).' \
       'Options: --config-file FILE, --cost-reader, --monitoring-reader,' \
       '  --log-analytics-reader, --security-reader, --certificate-path FILE.' \
       'login: human administrator device-code login; SP authentication is separate.' \
@@ -40,5 +40,5 @@ for argument in "$@"; do
 done
 
 exec "$python_command" "$script_dir/setup_account.py" \
-  --config-file "$root_dir/output/setup.json" \
-  --result-file "$root_dir/output/setup.json" "$mode" "$@"
+  --config-file "$root_dir/.wasm-agent/setup.json" \
+  --result-file "$root_dir/.wasm-agent/setup.json" "$mode" "$@"

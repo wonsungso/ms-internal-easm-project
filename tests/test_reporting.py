@@ -1,23 +1,45 @@
 from __future__ import annotations
 
-import csv
 import json
 import re
 from html.parser import HTMLParser
 from pathlib import Path
 from unittest.mock import patch
-from urllib.parse import unquote
 
 import pytest
+from openpyxl import load_workbook
 
 from wasm_agent.cli import main
 from wasm_agent.evaluators.engine import evaluate
 from wasm_agent.models import Collection, EvaluationRun, Finding, Issue
-from wasm_agent.reporting.reports import write_reports
+from wasm_agent.reporting.presentation import evaluation_columns
+from wasm_agent.reporting.reports import load_result, write_reports
 from wasm_agent.utils.evidence import redact
 from wasm_agent.utils.settings import load_yaml
 
 ROOT = Path(__file__).parents[1]
+
+
+@pytest.fixture(autouse=True)
+def isolated_result_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "wasm_agent.reporting.compact.STATE_ROOT",
+        tmp_path.parent / (tmp_path.name + "-runtime"),
+    )
+
+
+def evaluation_rows(output: Path) -> list[dict[str, str]]:
+    data = Collection.model_validate(load_result(output)["collection"])
+    return [evaluation_columns(agent, data) for agent in data.agents]
+
+
+def workbook_rows(output: Path, sheet: str) -> list[dict]:
+    book = load_workbook(output / "report.xlsx")
+    try:
+        rows = list(book[sheet].values)
+        return [dict(zip(rows[0], row, strict=True)) for row in rows[1:]]
+    finally:
+        book.close()
 
 
 def test_fixture_cli_is_offline_and_outputs_common_schema(tmp_path: Path) -> None:
@@ -27,7 +49,8 @@ def test_fixture_cli_is_offline_and_outputs_common_schema(tmp_path: Path) -> Non
             "--fixture", str(ROOT / "tests" / "fixtures" / "three_subscriptions.json"),
             "--output-dir", str(tmp_path),
         ]) == 0
-    inventory = json.loads((tmp_path / "inventory.json").read_text(encoding="utf-8"))
+    result = load_result(tmp_path)
+    inventory = result["collection"]["agents"]
     assert len(inventory) == 3
     assert isinstance(inventory, list)
     required = {
@@ -38,14 +61,14 @@ def test_fixture_cli_is_offline_and_outputs_common_schema(tmp_path: Path) -> Non
         "se_codes", "field_status",
     }
     assert required <= set(inventory[0])
-    summary = json.loads((tmp_path / "findings.json").read_text(encoding="utf-8"))
+    summary = result["findings"]
     assert len(summary) == 6
-    assert "EASM 거버넌스 진단 보고서" in (tmp_path / "report.md").read_text(encoding="utf-8")
-    assert (tmp_path / "cost_monthly.csv").is_file()
-    assert "단계 조건" in (tmp_path / "report.md").read_text(encoding="utf-8")
+    assert "EASM 거버넌스 진단 보고서" in (tmp_path / "report.html").read_text(encoding="utf-8")
+    assert {path.name for path in tmp_path.iterdir()} == {"report.html", "report.xlsx", "results.zip"}
+    assert "단계 조건" in (tmp_path / "report.html").read_text(encoding="utf-8")
 
 
-def test_csv_formula_injection_and_html_are_escaped(tmp_path: Path) -> None:
+def test_workbook_formula_injection_and_html_are_escaped(tmp_path: Path) -> None:
     data = Collection.model_validate_json((ROOT / "tests" / "fixtures" / "three_subscriptions.json").read_text())
     data.agents[0].agent_name = '=HYPERLINK("https://example.invalid")'
     config = load_yaml(ROOT / "config" / "criteria.yaml")
@@ -53,11 +76,11 @@ def test_csv_formula_injection_and_html_are_escaped(tmp_path: Path) -> None:
                     load_yaml(ROOT / "config" / "tag_conventions.yaml"))
     rows[0].rationale = "<script>alert(1)</script>"
     write_reports(data, rows, tmp_path, "fixture")
-    with (tmp_path / "inventory.csv").open(encoding="utf-8-sig", newline="") as stream:
-        first = next(csv.DictReader(stream))
-    assert first["agent_name"].startswith("'=")
-    with (tmp_path / "customer_inventory.csv").open(encoding="utf-8-sig", newline="") as stream:
-        assert next(csv.DictReader(stream))["Agent 이름"].startswith("'=")
+    assert workbook_rows(tmp_path, "Agent 원시데이터")[0]["agent_name"] == data.agents[0].agent_name
+    book = load_workbook(tmp_path / "report.xlsx")
+    assert all(cell.data_type != "f" and cell.hyperlink is None
+               for sheet in book for row in sheet for cell in row)
+    book.close()
     content = (tmp_path / "report.html").read_text(encoding="utf-8")
     assert "<script>" not in content
     assert "&lt;script&gt;" in content
@@ -89,7 +112,7 @@ def test_customer_reports_explain_states_metrics_and_observation_limits(tmp_path
                 rationale="내부 기준 확인이 필요합니다."),
     ]
     write_reports(data, findings, tmp_path, "fixture")
-    for filename in ("report.md", "report.html"):
+    for filename in ("report.html",):
         text = (tmp_path / filename).read_text(encoding="utf-8")
         for expected in (
             "허용 모델 사용 관리", "90.00%", "90일", "0건", "분모 확인 안됨", "판정 보류",
@@ -110,7 +133,7 @@ def test_customer_reports_explain_states_metrics_and_observation_limits(tmp_path
     assert "<main>" in content
 
 
-def test_machine_contracts_are_unchanged_and_customer_csv_is_separate(tmp_path: Path) -> None:
+def test_machine_contracts_are_unchanged_in_combined_data(tmp_path: Path) -> None:
     data = report_data()
     findings = [Finding(se_code="DS-SY-06", scope="partial", level="N/A",
                         reason="permission_denied", rationale="근거 <script>",
@@ -118,24 +141,33 @@ def test_machine_contracts_are_unchanged_and_customer_csv_is_separate(tmp_path: 
     before_data = data.model_dump(mode="json")
     before_findings = [f.model_dump(mode="json") for f in findings]
     write_reports(data, findings, tmp_path)
-    assert json.loads((tmp_path / "inventory.json").read_text(encoding="utf-8")) == redact(
-        before_data["agents"])
-    assert json.loads((tmp_path / "collection.json").read_text(encoding="utf-8")) == redact(before_data)
-    assert json.loads((tmp_path / "findings.json").read_text(encoding="utf-8")) == redact(before_findings)
-    with (tmp_path / "inventory.csv").open(encoding="utf-8-sig", newline="") as stream:
-        assert next(csv.reader(stream)) == list(type(data.agents[0]).model_fields)
-    with (tmp_path / "summary.csv").open(encoding="utf-8-sig", newline="") as stream:
-        rows = list(csv.DictReader(stream))
-        assert list(rows[0]) == [
-            "se_code", "scope", "metric_value", "level", "reason", "rationale",
-            "interview_level", "gap_flag", "next_step", "evidence_refs",
-        ]
-        assert rows[0]["level"] == "N/A"
-        assert rows[0]["reason"] == "permission_denied"
-    with (tmp_path / "customer_summary.csv").open(encoding="utf-8-sig", newline="") as stream:
-        customer = next(csv.DictReader(stream))
-        assert customer["판정"] == "판정 보류"
-        assert customer["실측값"] == "확인 자료 없음 - 분모 확인 안됨"
+    result = load_result(tmp_path)
+    expected_data = redact(before_data)
+    expected_data["facts"]["data_mode"] = "live"
+    replacements = {
+        item["reference"]: "evidence:" + item["id"]
+        for item in result["provenance"]["references"]
+    }
+
+    def normalized(value):
+        if isinstance(value, dict):
+            return {key: normalized(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [normalized(item) for item in value]
+        return replacements.get(value, value) if isinstance(value, str) else value
+
+    assert result["collection"] == normalized(expected_data)
+    assert result["findings"] == normalized(redact(before_findings))
+    row = result["findings"][0]
+    assert {k: v for k, v in row.items() if k != "evidence_refs"} == {
+        k: v for k, v in redact(before_findings)[0].items() if k != "evidence_refs"
+    }
+    assert row["level"] == "N/A"
+    assert row["reason"] == "permission_denied"
+    assert row["metric_value"] is None
+    customer = workbook_rows(tmp_path, "진단 체크리스트")[0]
+    assert customer["판정"] == "판정 보류"
+    assert customer["지표"] == "확인 자료 없음 - 분모 확인 안됨"
     assert data.model_dump(mode="json") == before_data
     assert [f.model_dump(mode="json") for f in findings] == before_findings
 
@@ -172,28 +204,26 @@ def test_all_se_references_link_existing_timestamped_files_without_aliases(tmp_p
     write_reports(data, findings, output)
     content = (output / "report.html").read_text(encoding="utf-8")
     assert content.count("증거 참조 11개") == 2
-    assert content.count("https://example.invalid/remote.json") == 2
+    result = load_result(output)
+    assert any(item["reference"] == "https://example.invalid/remote.json"
+               for item in result["provenance"]["unattached_evidence"])
     assert "<script>" not in content
     parser = LinkParser()
     parser.feed(content)
-    evidence_links = [link for link in parser.links if timestamp in link]
+    evidence_links = [link for link in parser.links if link.startswith("#evidence-")]
     assert len(evidence_links) == 4
     assert len(set(evidence_links)) == 1
-    expected = f"../evidence/{timestamp}/{evidence.name}"
-    assert set(evidence_links) == {expected}
+    identifier = next(iter(result["evidence"]))
+    assert set(evidence_links) == {f"#evidence-{identifier}"}
+    assert result["evidence"][identifier] == masked
+    assert f'<details id="evidence-{identifier}">' in content
     for link in parser.links:
         assert "://" not in link
         assert not re.search(r"evidence/[a-f0-9]{24}\.json", link)
-    for link in evidence_links:
-        target = (output / unquote(link)).resolve()
-        assert target == evidence.resolve()
-        assert target.is_relative_to(source.resolve())
-        assert target.is_file()
-        assert json.loads(target.read_text()) == masked
     assert evidence.read_bytes() == original_bytes
     assert not (output / "evidence").exists()
-    markdown = (output / "report.md").read_text(encoding="utf-8")
-    assert markdown.count(f"[마스킹된 파일 열기]({expected})") == 4
+    missing = {item["reference"] for item in result["provenance"]["unattached_evidence"]}
+    assert set(references[2:]) <= missing
 
 
 @pytest.mark.parametrize("reason, expected", [
@@ -213,7 +243,7 @@ def test_each_failure_explains_reason_roles_and_action(
                     "detail": "비용 확인 실패", "required_roles": ["Cost Management Reader"]}],
     })
     write_reports(data, [], tmp_path)
-    for filename in ("report.html", "report.md"):
+    for filename in ("report.html",):
         text = (tmp_path / filename).read_text(encoding="utf-8")
         assert expected in text
         assert reason not in text
@@ -255,13 +285,13 @@ def test_evidence_links_preserve_existing_names_and_encode_url_characters(
     write_reports(data, [finding], output)
     parser = LinkParser()
     parser.feed((output / "report.html").read_text(encoding="utf-8"))
-    links = [link for link in parser.links if link.startswith("evidence/")]
+    links = [link for link in parser.links if link.startswith("#evidence-")]
     assert len(links) == 1
-    assert (output / unquote(links[0])).resolve() == evidence.resolve()
-    assert "'" not in links[0] and "#" not in links[0] and " " not in links[0]
+    assert links[0].removeprefix("#evidence-") in load_result(output)["evidence"]
+    assert "'" not in links[0] and " " not in links[0]
     assert list(source.iterdir()) == [evidence]
     assert list((output / "evidence").iterdir()) == [source]
-    assert f"[마스킹된 파일 열기]({links[0]})" in (output / "report.md").read_text(encoding="utf-8")
+    assert len(load_result(output)["evidence"]) == 1
 
 
 @pytest.mark.parametrize("configured_root", [True, False])
@@ -282,10 +312,12 @@ def test_missing_evidence_and_fixture_refs_never_create_links(
     finding = Finding(se_code="DS-SY-06", scope="partial", level="N/A", rationale="확인 필요",
                       evidence_refs=refs)
     write_reports(data, [finding], output)
-    for filename in ("report.html", "report.md"):
+    for filename in ("report.html",):
         content = (output / filename).read_text(encoding="utf-8")
-        assert content.count("파일 확인불가") == len(refs)
+        assert content.count("파일 확인불가") >= len(refs)
         assert "마스킹된 파일 열기" not in content
+    missing = {item["reference"] for item in load_result(output)["provenance"]["unattached_evidence"]}
+    assert set(refs) <= missing
     assert not list(root.iterdir())
     assert not (output / "evidence").exists()
 
@@ -316,8 +348,7 @@ def test_agent_evaluation_history_matches_identity_version_project_and_subscript
     ])
     before = data.model_dump(mode="json")
     write_reports(data, [], tmp_path)
-    with (tmp_path / "customer_inventory.csv").open(encoding="utf-8-sig", newline="") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = evaluation_rows(tmp_path)
     assert rows[0]["평가 실행 이력"] == "평가 완료 이력 확인"
     assert rows[0]["일치 실행 수"] == "3건"
     assert rows[0]["완료 실행 수"] == "1건"
@@ -330,7 +361,7 @@ def test_agent_evaluation_history_matches_identity_version_project_and_subscript
     assert rows[1]["평가 실행 이력"] == "평가 이력 미확인"
     assert rows[1]["일치 실행 수"] == "0건"
     assert "미수행 확정 아님" in rows[1]["평가 이력 근거"]
-    for filename in ("report.html", "report.md"):
+    for filename in ("report.html",):
         content = (tmp_path / filename).read_text(encoding="utf-8")
         assert "<script>" not in content
         assert "&lt;script&gt;Agent&lt;/script&gt;" in content
@@ -339,7 +370,7 @@ def test_agent_evaluation_history_matches_identity_version_project_and_subscript
                          original.run_id, "running-matched", "failed-matched",
                          "평가 목록 조회 완전성 부족", "평가 미수행 확정이 아닙니다"):
             assert expected in content
-        assert "evidence/" in content
+        assert "#evidence-" in content
     assert data.model_dump(mode="json") == before
 
 
@@ -365,8 +396,7 @@ def test_evaluation_run_status_and_missing_identity_do_not_claim_completion(
         target=run.project_id, reason="permission_denied", detail="일부 페이지 확인 불가",
     )]
     write_reports(data, [], tmp_path)
-    with (tmp_path / "customer_inventory.csv").open(encoding="utf-8-sig", newline="") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = evaluation_rows(tmp_path)
     assert rows[0]["평가 실행 이력"] == (
         "평가 완료 이력 확인" if confirmed else "평가 이력 미확인"
     )
@@ -398,8 +428,7 @@ def test_completed_runs_preserve_passed_failed_and_error_item_counts(tmp_path: P
         ]
     ]
     write_reports(data, [], tmp_path)
-    with (tmp_path / "customer_inventory.csv").open(encoding="utf-8-sig", newline="") as stream:
-        row = next(csv.DictReader(stream))
+    row = evaluation_rows(tmp_path)[0]
     assert row["평가 실행 이력"] == "평가 완료 이력 확인"
     assert row["완료 실행 수"] == "4건"
     assert row["배포 전 평가"] == "판정 보류 - 배포 시각 확인 자료 없음"
@@ -408,17 +437,17 @@ def test_completed_runs_preserve_passed_failed_and_error_item_counts(tmp_path: P
         assert row[column].count("통과 문항 3문항") == 2
         assert row[column].count("오류 문항 0문항") == 4
         assert row[column].count("전체 문항 3문항") == 4
-    for filename in ("report.html", "report.md"):
+    for filename in ("report.html",):
         content = (tmp_path / filename).read_text(encoding="utf-8")
         for expected in ("통과 문항", "실패 문항", "오류 문항", "전체 문항",
                          "평가 완료, 모든 문항 통과, 배포 전 평가는 서로 다른 의미",
                          "질문/답변 본문은 수집하거나 표시하지 않습니다"):
             assert expected in content
-    markdown = (tmp_path / "report.md").read_text(encoding="utf-8")
-    assert markdown.count("- **통과 문항**: 2문항\n- **실패 문항**: 1문항\n"
-                          "- **오류 문항**: 0문항\n- **전체 문항**: 3문항") == 2
-    assert markdown.count("- **통과 문항**: 3문항\n- **실패 문항**: 0문항\n"
-                          "- **오류 문항**: 0문항\n- **전체 문항**: 3문항") == 2
+    raw = workbook_rows(tmp_path, "평가 원시데이터")
+    assert [item["passed_items"] for item in raw] == [3, 2, 2, 3]
+    assert [item["failed_items"] for item in raw] == [0, 1, 1, 0]
+    assert [item["errored_items"] for item in raw] == [0, 0, 0, 0]
+    assert [item["total_items"] for item in raw] == [3, 3, 3, 3]
 
 
 @pytest.mark.parametrize("counts, expected", [
@@ -434,17 +463,13 @@ def test_missing_item_counts_are_not_zero_or_inferred(
         **data.evaluations[0].model_dump(), **counts,
     })]
     write_reports(data, [], tmp_path)
-    with (tmp_path / "customer_inventory.csv").open(encoding="utf-8-sig", newline="") as stream:
-        row = next(csv.DictReader(stream))
+    row = evaluation_rows(tmp_path)[0]
     for label, value in zip(("통과 문항", "실패 문항", "오류 문항", "전체 문항"), expected, strict=True):
         assert f"{label} {value}" in row["평가 이력 근거"]
         assert f"{label} {value}" in row["평가 문항 집계"]
-    markdown = (tmp_path / "report.md").read_text(encoding="utf-8")
-    expected_bullets = "\n".join(
-        f"- **{label}**: {value}"
-        for label, value in zip(("통과 문항", "실패 문항", "오류 문항", "전체 문항"), expected, strict=True)
-    )
-    assert expected_bullets in markdown
+    raw = workbook_rows(tmp_path, "평가 원시데이터")[0]
+    for field in ("passed_items", "failed_items", "errored_items", "total_items"):
+        assert raw[field] == counts.get(field)
     assert "평가 완료 이력 확인" in row["평가 실행 이력"]
 
 
@@ -457,7 +482,7 @@ def test_easm_brand_scope_dynamic_counts_and_bullet_reports(
         "subscriptions": [f"subscription-{index}" for index in range(subscription_count)],
     })
     write_reports(data, [], tmp_path, "fixture")
-    for filename in ("report.html", "report.md"):
+    for filename in ("report.html",):
         content = (tmp_path / filename).read_text(encoding="utf-8")
         for expected in (
             "EASM 거버넌스 진단 보고서",
@@ -475,9 +500,10 @@ def test_easm_brand_scope_dynamic_counts_and_bullet_reports(
                         "테스트베드", "데모", "원 제품 진단은 범위 밖", "M365/Power Platform"):
             assert removed not in content
         assert content.count("<details>") == content.count("</details>")
-    markdown = (tmp_path / "report.md").read_text(encoding="utf-8")
-    assert "- 항목: 조회 대상 구독 - 수집 결과: " + str(subscription_count) + "개" in markdown
+    content = (tmp_path / "report.html").read_text(encoding="utf-8")
+    assert "항목: 조회 대상 구독 - 수집 결과: " + str(subscription_count) + "개" in content
     if subscription_count:
-        assert "<details><summary>구독: subscription-0" in markdown
-        assert "- **목록 확인 상태**: 목록 수집 실패" in markdown
+        assert "<details><summary>구독: subscription-0" in content
+        assert "목록 확인 상태" in content
+        assert "목록 수집 실패" in content
     assert "<li>" in (tmp_path / "report.html").read_text(encoding="utf-8")

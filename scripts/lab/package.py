@@ -12,7 +12,8 @@ def build_linux_package(root: Path) -> Path:
     dependencies = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))[
         "project"
     ]["optional-dependencies"]["sample"]
-    archive = root / "output" / "langchain-sample.zip"
+    archive = root / ".wasm-agent" / "demo" / "langchain-sample.zip"
+    archive.parent.mkdir(parents=True, exist_ok=True)
     requirements_text = "\n".join(dependencies) + "\n"
     sources = {
         path.name: path for path in (root / "samples" / "langchain").iterdir()

@@ -232,12 +232,12 @@ def build_scope(
     ]
     mapping = [
         ["개발 안건", "프로젝트 산출물", "현재 상태/한계"],
-        ["1. 항목 정의", "docs/scope.md, docs/candidates.md", "20개 원 항목과 추가 제안을 구분; 추가 제안은 미구현"],
-        ["2. 측정 방안", "docs/design.md, docs/api-notes.md, docs/rbac.md, src/wasm_agent/collectors/", "Step 0.5~6에서 작성/검증 예정"],
+        ["1. 항목 정의", "docs/api-notes.md", "20개 원 항목과 추가 제안을 구분; 추가 제안은 미구현"],
+        ["2. 측정 방안", "docs/api-notes.md, docs/guide.md, src/wasm_agent/collectors/", "설계·API 근거·읽기 권한"],
         ["3. 분석 기준", "config/criteria.yaml, src/wasm_agent/evaluators/, tests/", "Step 1·7·9 예정; 원문 미정의 구간은 임의 보간 금지"],
-        ["4. 보고서", "output/report.md, output/summary.csv", "Step 8 예정; 원 안건의 PPT는 이번 요청 산출물에 포함되지 않음"],
+        ["4. 보고서", "output/report.html, output/report.xlsx, output/results.zip", "사용자 보고서와 통합 원시 데이터"],
         ["5. 개선 과제", "criteria.yaml 기반 다음 단계 조건, 보고서 개선 후보", "Step 8 예정; 자동 변경/정책 적용은 하지 않음"],
-        ["6. 이기종 적용", "공통 AgentEvidence, templates/manual_agents.csv, docs/heterogeneous.md", "Step 2·7 예정; 사례/AI Gateway/OpenTelemetry는 검증 필요"],
+        ["6. 이기종 적용", "공통 AgentEvidence, templates/manual_agents.csv, docs/api-notes.md", "사례/AI Gateway/OpenTelemetry는 검증 필요"],
     ]
     return (
         "# System Evidence 범위 및 기준\n\n"
@@ -301,7 +301,7 @@ def convert(source_dir: Path, scope_path: Path) -> list[Path]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="원본 DOCX/XLSX/TXT -> Markdown 및 scope 생성")
     parser.add_argument("--source-dir", type=Path, default=Path("docs") / "source")
-    parser.add_argument("--scope-path", type=Path, default=Path("docs") / "scope.md")
+    parser.add_argument("--scope-path", type=Path, default=Path(".wasm-agent") / "source-scope.md")
     args = parser.parse_args()
     try:
         paths = convert(args.source_dir, args.scope_path)

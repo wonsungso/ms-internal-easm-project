@@ -309,7 +309,8 @@ def deploy(
             "workspace_customer_id": workspace["properties"]["customerId"],
             "hosts": [],
         })
-        partial_path = root / "output" / "lab.partial.json"
+        partial_path = root / ".wasm-agent" / "demo" / "lab.partial.json"
+        partial_path.parent.mkdir(parents=True, exist_ok=True)
         partial_path.write_text(json.dumps(redact(result), ensure_ascii=False, indent=2), encoding="utf-8")
         hosts = []
         archive = build_linux_package(root)

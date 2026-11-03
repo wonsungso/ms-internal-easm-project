@@ -16,6 +16,7 @@ from openai import OpenAIError
 from scripts.lab.auth import TemporaryCertificate
 from scripts.lab.bootstrap import deploy, plan
 from scripts.setup.setup_account import ROLES, AzureCLI, ensure_assignment
+from wasm_agent.reporting.bundle import load_result
 from wasm_agent.utils.evidence import redact
 from wasm_agent.utils.settings import load_yaml
 
@@ -35,24 +36,28 @@ def offline() -> None:
     if child(["-m", "pytest", "-q"]):
         raise RuntimeError("오프라인 테스트 실패; Azure 샘플 배포를 시작하지 않습니다.")
     if child(["-m", "wasm_agent.cli", "collect", "--fixture", "tests/fixtures/three_subscriptions.json",
-              "--output-dir", "output/mock"]):
+              "--output-dir", ".wasm-agent/mock"]):
         raise RuntimeError("오프라인 fixture Run-through 실패")
 
 
 def collect_live(setup: dict, lab: dict, cli: AzureCLI, options: dict) -> int:
+    if lab.get("resources_deleted"):
+        raise ValueError("데모 리소스가 삭제된 상태입니다. 먼저 데모를 다시 배포하세요.")
     settings = load_yaml(ROOT / "config" / "config.yaml")
     settings.update({
         "tenant_id": setup["tenant_id"], "expected_principal_id": setup["principal_id"],
         "subscriptions": setup["subscription_ids"],
-        "evidence_dir": str(ROOT / "evidence"),
+        "evidence_dir": str(ROOT / ".wasm-agent" / "evidence"),
         "projects": [{"subscription_id": setup["subscription_ids"][0],
                       "resource_id": lab["project_id"], "endpoint": lab["project_endpoint"]}],
     })
     for field in ("allowed_models_file", "criteria_file", "tag_conventions_file"):
         settings[field] = str(ROOT / "config" / settings[field])
-    config_path = ROOT / "output" / "lab-collection.yaml"
+    state = ROOT / ".wasm-agent" / "demo"
+    state.mkdir(parents=True, exist_ok=True)
+    config_path = state / "lab-collection.yaml"
     config_path.write_text(yaml.safe_dump(settings, allow_unicode=True), encoding="utf-8")
-    projects_path = ROOT / "output" / "lab-projects.json"
+    projects_path = state / "lab-projects.json"
     save(projects_path, settings["projects"])
     with TemporaryCertificate(setup) as environment:
         command = ["-m", "wasm_agent.cli", "collect", "--config", str(config_path),
@@ -65,7 +70,7 @@ def collect_live(setup: dict, lab: dict, cli: AzureCLI, options: dict) -> int:
             code = child(command, environment)
         if code not in (0, 2):
             raise RuntimeError("진단 SP 수집 실행 실패; 관리자 수집으로 대체하지 않음")
-        collection = json.loads((ROOT / "output" / "collection.json").read_text(encoding="utf-8"))
+        collection = load_result(ROOT / "output")["collection"]
         changes = []
         if options.get("auto_grant_needed_read_roles"):
             for entry in collection["issues"]:
@@ -83,10 +88,9 @@ def collect_live(setup: dict, lab: dict, cli: AzureCLI, options: dict) -> int:
                     ensure_assignment(cli, setup["principal_id"], "ServicePrincipal", scope, ROLES[role])
                     changes.append(record)
             if changes:
-                before = ROOT / "output" / "before-additional-read-roles"
+                before = state / "before-additional-read-roles"
                 before.mkdir(exist_ok=True)
-                for name in ("collection.json", "inventory.json", "inventory.csv", "findings.json",
-                             "summary.csv", "cost_monthly.csv", "report.md", "report.html"):
+                for name in ("report.html", "report.xlsx", "results.zip"):
                     source = ROOT / "output" / name
                     if source.exists():
                         source.replace(before / name)
@@ -95,9 +99,9 @@ def collect_live(setup: dict, lab: dict, cli: AzureCLI, options: dict) -> int:
                 if code not in (0, 2):
                     raise RuntimeError("제한된 추가 읽기 역할 적용 후 수집 실행 실패")
         lab["additional_diagnostic_read_roles"] = changes
-        save(ROOT / "output" / "lab.json", lab)
+        save(state / "lab.json", lab)
         for attempt in range(3):
-            current = json.loads((ROOT / "output" / "collection.json").read_text(encoding="utf-8"))
+            current = load_result(ROOT / "output")["collection"]
             pending = [
                 agent for agent in current["agents"]
                 if agent["platform"] == "langchain" and agent["usage_30d"] is None
@@ -116,7 +120,7 @@ def collect_live(setup: dict, lab: dict, cli: AzureCLI, options: dict) -> int:
         ], environment)
         if preflight not in (0, 2):
             raise RuntimeError("진단 SP 접근 사전 점검 실행 실패")
-    collection = json.loads((ROOT / "output" / "collection.json").read_text(encoding="utf-8"))
+    collection = load_result(ROOT / "output")["collection"]
     expected = lab.get("expected_agent_count", 3)
     if len(collection["agents"]) < expected or len(collection["completed_subscriptions"]) != 3:
         raise RuntimeError(f"승인된 3개 구독/{expected}개 Agent 샘플의 실측 발견을 확인하지 못했습니다.")
@@ -126,15 +130,15 @@ def collect_live(setup: dict, lab: dict, cli: AzureCLI, options: dict) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="관리자 샘플 준비와 진단 Reader Run-through 분리 실행")
     parser.add_argument("command", choices=["plan", "test", "validate", "deploy", "collect", "all"])
-    parser.add_argument("--setup-file", type=Path, default=ROOT / "output" / "setup.json")
+    parser.add_argument("--setup-file", type=Path, default=ROOT / ".wasm-agent" / "setup.json")
     parser.add_argument("--lab-config", type=Path, default=ROOT / "config" / "lab.yaml")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--prepare-providers", action="store_true")
     parser.add_argument("--reuse-infrastructure", action="store_true")
     args = parser.parse_args(argv)
     logging.getLogger("azure").setLevel(logging.WARNING)
-    output = ROOT / "output"
-    output.mkdir(exist_ok=True)
+    output = ROOT / ".wasm-agent" / "demo"
+    output.mkdir(parents=True, exist_ok=True)
     started = datetime.now(UTC).isoformat()
     try:
         setup = json.loads(args.setup_file.read_text(encoding="utf-8-sig"))

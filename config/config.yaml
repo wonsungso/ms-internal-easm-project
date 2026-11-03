@@ -2,7 +2,7 @@ tenant_id: null
 expected_principal_id: null
 subscriptions: []
 workers: 3
-evidence_dir: evidence
+evidence_dir: .wasm-agent/evidence
 foundry_profile: agents_v1
 projects: []
 manual_agents: null

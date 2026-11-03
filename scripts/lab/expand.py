@@ -150,13 +150,13 @@ def evaluate_agent(project: AIProjectClient, entry: dict, version: str, path: Pa
 
 
 def expand() -> None:
-    setup = json.loads((ROOT / "output" / "setup.json").read_text(encoding="utf-8"))
-    lab = json.loads((ROOT / "output" / "lab.json").read_text(encoding="utf-8"))
+    setup = json.loads((ROOT / ".wasm-agent" / "setup.json").read_text(encoding="utf-8"))
+    lab = json.loads((ROOT / ".wasm-agent" / "demo" / "lab.json").read_text(encoding="utf-8"))
     catalog = json.loads((ROOT / "samples" / "langchain" / "catalog.json").read_text(encoding="utf-8"))
     cli = AzureCLI()
     if cli.run("account", "show")["tenantId"].lower() != setup["tenant_id"]:
         raise RuntimeError("관리자 테넌트가 승인한 셋업과 다릅니다.")
-    receipts = ROOT / "output" / "chatbot-expansion" / lab["lab_id"]
+    receipts = ROOT / ".wasm-agent" / "demo" / "chatbot-expansion" / lab["lab_id"]
     receipts.mkdir(exist_ok=True)
     state_file = receipts / "state.json"
     state = json.loads(state_file.read_text(encoding="utf-8")) if state_file.is_file() else {"foundry": [], "hosts": []}
@@ -171,7 +171,7 @@ def expand() -> None:
             for host in lab["hosts"]:
                 auth = configure(cli, arm, graph, setup, lab, host, [oid])
                 host["web_auth"] = auth
-                save(ROOT / "output" / "lab.json", lab)
+                save(ROOT / ".wasm-agent" / "demo" / "lab.json", lab)
             with AIProjectClient(
                 endpoint=lab["project_endpoint"], credential=credential, allow_preview=True,
             ) as project:
@@ -265,12 +265,12 @@ def expand() -> None:
                              "anonymous_chat_status": denied.status_code, "deployment_verified": True})
                 state["hosts"] = [old for old in state["hosts"] if old["name"] != host["name"]] + [host]
                 save(state_file, state)
-                save(ROOT / "output" / "lab.json", lab)
+                save(ROOT / ".wasm-agent" / "demo" / "lab.json", lab)
                 print("로그인 보호 챗봇 배포: " + host["name"], flush=True)
             lab["chatbot_agents"] = state["foundry"]
             lab["expected_agent_count"] = len(catalog)
             lab["chatbot_expansion_complete"] = len(state["foundry"]) == 8 and len(state["hosts"]) == 2
-            save(ROOT / "output" / "lab.json", lab)
+            save(ROOT / ".wasm-agent" / "demo" / "lab.json", lab)
         finally:
             graph.close()
             arm.session.close()

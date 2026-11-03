@@ -16,8 +16,8 @@ def test_source_only_repack_reuses_verified_dependencies(tmp_path: Path) -> None
     (tmp_path / "pyproject.toml").write_text(
         '[project.optional-dependencies]\nsample = ["fixture==1"]\n', encoding="utf-8",
     )
-    output = tmp_path / "output"
-    output.mkdir()
+    output = tmp_path / ".wasm-agent" / "demo"
+    output.mkdir(parents=True)
     archive = output / "langchain-sample.zip"
     native = ".python_packages/lib/site-packages/native.so"
     with zipfile.ZipFile(archive, "w") as bundle:
