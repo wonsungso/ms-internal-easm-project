@@ -95,6 +95,9 @@ def main(argv: list[str] | None = None) -> int:
         else:
             with DefaultAzureCredential() as credential:
                 data = collect(settings, credential)
+            data.facts["subscription_scope"] = (
+                "explicit_subscription_list" if settings.subscriptions else "all_accessible_active_in_tenant"
+            )
         data.facts["data_mode"] = "fixture" if args.fixture else "live"
         findings = evaluate(
             data, load_yaml(settings.criteria_file), load_yaml(settings.allowed_models_file),

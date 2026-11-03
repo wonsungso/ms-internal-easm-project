@@ -8,7 +8,7 @@ if [[ "${1:-}" != "--apply" ]]; then
 fi
 python_command="${WASM_AGENT_PYTHON:-$root/.venv/bin/python}"
 "$python_command" -m scripts.lab.run validate --prepare-providers
-"$python_command" -m scripts.lab.run all --apply
+"$python_command" -m scripts.lab.run deploy --apply
 "$python_command" -m scripts.lab.expand --apply
 set +e
 "$python_command" -m scripts.lab.run collect
