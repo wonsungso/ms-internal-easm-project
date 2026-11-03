@@ -5,15 +5,15 @@ import uuid
 from pathlib import Path
 
 from wasm_agent.models import Collection, Finding
-from wasm_agent.reporting.compact import (
+from wasm_agent.report_data import (
     atomic_write,
     json_bytes,
     load_result,
     normalize_result,
     snapshot_path,
 )
-from wasm_agent.reporting.presentation import customer_document, html_document
-from wasm_agent.reporting.workbook import write_workbook
+from wasm_agent.report_excel import write_workbook
+from wasm_agent.report_html import customer_document, html_document
 
 __all__ = ["load_result", "write_reports"]
 

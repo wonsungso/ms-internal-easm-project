@@ -10,7 +10,7 @@ import requests
 from azure.core.exceptions import ClientAuthenticationError
 
 from scripts import verify_permissions as verify
-from wasm_agent.utils.azure import credential_token
+from wasm_agent.azure import credential_token
 
 SID = "11111111-1111-4111-8111-111111111111"
 TENANT = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"

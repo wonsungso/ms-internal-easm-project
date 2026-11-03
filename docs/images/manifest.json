@@ -1,0 +1,82 @@
+{
+  "authentication": {
+    "captured_on": "2026-11-03",
+    "source": "실제 로그인된 Azure portal",
+    "automation": "Playwright integrated browser",
+    "highlight_color": "#d40000",
+    "account_banner_excluded": true,
+    "credentials_modified": false,
+    "credential_counts_after_cancel": {
+      "certificates": 0,
+      "passwords": 0,
+      "federated_credentials": 0
+    },
+    "verification_limit": "화면 이동·필수 입력란·비활성 Add·취소만 검증. 실제 자격증명 등록·토큰 교환·SP 사전 점검은 미실행.",
+    "images": [
+      {
+        "file": "01-app-registration.png",
+        "action": "All applications 선택, 앱 검색, 앱 링크 열기",
+        "highlight_count": 3,
+        "client_id_masked": true
+      },
+      {
+        "file": "02-certificates.png",
+        "action": "Certificates & secrets 메뉴, Certificates 탭, Upload certificate",
+        "highlight_count": 3
+      },
+      {
+        "file": "03-upload-public-certificate.png",
+        "action": "공개 인증서 선택 아이콘 및 설명 입력란 확인 후 취소",
+        "highlight_count": 2,
+        "file_selected": false,
+        "add_disabled": true
+      },
+      {
+        "file": "04-federated-credentials.png",
+        "action": "Federated credentials 탭과 Add credential",
+        "highlight_count": 2
+      },
+      {
+        "file": "05-federation-scenario.png",
+        "action": "시나리오 목록에서 Other issuer 양식 확인",
+        "highlight_count": 2
+      },
+      {
+        "file": "06-federation-fields.png",
+        "action": "공개 예시 Issuer 입력 후 명시적 Subject·Value·Name 표시 확인 및 취소",
+        "highlight_count": 4,
+        "sample_issuer_only": true,
+        "add_disabled": true
+      }
+    ]
+  },
+  "chatbots": {
+    "method": "Playwright screenshots of actual Entra sign-in and deployed Azure chatbot",
+    "highlight_color": "#d40000",
+    "synthetic_conversations_only": true,
+    "account_identifiers_masked": true,
+    "images": [
+      {
+        "file": "01-entra-consent.png",
+        "highlight_count": 1,
+        "account_masked": true,
+        "application_registration_name_masked": true,
+        "flow": "Actual single-tenant Entra basic sign-in consent; no secret generated"
+      },
+      {
+        "file": "02-langchain-chat.png",
+        "highlight_count": 3,
+        "actual_response": true,
+        "input_tokens": 64,
+        "output_tokens": 88
+      },
+      {
+        "file": "03-foundry-chat.png",
+        "highlight_count": 3,
+        "actual_response": true,
+        "input_tokens": 72,
+        "output_tokens": 59
+      }
+    ]
+  }
+}

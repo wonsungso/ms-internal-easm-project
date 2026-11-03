@@ -54,7 +54,7 @@ bash scripts/setup/manage.sh verify \
   --certificate-path "$AZURE_CLIENT_CERTIFICATE_PATH"
 ```
 
-![공개 인증서 메뉴와 클릭 위치](docs/images/setup/02-certificates.png)
+![공개 인증서 메뉴와 클릭 위치](docs/images/02-certificates.png)
 
 ## 수집
 
@@ -82,7 +82,7 @@ wasm-agent collect --setup-file .wasm-agent/setup.json \
   --output-dir output
 ```
 
-- 다른 플랫폼의 수동 등록은 `--manual-agents templates/manual_agents.csv`로 추가합니다.
+- 다른 플랫폼의 수동 등록은 `--manual-agents config/manual_agents.csv`로 추가합니다.
 - 수집 필드·필요 권한·값이 나오지 않는 조건은 [수집 안내](docs/guide.md)에 있습니다.
 
 ## 결과 - 세 파일만 확인
@@ -113,6 +113,14 @@ wasm-agent package --output-dir output
 
 ## 참고
 
+- 폴더 구조
+  - [src/wasm_agent](src/wasm_agent/): 수집·판정·보고서 모듈을 한 폴더에 모았습니다.
+  - [config](config/): 설정·정책·수동 Agent 입력 CSV.
+  - [docs](docs/): 안내 문서 3개와 공통 이미지 폴더.
+  - [scripts](scripts/): 운영 명령. 관리자용 `setup`·`lab`은 읽기 수집 코드와 분리합니다.
+  - [infra](infra/), [samples](samples/): 선택 실행하는 배포 정의·예제 코드.
+  - [tests](tests/): 단위 테스트와 가짜 API 응답.
+  - `output/`: 최종 결과 3개. `.wasm-agent/`: Git에 포함하지 않는 내부 설정·상태.
 - [고객 안내: 인증·권한·수집 항목](docs/guide.md).
 - [개발 참고: 설계·API 근거·평가 기준](docs/api-notes.md).
 - 코드 검사는 `python -m pytest -q`, `python -m ruff check src scripts samples tests`로 실행합니다.

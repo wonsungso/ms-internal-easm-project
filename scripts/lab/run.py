@@ -16,9 +16,9 @@ from openai import OpenAIError
 from scripts.lab.auth import TemporaryCertificate
 from scripts.lab.bootstrap import deploy, plan
 from scripts.setup.setup_account import ROLES, AzureCLI, ensure_assignment
-from wasm_agent.reporting.bundle import load_result
-from wasm_agent.utils.evidence import redact
-from wasm_agent.utils.settings import load_yaml
+from wasm_agent.evidence import redact
+from wasm_agent.report_bundle import load_result
+from wasm_agent.settings import load_yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 

@@ -8,7 +8,7 @@ from scripts.lab.package import build_linux_package
 
 
 def test_source_only_repack_reuses_verified_dependencies(tmp_path: Path) -> None:
-    source = tmp_path / "samples" / "langchain"
+    source = tmp_path / "samples"
     source.mkdir(parents=True)
     (source / "app.py").write_text("new chatbot source", encoding="utf-8")
     (source / "chat.html").write_text("new chat form", encoding="utf-8")

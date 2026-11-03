@@ -9,7 +9,7 @@ import httpx
 import pytest
 from openai import RateLimitError
 
-from samples.langchain.app import CATALOG, app, reserve_call
+from samples.app import CATALOG, app, reserve_call
 from scripts.lab.web_auth import auth_settings
 
 
@@ -52,7 +52,7 @@ def test_auth_config_uses_managed_identity_not_secret() -> None:
 
 
 def test_anonymous_and_unapproved_user_cannot_invoke(client) -> None:
-    with patch("samples.langchain.app.invoke_agent", side_effect=AssertionError("must not invoke")):
+    with patch("samples.app.invoke_agent", side_effect=AssertionError("must not invoke")):
         assert client.get("/").status_code == 401
         assert client.get("/api/agents").status_code == 401
         assert client.post("/api/chat", json=question()).status_code == 401
@@ -75,7 +75,7 @@ def test_easyauth_sid_header_uses_verified_oid_claim(client) -> None:
 
 
 def test_health_has_no_model_call(client) -> None:
-    with patch("samples.langchain.app.invoke_agent", side_effect=AssertionError("no charge")):
+    with patch("samples.app.invoke_agent", side_effect=AssertionError("no charge")):
         assert client.get("/health").status_code == 200
 
 
@@ -95,7 +95,7 @@ def test_real_chat_ui_and_available_agents(client, monkeypatch: pytest.MonkeyPat
     {"Origin": "https://foreign.example"}, {"X-SEAgent-Chat": ""},
 ])
 def test_cross_origin_chat_is_rejected(client, replacement: dict) -> None:
-    with patch("samples.langchain.app.invoke_agent", side_effect=AssertionError("must not invoke")):
+    with patch("samples.app.invoke_agent", side_effect=AssertionError("must not invoke")):
         assert client.post("/api/chat", json=question(), headers=headers() | replacement).status_code == 403
 
 
@@ -103,7 +103,7 @@ def test_azure_https_origin_is_not_confused_with_internal_http(
     client, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("WEBSITE_HOSTNAME", "sample.azurewebsites.net")
-    with patch("samples.langchain.app.invoke_agent", return_value=("답변", 1, 2)):
+    with patch("samples.app.invoke_agent", return_value=("답변", 1, 2)):
         response = client.post("/api/chat", json=question(), headers={
             **headers(), "Origin": "https://sample.azurewebsites.net",
         })
@@ -127,7 +127,7 @@ def test_other_host_agent_not_routed_locally(client) -> None:
 
 
 def test_chat_calls_llm_and_logs_only_usage(client, capsys: pytest.CaptureFixture) -> None:
-    with patch("samples.langchain.app.invoke_agent", return_value=("실제 모델 답변", 15, 20)) as invoke:
+    with patch("samples.app.invoke_agent", return_value=("실제 모델 답변", 15, 20)) as invoke:
         response = client.post("/api/chat", json=question(), headers=headers())
     assert response.status_code == 200 and response.json["answer"] == "실제 모델 답변"
     assert invoke.call_args.args[0]["id"] == "langchain-tools"
@@ -138,7 +138,7 @@ def test_chat_calls_llm_and_logs_only_usage(client, capsys: pytest.CaptureFixtur
 
 
 def test_llm_failure_is_not_a_fake_answer(client) -> None:
-    with patch("samples.langchain.app.invoke_agent", side_effect=RuntimeError("upstream")):
+    with patch("samples.app.invoke_agent", side_effect=RuntimeError("upstream")):
         response = client.post("/api/chat", json=question(), headers=headers())
     assert response.status_code == 502 and "answer" not in response.json
 
@@ -150,7 +150,7 @@ def rate_limit() -> RateLimitError:
 
 
 def test_model_limit_is_explained_without_fake_answer(client) -> None:
-    with patch("samples.langchain.app.invoke_agent", side_effect=rate_limit()):
+    with patch("samples.app.invoke_agent", side_effect=rate_limit()):
         response = client.post("/api/chat", json=question(), headers=headers())
     assert response.status_code == 429 and "Azure 모델" in response.json["message"]
     assert "answer" not in response.json
@@ -192,7 +192,7 @@ def test_quota_is_persistent_and_bounds_model_calls(client) -> None:
     for _ in range(10):
         assert reserve_call("allowed-user")
     assert not reserve_call("allowed-user")
-    with patch("samples.langchain.app.invoke_agent", side_effect=AssertionError("quota stops inference")):
+    with patch("samples.app.invoke_agent", side_effect=AssertionError("quota stops inference")):
         assert client.post("/api/chat", json=question(), headers=headers()).status_code == 429
 
 
@@ -201,7 +201,7 @@ def test_multiturn_usage_counts_only_new_model_rounds(monkeypatch: pytest.Monkey
 
     from langchain_core.messages import AIMessage, HumanMessage
 
-    from samples.langchain.app import invoke_agent
+    from samples.app import invoke_agent
 
     monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://fixture.openai.azure.com")
     monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT", "fixture")
@@ -216,10 +216,10 @@ def test_multiturn_usage_counts_only_new_model_rounds(monkeypatch: pytest.Monkey
             "input_tokens": 12, "output_tokens": 34, "total_tokens": 46,
         }),
     ]}
-    with patch("samples.langchain.app.DefaultAzureCredential"), patch(
-        "samples.langchain.app.AzureChatOpenAI",
-    ), patch("samples.langchain.app.get_bearer_token_provider"), patch(
-        "samples.langchain.app.create_agent", return_value=runtime,
+    with patch("samples.app.DefaultAzureCredential"), patch(
+        "samples.app.AzureChatOpenAI",
+    ), patch("samples.app.get_bearer_token_provider"), patch(
+        "samples.app.create_agent", return_value=runtime,
     ):
         entry = next(row for row in CATALOG if row["id"] == "langchain-basic")
         assert invoke_agent(entry, history) == ("new response", 12, 34)

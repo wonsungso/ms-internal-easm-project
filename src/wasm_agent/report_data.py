@@ -8,9 +8,9 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
+from wasm_agent.evidence import redact
 from wasm_agent.models import Collection, Finding
-from wasm_agent.reporting.presentation import EvidenceLinks
-from wasm_agent.utils.evidence import redact
+from wasm_agent.report_html import EvidenceLinks
 
 STATE_ROOT = Path(__file__).resolve().parents[3] / ".wasm-agent" / "results"
 

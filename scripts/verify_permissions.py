@@ -15,14 +15,14 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from wasm_agent.utils.azure import (
+from wasm_agent.azure import (
     AccessError,
     Credential,
     ReaderHTTP,
     trusted_url,
 )
-from wasm_agent.utils.azure import time as time
-from wasm_agent.utils.identity import rejects_broad_permissions, verify_identity
+from wasm_agent.azure import time as time
+from wasm_agent.identity import rejects_broad_permissions, verify_identity
 
 ARM = "https://management.azure.com"
 ARM_SCOPE = ARM + "/.default"

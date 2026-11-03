@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from wasm_agent.models import Collection
-from wasm_agent.reporting.compact import atomic_write, json_bytes, load_result, snapshot_path
+from wasm_agent.report_data import atomic_write, json_bytes, load_result, snapshot_path
 
 RESULT_FILES = ("report.html", "report.xlsx", "data.json")
 

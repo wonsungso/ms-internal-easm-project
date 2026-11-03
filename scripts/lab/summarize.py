@@ -12,7 +12,7 @@ import requests
 
 from scripts.lab.certificates import GraphCertificates
 from scripts.setup.setup_account import AzureCLI
-from wasm_agent.reporting.bundle import load_result
+from wasm_agent.report_bundle import load_result
 
 ROOT = Path(__file__).resolve().parents[2]
 

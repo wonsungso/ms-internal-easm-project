@@ -7,7 +7,7 @@ from pathlib import Path
 
 from scripts.lab.bootstrap import plan
 from scripts.setup.setup_account import AzureCLI
-from wasm_agent.utils.settings import load_yaml
+from wasm_agent.settings import load_yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 

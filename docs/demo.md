@@ -149,15 +149,15 @@ python -m scripts.lab.summarize
 
 - 처음에는 기본 로그인 프로필 사용에 동의하는 화면이 나올 수 있습니다. 이것은 진단 SP에 Azure 쓰기 권한을 부여하는 화면이 아닙니다. 실제 캡처에서 계정과 앱 등록 식별자를 가렸습니다.
 
-![Entra 기본 로그인 동의와 클릭 위치](images/chatbots/01-entra-consent.png)
+![Entra 기본 로그인 동의와 클릭 위치](images/01-entra-consent.png)
 
 - 아래는 실제 로그인 후 LangChain Agent가 LLM으로 생성한 답변입니다. 빨간 네모 순서대로 Agent 선택, 질문 입력, 질문 보내기를 사용합니다.
 
-![실제 LangChain 챗봇 대화](images/chatbots/02-langchain-chat.png)
+![실제 LangChain 챗봇 대화](images/02-langchain-chat.png)
 
 - 같은 화면에서 Foundry Agent를 선택하면 해당 Foundry endpoint가 실제로 답변합니다. 아래의 평가 완료 표시는 서비스 평가 실행 이력에 근거하며 모든 문항 통과를 뜻하지 않습니다.
 
-![실제 Foundry 챗봇 대화와 평가 조건](images/chatbots/03-foundry-chat.png)
+![실제 Foundry 챗봇 대화와 평가 조건](images/03-foundry-chat.png)
 
 - **모델 허용 목록에는 어떤 정보를 기록해야 하나요?**
   - 볼 수 있는 차이: 정책 상담 Agent의 전문 프롬프트

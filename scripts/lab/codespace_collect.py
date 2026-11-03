@@ -15,7 +15,7 @@ import yaml
 
 from scripts.lab.auth import TemporaryCertificate
 from scripts.lab.run import ROOT, save
-from wasm_agent.utils.settings import load_yaml
+from wasm_agent.settings import load_yaml
 
 WORKSPACE = "/workspaces/ms-internal-wasm-project"
 

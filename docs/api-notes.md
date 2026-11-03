@@ -268,10 +268,10 @@
   - 프로젝트 산출물: docs/api-notes.md의 원문 범위와 추가 제안
   - 현재 상태/한계: 20개 원 항목과 추가 제안을 구분; 추가 제안은 미구현
 - **2. 측정 방안**
-  - 프로젝트 산출물: docs/api-notes.md, docs/guide.md, src/wasm_agent/collectors/
+  - 프로젝트 산출물: docs/api-notes.md, docs/guide.md, src/wasm_agent/
   - 현재 상태/한계: 읽기 계약과 권한 한계를 아래에 보존; 고객별 지원은 실제 접근 확인 필요
 - **3. 분석 기준**
-  - 프로젝트 산출물: config/criteria.yaml, src/wasm_agent/evaluators/, tests/
+  - 프로젝트 산출물: config/criteria.yaml, src/wasm_agent/evaluation.py, tests/
   - 현재 상태/한계: 원문 미정의 구간은 임의 보간 금지
 - **4. 보고서**
   - 프로젝트 산출물: report.html, report.xlsx, results.zip
@@ -280,7 +280,7 @@
   - 프로젝트 산출물: criteria.yaml 기반 다음 단계 조건, 보고서 개선 후보
   - 현재 상태/한계: 자동 변경/정책 적용은 하지 않음
 - **6. 이기종 적용**
-  - 프로젝트 산출물: 공통 AgentEvidence, templates/manual_agents.csv, 이 문서의 이기종 절
+  - 프로젝트 산출물: 공통 AgentEvidence, config/manual_agents.csv, 이 문서의 이기종 절
   - 현재 상태/한계: 사례/AI Gateway/OpenTelemetry는 검증 필요
 
 ## 실행 경계와 설계
@@ -477,7 +477,7 @@
 
 - Azure 외 Agent도 같은 목록에 정리할 수 있습니다. 현재는 CSV 직접 등록이며 Google/AWS 자동 로그인 수집이 아닙니다. 고객 입력과 Azure API 확인값을 구분합니다.
 - 공통 스키마: AgentEvidence의 platform과 필드별 null 사유로 플랫폼 차이 보존.
-- 수동 등록: `wasm-agent collect --manual-agents templates/manual_agents.csv`; manual/other만 허용. CSV는 입력 템플릿이며 사용자 결과 CSV를 뜻하지 않음.
+- 수동 등록: `wasm-agent collect --manual-agents config/manual_agents.csv`; manual/other만 허용. CSV는 입력 템플릿이며 사용자 결과 CSV를 뜻하지 않음.
 - 확장 플러그인: Collector Protocol의 discover(subscriptions), required_roles를 구현하고 공통 모델 반환.
 - 재사용 후보: LG U+ Connector/ISD 사례의 커넥터/메타데이터 매핑 조사 자리. 현재 구현/검증 안 함.
 - API Management AI Gateway: 요청/모델/토큰 메타데이터 공통 수집 가능성. 검증 필요.

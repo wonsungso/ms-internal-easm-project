@@ -4,8 +4,8 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
+from wasm_agent.evidence import EvidenceStore, redact
 from wasm_agent.models import AgentEvidence, Collection
-from wasm_agent.utils.evidence import EvidenceStore, redact
 
 HOSTS = {
     "microsoft.web/sites", "microsoft.app/containerapps",

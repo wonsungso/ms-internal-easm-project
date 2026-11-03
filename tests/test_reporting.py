@@ -10,12 +10,12 @@ import pytest
 from openpyxl import load_workbook
 
 from wasm_agent.cli import main
-from wasm_agent.evaluators.engine import evaluate
+from wasm_agent.evaluation import evaluate
+from wasm_agent.evidence import redact
 from wasm_agent.models import Collection, EvaluationRun, Finding, Issue
-from wasm_agent.reporting.presentation import evaluation_columns
-from wasm_agent.reporting.reports import load_result, write_reports
-from wasm_agent.utils.evidence import redact
-from wasm_agent.utils.settings import load_yaml
+from wasm_agent.report import load_result, write_reports
+from wasm_agent.report_html import evaluation_columns
+from wasm_agent.settings import load_yaml
 
 ROOT = Path(__file__).parents[1]
 
@@ -23,7 +23,7 @@ ROOT = Path(__file__).parents[1]
 @pytest.fixture(autouse=True)
 def isolated_result_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "wasm_agent.reporting.compact.STATE_ROOT",
+        "wasm_agent.report_data.STATE_ROOT",
         tmp_path.parent / (tmp_path.name + "-runtime"),
     )
 

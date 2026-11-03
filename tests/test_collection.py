@@ -9,14 +9,14 @@ from urllib.parse import urlparse
 
 import pytest
 
+from wasm_agent.azure import AccessError
 from wasm_agent.collect import collect
-from wasm_agent.collectors.foundry import FoundryCollector, list_data
-from wasm_agent.collectors.manual import ManualCollector
-from wasm_agent.collectors.signals import SignalCollector
+from wasm_agent.collect_foundry import FoundryCollector, list_data
+from wasm_agent.collect_manual import ManualCollector
+from wasm_agent.collect_signals import SignalCollector
+from wasm_agent.evidence import EvidenceStore, redact
 from wasm_agent.models import Collection
-from wasm_agent.utils.azure import AccessError
-from wasm_agent.utils.evidence import EvidenceStore, redact
-from wasm_agent.utils.settings import load_settings, load_yaml
+from wasm_agent.settings import load_settings, load_yaml
 
 ROOT = Path(__file__).parents[1]
 NOW = datetime(2026, 11, 3, 1, tzinfo=UTC)
@@ -71,7 +71,7 @@ def test_foundry_versions_do_not_count_as_multiple_agents(
     http.request.return_value = {
         "properties": {"endpoints": {"AI Foundry API": "https://fixture.services.ai.azure.com/api/projects/test"}},
     }
-    with patch("wasm_agent.collectors.foundry.list_data", side_effect=[
+    with patch("wasm_agent.collect_foundry.list_data", side_effect=[
         fixtures["foundry_agents"]["data"], fixtures["foundry_versions"]["data"],
         [{"id": "eval-fixture"}],
         [{"id": "run-fixture", "status": "completed", "result_counts": counts,
@@ -166,7 +166,7 @@ def test_subscription_failure_preserves_other_subscription_records(tmp_path: Pat
             facts={"inventory_complete": True},
         )
 
-    with patch("wasm_agent.collectors.inventory.InventoryCollector.discover", autospec=True, side_effect=inventory), patch(
+    with patch("wasm_agent.collect_inventory.InventoryCollector.discover", autospec=True, side_effect=inventory), patch(
         "wasm_agent.collect.FoundryCollector.discover", return_value=Collection(collected_at=NOW),
     ), patch("wasm_agent.collect.LangChainCollector.discover", return_value=Collection(collected_at=NOW)), patch(
         "wasm_agent.collect.SignalCollector.discover", return_value=Collection(collected_at=NOW),
@@ -179,7 +179,7 @@ def test_subscription_failure_preserves_other_subscription_records(tmp_path: Pat
 
 
 def test_manual_template_and_invalid_input(tmp_path: Path) -> None:
-    data = ManualCollector(ROOT / "templates" / "manual_agents.csv", NOW).discover([])
+    data = ManualCollector(ROOT / "config" / "manual_agents.csv", NOW).discover([])
     assert data.agents[0].platform == "other"
     assert data.agents[0].field_status["subscription_id"].reason == "not_found"
     invalid = tmp_path / "invalid.csv"

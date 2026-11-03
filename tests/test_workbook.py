@@ -19,8 +19,8 @@ from wasm_agent.models import (
     Issue,
     LogSetting,
 )
-from wasm_agent.reporting.reports import write_reports
-from wasm_agent.reporting.workbook import portable_workbook, write_workbook
+from wasm_agent.report import write_reports
+from wasm_agent.report_excel import portable_workbook, write_workbook
 
 
 def snapshot() -> Collection:

@@ -5,11 +5,17 @@ from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import urlencode
 
-from wasm_agent.models import Collection, CostRecord, LogSetting, SecurityRecommendation, Usage
-from wasm_agent.models.evidence import timestamp
-from wasm_agent.utils.azure import ARM, GRAPH_URL, LOG_SCOPE, AccessError, ReaderHTTP
+from wasm_agent.azure import ARM, GRAPH_URL, LOG_SCOPE, AccessError, ReaderHTTP
+from wasm_agent.models import (
+    Collection,
+    CostRecord,
+    LogSetting,
+    SecurityRecommendation,
+    Usage,
+    timestamp,
+)
 
-from .inventory import issue
+from .collect_inventory import issue
 
 
 class SignalCollector:

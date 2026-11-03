@@ -16,6 +16,7 @@ from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.worksheet.worksheet import Worksheet
 from pydantic import BaseModel
 
+from wasm_agent.evidence import redact
 from wasm_agent.models import (
     AgentEvidence,
     Collection,
@@ -27,8 +28,7 @@ from wasm_agent.models import (
     ModelDeployment,
     SecurityRecommendation,
 )
-from wasm_agent.reporting.presentation import FIELD_NAMES, SE_NAMES, metric, readable
-from wasm_agent.utils.evidence import redact
+from wasm_agent.report_html import FIELD_NAMES, SE_NAMES, metric, readable
 
 EMPTY = "수집된 데이터 없음 - 미수행 또는 0건으로 확정하지 않음"
 ORIGINAL = "원본 JSON"

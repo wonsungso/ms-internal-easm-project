@@ -10,13 +10,13 @@ from pathlib import Path
 from azure.core.exceptions import ClientAuthenticationError
 from azure.identity import DefaultAzureCredential
 
+from wasm_agent.azure import AccessError
 from wasm_agent.collect import collect
-from wasm_agent.evaluators.engine import evaluate
+from wasm_agent.evaluation import evaluate
 from wasm_agent.models import Collection, Finding
-from wasm_agent.reporting.bundle import create_bundle
-from wasm_agent.reporting.reports import load_result, write_reports
-from wasm_agent.utils.azure import AccessError
-from wasm_agent.utils.settings import load_settings, load_yaml
+from wasm_agent.report import load_result, write_reports
+from wasm_agent.report_bundle import create_bundle
+from wasm_agent.settings import load_settings, load_yaml
 
 
 def main(argv: list[str] | None = None) -> int:

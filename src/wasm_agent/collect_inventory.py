@@ -4,9 +4,9 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
+from wasm_agent.azure import ARM, GRAPH_URL, AccessError, ReaderHTTP
+from wasm_agent.identity import rejects_broad_permissions
 from wasm_agent.models import Collection, Issue
-from wasm_agent.utils.azure import ARM, GRAPH_URL, AccessError, ReaderHTTP
-from wasm_agent.utils.identity import rejects_broad_permissions
 
 RESOURCE_TYPES = (
     "microsoft.cognitiveservices/accounts", "microsoft.cognitiveservices/accounts/projects",

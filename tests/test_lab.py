@@ -10,7 +10,7 @@ from scripts.lab.auth import TemporaryCertificate
 from scripts.lab.bootstrap import AdminARM, plan
 from scripts.lab.cleanup import main as cleanup
 from scripts.lab.run import main
-from wasm_agent.utils.settings import load_yaml
+from wasm_agent.settings import load_yaml
 
 ROOT = Path(__file__).parents[1]
 

@@ -25,7 +25,7 @@ from azure.identity import DefaultAzureCredential
 from openai import APIStatusError
 
 from scripts.setup.setup_account import ensure_assignment, role_spec, verify_custom_role
-from wasm_agent.utils.evidence import redact
+from wasm_agent.evidence import redact
 
 from .package import build_linux_package
 from .zipdeploy import deploy_zip

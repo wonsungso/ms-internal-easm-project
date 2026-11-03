@@ -5,13 +5,12 @@ from datetime import datetime
 from typing import Any
 from urllib.parse import quote, urlencode
 
-from wasm_agent.models import AgentEvidence, Collection, EvaluationRun, ModelDeployment
-from wasm_agent.models.evidence import timestamp
-from wasm_agent.utils.azure import AI_SCOPE, ARM, AccessError, ReaderHTTP, trusted_url
-from wasm_agent.utils.evidence import redact
-from wasm_agent.utils.settings import Settings
+from wasm_agent.azure import AI_SCOPE, ARM, AccessError, ReaderHTTP, trusted_url
+from wasm_agent.evidence import redact
+from wasm_agent.models import AgentEvidence, Collection, EvaluationRun, ModelDeployment, timestamp
+from wasm_agent.settings import Settings
 
-from .inventory import issue
+from .collect_inventory import issue
 
 
 def list_data(

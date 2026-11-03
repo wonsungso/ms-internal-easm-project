@@ -6,16 +6,16 @@ from typing import Any
 
 from azure.core.exceptions import ClientAuthenticationError
 
-from wasm_agent.collectors.foundry import FoundryCollector
-from wasm_agent.collectors.inventory import InventoryCollector, issue
-from wasm_agent.collectors.langchain import LangChainCollector
-from wasm_agent.collectors.manual import ManualCollector
-from wasm_agent.collectors.signals import SignalCollector
+from wasm_agent.azure import ARM, AccessError, Credential, ReaderHTTP
+from wasm_agent.collect_foundry import FoundryCollector
+from wasm_agent.collect_inventory import InventoryCollector, issue
+from wasm_agent.collect_langchain import LangChainCollector
+from wasm_agent.collect_manual import ManualCollector
+from wasm_agent.collect_signals import SignalCollector
+from wasm_agent.evidence import EvidenceStore
+from wasm_agent.identity import verify_identity
 from wasm_agent.models import Collection, Issue
-from wasm_agent.utils.azure import ARM, AccessError, Credential, ReaderHTTP
-from wasm_agent.utils.evidence import EvidenceStore
-from wasm_agent.utils.identity import verify_identity
-from wasm_agent.utils.settings import Settings, load_yaml
+from wasm_agent.settings import Settings, load_yaml
 
 
 def merge(destination: Collection, source: Collection) -> None:

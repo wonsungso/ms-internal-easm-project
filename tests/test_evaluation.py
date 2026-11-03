@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from wasm_agent.evaluators.engine import evaluate, matches
+from wasm_agent.evaluation import evaluate, matches
 from wasm_agent.models import Collection, ModelDeployment
-from wasm_agent.utils.settings import load_yaml
+from wasm_agent.settings import load_yaml
 
 ROOT = Path(__file__).parents[1]
 

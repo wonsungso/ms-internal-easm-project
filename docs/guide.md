@@ -97,7 +97,7 @@ export AZURE_CLIENT_CERTIFICATE_PASSWORD
 
 - [Azure portal](https://portal.azure.com)에서 **Microsoft Entra ID > App registrations > All applications**를 엽니다. 설정 파일의 `account_name`으로 검색해 앱을 클릭합니다. 아래 테스트베드의 앱 이름은 예시이며 다른 환경에서는 본인의 진단 앱을 선택하세요. Client ID는 이미지에서 가렸습니다.
 
-![All applications, 검색, 진단 앱 링크의 빨간 네모](images/setup/01-app-registration.png)
+![All applications, 검색, 진단 앱 링크의 빨간 네모](images/01-app-registration.png)
 
 ## A. 인증서 방식
 
@@ -110,9 +110,9 @@ export AZURE_CLIENT_CERTIFICATE_PASSWORD
 - **4**
   - 고객이 할 일: 개인키 포함 PEM/PFX는 로컬 보호 경로에 두고 아래 `verify` 실행
 
-![Certificates 메뉴, Certificates 탭, Upload certificate 버튼](images/setup/02-certificates.png)
+![Certificates 메뉴, Certificates 탭, Upload certificate 버튼](images/02-certificates.png)
 
-![공개 인증서 파일 선택 아이콘과 설명 입력란](images/setup/03-upload-public-certificate.png)
+![공개 인증서 파일 선택 아이콘과 설명 입력란](images/03-upload-public-certificate.png)
 
 - **포털에 개인키 포함 PEM/PFX를 올리지 마세요.** 같은 `.pem` 확장자라도 공개 인증서와 개인키 포함 파일은 다릅니다. 위 이미지는 파일 선택 전 상태이며, Add는 비활성입니다. 실제 등록은 고객 관리자가 수행합니다.
 
@@ -138,11 +138,11 @@ unset AZURE_CLIENT_CERTIFICATE_PASSWORD
 
 - **Certificates & secrets > Federated credentials > Add credential**를 클릭합니다.
 
-![Federated credentials 탭과 Add credential 버튼](images/setup/04-federated-credentials.png)
+![Federated credentials 탭과 Add credential 버튼](images/04-federated-credentials.png)
 
 - 실행 호스트에 맞는 시나리오를 선택합니다. GitHub Actions와 Kubernetes는 전용 시나리오를 사용하고, 다른 OIDC 공급자는 **Other issuer**를 사용합니다. 아래는 Other issuer 양식을 검증한 예시입니다.
 
-![Federated credential scenario와 Other issuer 선택](images/setup/05-federation-scenario.png)
+![Federated credential scenario와 Other issuer 선택](images/05-federation-scenario.png)
 
 - **Issuer**
   - 입력 기준: 실행 호스트가 발급하는 OIDC 토큰의 `iss`와 정확히 일치
@@ -157,7 +157,7 @@ unset AZURE_CLIENT_CERTIFICATE_PASSWORD
 
 - Issuer 입력 후 Type과 Value가 표시되는 것을 확인했습니다. 아래 Issuer는 **화면 테스트용 공개 예시**이며, 실제 고객 설정을 뜻하지 않습니다. Name·Value는 비워 두었고 Add를 누르지 않았습니다.
 
-![Issuer, Explicit subject identifier, Value, Name 입력란](images/setup/06-federation-fields.png)
+![Issuer, Explicit subject identifier, Value, Name 입력란](images/06-federation-fields.png)
 
 - 고객 관리자가 신뢰 관계를 저장한 뒤, **실행 호스트가 발급·갱신하는 토큰 파일**을 지정합니다. GitHub Actions의 토큰 발급이나 Kubernetes의 projected token 준비는 별도 호스트 설정이 필요합니다.
 
@@ -184,7 +184,7 @@ bash scripts/setup/manage.sh verify
 - **미검증**
   - 결과: 실제 인증서 로그인, OIDC 토큰 교환, 진단 SP의 API 사전 점검
 
-- 포털 언어·버전에 따라 메뉴가 다를 수 있습니다. 빨간 네모는 클릭/입력 대상이며 미입력 상태의 Add 버튼을 활성 상태처럼 표시하지 않았습니다. 캡처 내역은 [manifest.json](images/setup/manifest.json)에 있습니다.
+- 포털 언어·버전에 따라 메뉴가 다를 수 있습니다. 빨간 네모는 클릭/입력 대상이며 미입력 상태의 Add 버튼을 활성 상태처럼 표시하지 않았습니다. 캡처 내역은 [manifest.json](images/manifest.json)에 있습니다.
 
 - 공식 근거: [인증서 등록](https://learn.microsoft.com/entra/identity-platform/howto-create-service-principal-portal#option-1-recommended-upload-a-trusted-certificate-issued-by-a-certificate-authority) · [연합 신뢰 관계](https://learn.microsoft.com/entra/workload-id/workload-identity-federation-create-trust).
 

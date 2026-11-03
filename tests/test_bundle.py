@@ -15,17 +15,17 @@ import pytest
 from openpyxl import load_workbook
 
 from wasm_agent.cli import main
+from wasm_agent.evidence import redact
 from wasm_agent.models import AgentEvidence, Collection, Finding
-from wasm_agent.reporting.bundle import RESULT_FILES, create_bundle
-from wasm_agent.reporting.compact import snapshot_path
-from wasm_agent.reporting.reports import load_result, write_reports
-from wasm_agent.utils.evidence import redact
+from wasm_agent.report import load_result, write_reports
+from wasm_agent.report_bundle import RESULT_FILES, create_bundle
+from wasm_agent.report_data import snapshot_path
 
 
 @pytest.fixture(autouse=True)
 def isolated_result_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "wasm_agent.reporting.compact.STATE_ROOT",
+        "wasm_agent.report_data.STATE_ROOT",
         tmp_path.parent / (tmp_path.name + "-runtime"),
     )
 
@@ -168,7 +168,7 @@ def test_unknown_files_and_previous_zip_are_preserved_on_atomic_failure(tmp_path
     original = archive.read_bytes()
     for name in ("setup.json", "private.pem", "old.zip"):
         (output / name).write_bytes(b"unknown")
-    with patch("wasm_agent.reporting.bundle.os.replace", side_effect=OSError("locked")):
+    with patch("wasm_agent.report_bundle.os.replace", side_effect=OSError("locked")):
         with pytest.raises(OSError):
             create_bundle(data, output)
     assert archive.read_bytes() == original
@@ -234,7 +234,7 @@ def test_atomic_report_failure_preserves_existing_reports_and_snapshot(tmp_path:
     originals = {path: path.read_bytes() for path in output.iterdir()}
     snapshot = snapshot_path(output).read_bytes()
     data.agents[0].agent_name = "new name"
-    with patch("wasm_agent.reporting.reports.os.replace", side_effect=OSError("locked")):
+    with patch("wasm_agent.report.os.replace", side_effect=OSError("locked")):
         with pytest.raises(OSError):
             write_reports(data, [], output)
     assert {path: path.read_bytes() for path in output.iterdir()} == originals

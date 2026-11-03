@@ -152,7 +152,7 @@ def evaluate_agent(project: AIProjectClient, entry: dict, version: str, path: Pa
 def expand() -> None:
     setup = json.loads((ROOT / ".wasm-agent" / "setup.json").read_text(encoding="utf-8"))
     lab = json.loads((ROOT / ".wasm-agent" / "demo" / "lab.json").read_text(encoding="utf-8"))
-    catalog = json.loads((ROOT / "samples" / "langchain" / "catalog.json").read_text(encoding="utf-8"))
+    catalog = json.loads((ROOT / "samples" / "catalog.json").read_text(encoding="utf-8"))
     cli = AzureCLI()
     if cli.run("account", "show")["tenantId"].lower() != setup["tenant_id"]:
         raise RuntimeError("관리자 테넌트가 승인한 셋업과 다릅니다.")

@@ -9,8 +9,8 @@ from pathlib import Path, PureWindowsPath
 from typing import Any
 from urllib.parse import quote, unquote
 
+from wasm_agent.evidence import redact
 from wasm_agent.models import AgentEvidence, Collection, EvaluationRun, Finding
-from wasm_agent.utils.evidence import redact
 
 LABELS = {
     "permission_denied": "조회 권한 부족",

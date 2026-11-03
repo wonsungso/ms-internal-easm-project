@@ -34,7 +34,7 @@ def test_auto_enumeration_handles_hundreds_and_filters_tenant_and_state(tmp_path
 
     from wasm_agent.collect import collect
     from wasm_agent.models import Collection
-    from wasm_agent.utils.settings import load_settings
+    from wasm_agent.settings import load_settings
 
     root = Path(__file__).parents[1]
     settings = load_settings(root / "config" / "config.yaml")

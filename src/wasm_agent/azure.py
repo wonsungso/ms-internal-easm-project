@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 import requests
 from azure.core.exceptions import ClientAuthenticationError
 
-from wasm_agent.models.evidence import Reason
+from wasm_agent.models import Reason
 
 from .evidence import EvidenceStore
 

@@ -10,12 +10,12 @@ from urllib.parse import unquote
 def test_screenshot_guide_references_all_captured_images() -> None:
     docs = Path(__file__).parents[1] / "docs"
     guide = docs / "guide.md"
-    manifest = json.loads((docs / "images" / "setup" / "manifest.json").read_text(encoding="utf-8"))
+    manifest = json.loads((docs / "images" / "manifest.json").read_text(encoding="utf-8"))["authentication"]
     references = {
         (guide.parent / value).resolve()
         for value in re.findall(r"!\[[^\]]*\]\(([^)]+\.png)\)", guide.read_text(encoding="utf-8"))
     }
-    expected = {(docs / "images" / "setup" / image["file"]).resolve() for image in manifest["images"]}
+    expected = {(docs / "images" / image["file"]).resolve() for image in manifest["images"]}
     assert len(expected) == 6
     assert expected <= references
     for path in references:
@@ -23,8 +23,8 @@ def test_screenshot_guide_references_all_captured_images() -> None:
 
 
 def test_captured_images_are_real_pngs_with_highlight_metadata() -> None:
-    directory = Path(__file__).parents[1] / "docs" / "images" / "setup"
-    manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
+    directory = Path(__file__).parents[1] / "docs" / "images"
+    manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))["authentication"]
     assert manifest["highlight_color"] == "#d40000"
     assert manifest["account_banner_excluded"] is True
     assert manifest["credentials_modified"] is False
@@ -43,13 +43,13 @@ def test_captured_images_are_real_pngs_with_highlight_metadata() -> None:
 
 def test_chatbot_guide_uses_real_masked_highlighted_screenshots() -> None:
     docs = Path(__file__).parents[1] / "docs"
-    manifest = json.loads((docs / "images" / "chatbots" / "manifest.json").read_text(encoding="utf-8"))
+    manifest = json.loads((docs / "images" / "manifest.json").read_text(encoding="utf-8"))["chatbots"]
     guide = (docs / "demo.md").read_text(encoding="utf-8")
     assert manifest["account_identifiers_masked"] is True
     assert manifest["synthetic_conversations_only"] is True
     for image in manifest["images"]:
         assert image["file"] in guide
-        data = (docs / "images" / "chatbots" / image["file"]).read_bytes()
+        data = (docs / "images" / image["file"]).read_bytes()
         assert data[:8] == b"\x89PNG\r\n\x1a\n"
         assert image["highlight_count"] > 0
     root = (docs.parent / "README.md").read_text(encoding="utf-8")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 import re
 import shutil
@@ -60,7 +61,7 @@ def test_authored_documents_and_scripts_use_ascii_hyphens() -> None:
     root = Path(__file__).parents[1]
     extensions = {".md", ".txt", ".py", ".sh", ".ps1", ".json", ".yaml", ".yml", ".toml"}
     files = [path for path in root.iterdir() if path.is_file()]
-    for directory in ("docs", "scripts", "tests", "config", ".github", "src", "templates"):
+    for directory in ("docs", "scripts", "tests", "config", ".github", "src"):
         files.extend((root / directory).rglob("*"))
     violations = []
     for path in files:
@@ -71,3 +72,24 @@ def test_authored_documents_and_scripts_use_ascii_hyphens() -> None:
         if chr(0x2014) in path.read_text(encoding="utf-8-sig"):
             violations.append(str(path.relative_to(root)))
     assert not violations, f"Use ASCII hyphens in: {violations}"
+
+
+def test_flat_collector_layout_keeps_administrator_code_separate() -> None:
+    root = Path(__file__).parents[1]
+    package = root / "src" / "wasm_agent"
+    assert not [path for path in package.iterdir() if path.is_dir() and path.name != "__pycache__"]
+    assert (root / "scripts" / "setup").is_dir()
+    assert (root / "scripts" / "lab").is_dir()
+    assert (root / "samples" / "app.py").is_file()
+    assert (root / "config" / "manual_agents.csv").is_file()
+    assert not (root / "templates").exists()
+    assert not (root / "samples" / "langchain").exists()
+    for path in package.glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            names = []
+            if isinstance(node, ast.Import):
+                names = [entry.name for entry in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                names = [node.module or ""]
+            assert not any(name == "scripts" or name.startswith("scripts.") for name in names), path.name

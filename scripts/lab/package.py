@@ -16,7 +16,7 @@ def build_linux_package(root: Path) -> Path:
     archive.parent.mkdir(parents=True, exist_ok=True)
     requirements_text = "\n".join(dependencies) + "\n"
     sources = {
-        path.name: path for path in (root / "samples" / "langchain").iterdir()
+        path.name: path for path in (root / "samples").iterdir()
         if path.is_file() and path.suffix in (".py", ".json", ".html")
     }
     if archive.is_file():
