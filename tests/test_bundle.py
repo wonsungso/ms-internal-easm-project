@@ -4,8 +4,9 @@ import hashlib
 import html
 import json
 import re
+import shutil
 import zipfile
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
@@ -181,7 +182,7 @@ def test_unknown_files_and_previous_zip_are_preserved_on_atomic_failure(tmp_path
         assert set(bundle.namelist()) == set(RESULT_FILES)
 
 
-def test_legacy_package_migration_and_snapshot_priority(tmp_path: Path) -> None:
+def test_legacy_package_migration_and_compact_result_priority(tmp_path: Path) -> None:
     data, output, _ = prepared(tmp_path)
     result = load_result(output)
     snapshot_path(output).unlink()
@@ -238,3 +239,55 @@ def test_atomic_report_failure_preserves_existing_reports_and_snapshot(tmp_path:
             write_reports(data, [], output)
     assert {path: path.read_bytes() for path in output.iterdir()} == originals
     assert snapshot_path(output).read_bytes() == snapshot
+
+
+def test_imported_zip_overrides_stale_snapshot_when_packaging(tmp_path: Path) -> None:
+    old, output, old_source = prepared(tmp_path)
+    create_bundle(old, output)
+    stale_snapshot = snapshot_path(output).read_bytes()
+    newer, incoming, incoming_source = prepared(tmp_path / "external")
+    newer.collected_at = old.collected_at + timedelta(minutes=8)
+    newer.agents[0].agent_name = "newer imported Agent"
+    incoming_source.write_text('{"response": {"latest": 34}}', encoding="utf-8")
+    findings = [Finding(
+        se_code="BI-SY-08", scope="partial", level="N/A", reason="not_found",
+        rationale="새 ZIP의 평가 결과", evidence_refs=[str(incoming_source.resolve())],
+    )]
+    write_reports(newer, findings, incoming)
+    create_bundle(newer, incoming)
+    imported = load_result(incoming)
+    shutil.copyfile(incoming / "results.zip", output / "results.zip")
+    old_source.unlink()
+    incoming_source.unlink()
+    assert snapshot_path(output).read_bytes() == stale_snapshot
+    assert "newer imported Agent" not in (output / "report.html").read_text(encoding="utf-8")
+    assert load_result(output)["collection"] == imported["collection"]
+    with patch("wasm_agent.cli.DefaultAzureCredential", side_effect=AssertionError("no Azure calls")):
+        assert main(["package", "--output-dir", str(output)]) == 0
+    result = load_result(output)
+    for field in ("collection", "findings", "evidence", "provenance"):
+        assert result[field] == imported[field]
+    assert result["collection"]["agents"][0]["agent_name"] == "newer imported Agent"
+    snapshot = json.loads(snapshot_path(output).read_text(encoding="utf-8"))
+    assert snapshot["collection"] == imported["collection"]
+    assert "newer imported Agent" in (output / "report.html").read_text(encoding="utf-8")
+    assert {path.name for path in output.iterdir()} == {"report.html", "report.xlsx", "results.zip"}
+    with zipfile.ZipFile(output / "results.zip") as bundle:
+        assert set(bundle.namelist()) == set(RESULT_FILES)
+
+
+def test_write_reports_then_bundle_uses_pending_snapshot_not_previous_zip(tmp_path: Path) -> None:
+    data, output, source = prepared(tmp_path)
+    create_bundle(data, output)
+    old = load_result(output)
+    data.collected_at += timedelta(minutes=8)
+    data.agents[0].agent_name = "new collection"
+    source.write_text('{"response": {"new": true}}', encoding="utf-8")
+    write_reports(data, [], output)
+    assert load_result(output)["collection"] == old["collection"]
+    create_bundle(data, output)
+    result = load_result(output)
+    assert result["collection"]["agents"][0]["agent_name"] == "new collection"
+    assert result["collection"]["collected_at"] != old["collection"]["collected_at"]
+    assert result["findings"] == []
+    assert list(result["evidence"].values()) == [{"response": {"new": True}}]

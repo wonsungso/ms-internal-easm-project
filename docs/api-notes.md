@@ -2,7 +2,8 @@
 
 - 수집 대상: Microsoft Foundry, Azure 자체 호스팅 Agent, Azure Monitor·Log Analytics, 비용·보안 권고.
 
-- 기준 원본: [4) AI Agent Governance Readiness 진단_System Evidence 수집 기준.docx](source/4%29%20AI%20Agent%20Governance%20Readiness%20진단_System%20Evidence%20수집%20기준.docx.md). 평가 모델 XLSX의 `4. 질문별 평가 기준`에 있는 20개 SE 행의 L1~L5와 공백 차이를 제외하고 일치함을 변환 시 검증했습니다.
+- 기준 원본: `4) AI Agent Governance Readiness 진단_System Evidence 수집 기준.docx`. 평가 모델 XLSX의 `4. 질문별 평가 기준`에 있는 20개 SE 행의 L1~L5와 공백 차이를 제외하고 일치함을 변환 시 검증했습니다.
+- 승인된 원본은 로컬 `docs/source`에 별도 보관하며 저장소에는 포함하지 않습니다. Codespaces에는 원본이 없어도 되므로 로컬 원본 파일을 문서 링크로 연결하지 않습니다.
 
 ## 범위 원칙
 

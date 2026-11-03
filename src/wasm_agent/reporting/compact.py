@@ -40,13 +40,11 @@ def atomic_write(path: Path, payload: bytes) -> None:
 
 
 def load_result(output: Path) -> dict[str, Any]:
-    """Return collection/findings/mode/evidence/provenance/manifest, snapshot before ZIP.
+    """Return collection/findings/mode/evidence/provenance/manifest, ZIP before snapshot.
 
+    The portable ZIP is authoritative, including when imported from another machine.
     Legacy collection.json and findings.json are accepted only as migration input.
     """
-    snapshot = snapshot_path(output)
-    if snapshot.is_file():
-        return json.loads(snapshot.read_text(encoding="utf-8"))
     archive = output / "results.zip"
     if archive.is_file() and not archive.is_symlink():
         with zipfile.ZipFile(archive) as bundle:
@@ -54,6 +52,9 @@ def load_result(output: Path) -> dict[str, Any]:
         if result.get("schema_version") != 1:
             raise ValueError("지원되지 않는 결과 스키마입니다.")
         return result
+    snapshot = snapshot_path(output)
+    if snapshot.is_file():
+        return json.loads(snapshot.read_text(encoding="utf-8"))
     collection = json.loads((output / "collection.json").read_text(encoding="utf-8"))
     findings = json.loads((output / "findings.json").read_text(encoding="utf-8"))
     return {

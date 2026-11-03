@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import uuid
 import zipfile
@@ -14,7 +15,12 @@ RESULT_FILES = ("report.html", "report.xlsx", "data.json")
 
 
 def create_bundle(data: Collection, output: Path, mode: str = "live") -> Path:
-    result = load_result(output)
+    """Package the pending write_reports snapshot instead of an earlier ZIP."""
+    snapshot = snapshot_path(output)
+    result = (
+        json.loads(snapshot.read_text(encoding="utf-8")) if snapshot.is_file()
+        else load_result(output)
+    )
     if result["mode"] != mode:
         raise ValueError("수집한 데이터 구분과 지정한 mode가 다릅니다.")
     payloads: dict[str, bytes] = {}

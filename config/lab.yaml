@@ -1,5 +1,5 @@
 region: koreacentral
-generation: clean-e2e-20261103
+generation: manual-redeploy-20261103
 budget_usd: 100
 resource_group_prefix: rg-seagent-lab
 project_name: governance-lab
