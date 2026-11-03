@@ -1,0 +1,25 @@
+{
+  "captured_at_utc": "2026-11-03T05:01:34Z",
+  "collection_at_utc": "2026-11-03T04:55:20.452399Z",
+  "method": "Playwright screenshot of actual local result HTML",
+  "mode": "live",
+  "highlight_color": "#d40000",
+  "tenant_and_subscription_ids_excluded": true,
+  "images": [
+    {
+      "file": "01-live-dashboard.png",
+      "captured_at_utc": "2026-11-03T05:01:19Z",
+      "source": "output/runthrough.html",
+      "highlight_count": 4,
+      "scope": "Actual deployment, collection and independent verification JSON rendered locally"
+    },
+    {
+      "file": "02-live-se-report.png",
+      "captured_at_utc": "2026-11-03T05:01:34Z",
+      "source": "output/report.html",
+      "highlight_count": 4,
+      "scope": "Actual SE table only; lower evidence identifiers excluded",
+      "report_link_click_verified": true
+    }
+  ]
+}

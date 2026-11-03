@@ -1,0 +1,16 @@
+tenant_id: null
+expected_principal_id: null
+subscriptions: []
+workers: 3
+evidence_dir: evidence
+foundry_profile: agents_v1
+projects: []
+manual_agents: null
+allowed_models_file: allowed_models.yaml
+criteria_file: criteria.yaml
+tag_conventions_file: tag_conventions.yaml
+policy_facts: {}
+interview_levels: {}
+monitor:
+  calls_metric_candidates: [AzureOpenAIRequests, Requests]
+  token_metric_candidates: [ProcessedPromptTokens, GeneratedTokens, InputTokens, OutputTokens]

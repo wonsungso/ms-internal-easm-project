@@ -1,0 +1,2 @@
+platform,agent_id,agent_name,hosting_type,owner,sponsor,model,created_at,last_used_at,tags,tools
+other,example-other-agent,이기종 샘플,external,example-team,example-sponsor,example-model,,,"{""env"":""test""}","[]"

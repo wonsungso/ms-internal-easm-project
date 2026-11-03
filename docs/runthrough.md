@@ -1,0 +1,27 @@
+# 실행·검증 결과 확인
+
+- 수집 대상: Microsoft Foundry, Azure 자체 호스팅 Agent, Azure Monitor, 비용·보안 권고.
+- 고객 진단 절차는 [실행 안내](../README.md)를 기준으로 수행합니다.
+- 실행별 결과
+  - `output/report.html`: Agent 목록·평가 결과·지표·판정 근거·추가 조치.
+  - `output/customer_summary.csv`: 한글 진단 요약.
+  - `output/customer_inventory.csv`: 한글 Agent 목록.
+  - `output/wasm-agent-results-*.zip`: 다운로드용 결과와 마스킹된 증적.
+- 결과의 의미
+  - 평가 실행 완료와 모든 문항 통과는 다릅니다.
+  - 평가 이력 확인과 운영 배포 전 평가 확인도 다릅니다.
+  - 권한·자료·관측 기간이 부족하면 판정 보류로 표시합니다.
+  - 원본 API 응답의 필드가 없으면 값을 추정하지 않습니다.
+- 개발 검증
+  - `python -m pytest -q`: 가짜 API 응답으로 코드 동작을 검사합니다.
+  - `python -m ruff check src scripts samples tests`: 코드 오류와 형식을 검사합니다.
+  - 원문 문서 보존 검사는 승인된 원본이 로컬에 있을 때만 수행합니다.
+- 실제 Azure 검증
+  - 관리자 준비와 진단 계정의 읽기 실행을 구분합니다.
+  - 구독·Agent 수는 실행마다 결과에서 동적으로 확인합니다.
+  - 민감한 식별자를 가린 화면만 문서에 사용합니다.
+  - 실행하지 않은 인증·배포를 완료로 표시하지 않습니다.
+- 참고
+  - [수집 항목과 값의 의미](collection-items.md).
+  - [필요한 읽기 권한](rbac.md).
+  - [API 계약·한계](api-notes.md).

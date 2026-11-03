@@ -1,0 +1,72 @@
+{
+  "collected_at": "2026-11-03T01:00:00Z",
+  "subscriptions": ["11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222", "33333333-3333-4333-8333-333333333333"],
+  "completed_subscriptions": ["11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222", "33333333-3333-4333-8333-333333333333"],
+  "agents": [
+    {
+      "collected_at": "2026-11-03T01:00:00Z", "tenant_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "subscription_id": "11111111-1111-4111-8111-111111111111", "resource_group": "fixture",
+      "platform": "foundry", "agent_id": "fixture-foundry", "agent_name": "fixture-foundry",
+      "agent_version": "1", "resource_id": "/fixture/project",
+      "model_resource_id": "/fixture/shared-model", "model": "gpt-4o-mini", "model_version": "2024-07-18",
+      "tags": {"env": "prod", "owner": "fixture-team"},
+      "created_at": "2026-06-01T00:00:00Z", "deployed_at": "2026-10-25T00:00:00Z",
+      "last_used_at": "2026-11-02T00:00:00Z", "usage_30d": {"calls": 50, "tokens": 3000},
+      "usage_coverage_start": "2026-06-01T00:00:00Z",
+      "detection_confidence": "tag", "evidence_refs": ["fixture://foundry"]
+    },
+    {
+      "collected_at": "2026-11-03T01:00:00Z", "tenant_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "subscription_id": "22222222-2222-4222-8222-222222222222", "resource_group": "fixture",
+      "platform": "langchain", "agent_id": "fixture-lc-2", "agent_name": "fixture-lc-2",
+      "resource_id": "/fixture/host-2", "cost_resource_ids": ["/fixture/host-2", "/fixture/plan-2"],
+      "model_resource_id": "/fixture/shared-model", "model": "gpt-4o-mini", "model_version": "2024-07-18",
+      "tags": {"env": "test"}, "last_used_at": "2026-11-02T00:00:00Z",
+      "usage_30d": {"calls": 25, "tokens": 2000},
+      "usage_coverage_start": "2026-06-01T00:00:00Z",
+      "detection_confidence": "tag", "evidence_refs": ["fixture://host-2"]
+    },
+    {
+      "collected_at": "2026-11-03T01:00:00Z", "tenant_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "subscription_id": "33333333-3333-4333-8333-333333333333", "resource_group": "fixture",
+      "platform": "langchain", "agent_id": "fixture-lc-3", "agent_name": "fixture-lc-3",
+      "resource_id": "/fixture/host-3", "cost_resource_ids": ["/fixture/host-3", "/fixture/plan-3"],
+      "model_resource_id": "/fixture/shared-model", "model": "gpt-4o-mini", "model_version": "2024-07-18",
+      "tags": {"env": "test"}, "last_used_at": "2026-11-01T00:00:00Z",
+      "usage_30d": {"calls": 20, "tokens": 1500},
+      "usage_coverage_start": "2026-06-01T00:00:00Z",
+      "detection_confidence": "name_heuristic", "evidence_refs": ["fixture://host-3"]
+    }
+  ],
+  "deployments": [
+    {
+      "subscription_id": "11111111-1111-4111-8111-111111111111", "resource_id": "/fixture/shared-model/deployments/small",
+      "account_id": "/fixture/shared-model", "name": "small", "model": "gpt-4o-mini", "version": "2024-07-18",
+      "format": "OpenAI", "sku": "GlobalStandard", "capacity": 1, "state": "Succeeded",
+      "evidence_refs": ["fixture://deployments"]
+    }
+  ],
+  "evaluations": [
+    {
+      "subscription_id": "11111111-1111-4111-8111-111111111111", "project_id": "/fixture/project",
+      "run_id": "fixture-eval", "status": "completed", "agent_id": "fixture-foundry",
+      "agent_version": "1", "completed_at": "2026-10-20T00:00:00Z", "evidence_refs": ["fixture://evaluation"]
+    }
+  ],
+  "costs": [
+    {"subscription_id": "11111111-1111-4111-8111-111111111111", "resource_id": "/fixture/shared-model", "amount": 20, "currency": "USD", "usage_date": "20261020"},
+    {"subscription_id": "22222222-2222-4222-8222-222222222222", "resource_id": "/fixture/plan-2", "amount": 40, "currency": "USD", "usage_date": "20261020"},
+    {"subscription_id": "33333333-3333-4333-8333-333333333333", "resource_id": "/fixture/plan-3", "amount": 40, "currency": "USD", "usage_date": "20261020"}
+  ],
+  "logs": [
+    {"subscription_id": "11111111-1111-4111-8111-111111111111", "resource_id": "/fixture/project", "enabled": true, "retention_days": 90},
+    {"subscription_id": "22222222-2222-4222-8222-222222222222", "resource_id": "/fixture/host-2", "enabled": true, "retention_days": 90},
+    {"subscription_id": "33333333-3333-4333-8333-333333333333", "resource_id": "/fixture/host-3", "enabled": true, "retention_days": 90}
+  ],
+  "facts": {
+    "inventory_complete": true, "deployment_inventory_complete": true,
+    "foundry_project_ids": ["/fixture/project"], "evaluation_complete_projects": ["/fixture/project"],
+    "cost_complete_subscriptions": ["11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222", "33333333-3333-4333-8333-333333333333"],
+    "audit_activity_observed": true
+  }
+}

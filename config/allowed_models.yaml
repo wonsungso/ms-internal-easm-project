@@ -1,0 +1,9 @@
+sample_policy: true
+models:
+  - name: gpt-4.1-nano
+    version: "2025-04-14"
+    format: OpenAI
+  # 과거 fixture 대조용. 신규 샘플 배포에는 사용하지 않습니다.
+  - name: gpt-4o-mini
+    version: "2024-07-18"
+    format: OpenAI

@@ -1,0 +1,14 @@
+{
+  "Name": "SEAgent Foundry Evidence Reader v2",
+  "IsCustom": true,
+  "Description": "Read agents, evaluation runs and evaluation assets for governance evidence. No inference, keys or write operations.",
+  "Actions": [],
+  "NotActions": [],
+  "DataActions": [
+    "Microsoft.CognitiveServices/accounts/AIServices/agents/read",
+    "Microsoft.CognitiveServices/accounts/AIServices/evaluations/read",
+    "Microsoft.CognitiveServices/accounts/AIServices/assets/read"
+  ],
+  "NotDataActions": [],
+  "AssignableScopes": []
+}

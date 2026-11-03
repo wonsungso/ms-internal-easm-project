@@ -1,0 +1,29 @@
+{
+  "method": "Playwright screenshots of actual Entra sign-in and deployed Azure chatbot",
+  "highlight_color": "#d40000",
+  "synthetic_conversations_only": true,
+  "account_identifiers_masked": true,
+  "images": [
+    {
+      "file": "01-entra-consent.png",
+      "highlight_count": 1,
+      "account_masked": true,
+      "application_registration_name_masked": true,
+      "flow": "Actual single-tenant Entra basic sign-in consent; no secret generated"
+    },
+    {
+      "file": "02-langchain-chat.png",
+      "highlight_count": 3,
+      "actual_response": true,
+      "input_tokens": 64,
+      "output_tokens": 88
+    },
+    {
+      "file": "03-foundry-chat.png",
+      "highlight_count": 3,
+      "actual_response": true,
+      "input_tokens": 72,
+      "output_tokens": 59
+    }
+  ]
+}

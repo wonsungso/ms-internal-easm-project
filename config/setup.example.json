@@ -1,0 +1,8 @@
+{
+  "tenant_id": "<tenant-id>",
+  "subscription_ids": [
+    "<subscription-id>"
+  ],
+  "account_type": "service-principal",
+  "account_name": "seagent-diagnostic"
+}

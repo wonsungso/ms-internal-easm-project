@@ -1,0 +1,281 @@
+# System Evidence 범위 및 기준
+
+- 기준 원본: [4) AI Agent Governance Readiness 진단_System Evidence 수집 기준.docx](source/4) AI Agent Governance Readiness 진단_System Evidence 수집 기준.docx.md). 평가 모델 XLSX의 `4. 질문별 평가 기준`에 있는 20개 SE 행의 L1~L5와 공백 차이를 제외하고 일치함을 변환 시 검증했습니다.
+
+## 범위 원칙
+
+- in_scope 2개, partial 4개, out_of_scope 14개. out_of_scope는 문서에만 표시하며 수집·판정하지 않습니다.
+- Azure 인벤토리의 ID·소유자 태그는 Entra Agent ID, Agent Registry, 퇴사자 확인을 대체하지 않습니다. 따라서 DM-SY-03, DP-SY-10, OE-SY-13을 Azure 인벤토리로 재해석하지 않습니다.
+- partial의 수치와 L 레벨은 Azure 부분 범위의 초안이며 조직 전체 원 항목의 최종 점수가 아닙니다. 특히 OE-SY-16의 Azure 로그는 Purview Audit 보관을 입증하지 못합니다.
+- L1~L5는 원문 그대로 보존합니다. 권한 거부·기능 미제공을 L1로 취급하지 않고 null 및 사유를 남깁니다. 실제 통제가 없다는 증거와 통제를 조회할 수 없다는 상태를 구분합니다.
+- 예: DS-SY-06의 80% 초과~90% 미만, BI-SY-08의 30% 이상~80% 미만처럼 원문이 다루지 않는 구간은 임의로 L2/L3에 배정하지 않습니다. L4/L5의 자동화·정책·지속 운영은 비율만으로 충족 처리할 수 없습니다.
+- OE-SY-16의 1년은 내부 규정의 예시이지 모든 고객에게 적용할 고정 임계값이 아닙니다. BI-SY-09의 내부 보안 점수 기준도 고객 입력이 필요합니다.
+- 평가 원문은 인터뷰와의 괴리 시 영역 점수 보정도 설명하나, 이번 요청의 자동 기능은 괴리 플래그입니다. 영역 점수 자동 보정은 별도 승인 없이 구현하지 않습니다.
+
+## 20개 항목
+
+- **DM-SY-01**
+  - 항목명: Agent 제작 허용 사용자 범위 및 허용 Agent 유형 설정
+  - 유형: T1
+  - 제품/메뉴: M365 Admin Center – Copilot &gt; Agents 설정
+  - 측정방법: 타 담당 확인: Copilot &gt; Agents 설정 화면 캡처, 허용 그룹 구성원 목록; 본 프로젝트에서는 구현하지 않음
+  - L1: 기본값(전 사용자 제작 허용) 그대로이며 설정 확인 불가
+  - L2: 일부 유형만 제한, 제작 허용 사용자가 전체의 50% 이상
+  - L3: 허용 사용자가 지정 그룹으로 제한되고 허용 Agent 유형이 정의됨
+  - L4: 허용 그룹이 요청 승인과 연동되어 자동 관리, 비허용 제작 0건
+  - L5: 설정 변경 이력을 정기 검토하고 위험 신호 시 자동으로 제한함
+  - scope: out_of_scope
+  - 분류 근거: 원 항목의 담당 제품은 M365 Admin Center – Copilot &gt; Agents 설정이며 Azure/Foundry 담당 범위가 아니다.
+- **DM-SY-02**
+  - 항목명: Copilot Studio 제작 권한 보유자 수 및 환경(Environment) 현황
+  - 유형: T2
+  - 제품/메뉴: Power Platform Admin Center
+  - 측정방법: 타 담당 확인: PPAC 환경 목록, 환경별 Maker 역할 보유자 수; 본 프로젝트에서는 구현하지 않음
+  - L1: 기본 환경만 사용, 사실상 전 직원이 제작 권한을 보유함
+  - L2: 환경은 일부 분리됐으나 제작 권한자가 전 직원의 20% 이상
+  - L3: 제작 권한자가 승인 인원과 일치하고 용도별 환경이 분리됨
+  - L4: 권한 불일치 5% 미만, 신규 환경 생성은 관리자 승인으로만 가능
+  - L5: 미사용 권한·환경을 자동 회수하고 월간 현황을 모니터링함
+  - scope: out_of_scope
+  - 분류 근거: 원 항목의 담당 제품은 Power Platform Admin Center이며 Azure/Foundry 담당 범위가 아니다.
+- **DM-SY-03**
+  - 항목명: 최근 6개월 신규 생성 Agent 수 추이 (요청 절차 대비 실제 생성 규모 비교)
+  - 유형: T2
+  - 제품/메뉴: M365 Admin Center – Agent Registry
+  - 측정방법: 타 담당 확인: Agent Registry 월별 생성 건수 추출, 요청 이력과의 대사 결과; 본 프로젝트에서는 구현하지 않음
+  - L1: 생성 추이 확인 불가 또는 요청 기록과 비교 불가
+  - L2: 신규 생성 Agent 중 승인 요청과 매칭되는 비율 50% 미만
+  - L3: 신규 생성 Agent의 80% 이상이 승인 요청과 매칭됨
+  - L4: 매칭률 95% 이상, 미승인 생성이 자동 탐지·통보됨
+  - L5: 매칭률 100% 유지, 생성 추이로 수요를 예측해 계획에 반영함
+  - scope: out_of_scope
+  - 분류 근거: 원 항목의 담당 제품은 M365 Admin Center – Agent Registry이며 Azure/Foundry 담당 범위가 아니다.
+- **DS-SY-04**
+  - 항목명: 커넥터 분류·차단 정책(데이터 정책) 적용 현황
+  - 유형: T1
+  - 제품/메뉴: Power Platform Admin Center – Data policies
+  - 측정방법: 타 담당 확인: Data policies 목록, 정책별 적용 환경 범위; 본 프로젝트에서는 구현하지 않음
+  - L1: 데이터 정책(DLP)이 하나도 설정되어 있지 않음
+  - L2: 정책은 있으나 일부 환경(50% 미만)에만 적용됨
+  - L3: 전 환경의 80% 이상에 커넥터 분류·차단 정책이 적용됨
+  - L4: 전 환경 100% 적용, 신규 환경에 정책이 자동 상속됨
+  - L5: 정책 위반 시도를 모니터링하고 정책을 분기별로 갱신함
+  - scope: out_of_scope
+  - 분류 근거: 원 항목의 담당 제품은 Power Platform Admin Center – Data policies이며 Azure/Foundry 담당 범위가 아니다.
+- **DS-SY-05**
+  - 항목명: Agent ID 템플릿(Blueprint) 정의 여부 및 개수
+  - 유형: T3
+  - 제품/메뉴: Microsoft Entra Agent ID
+  - 측정방법: 타 담당 확인: Entra Agent ID Blueprint 목록, Blueprint별 Agent 수; 본 프로젝트에서는 구현하지 않음
+  - L1: Agent ID 미사용 또는 Blueprint 정의 0개
+  - L2: Blueprint 1~2개 시범 정의, 실제 적용 Agent는 소수
+  - L3: 주요 유형별 Blueprint 정의, 신규 Agent의 50% 이상에 적용
+  - L4: 신규 Agent의 90% 이상이 Blueprint 기반으로 생성됨
+  - L5: Blueprint 사용 데이터로 템플릿을 정기 개정, 적용률 100% 유지
+  - scope: out_of_scope
+  - 분류 근거: 원 항목의 담당 제품은 Microsoft Entra Agent ID이며 Azure/Foundry 담당 범위가 아니다.
+- **DS-SY-06**
+  - 항목명: 사용 중인 모델 배포 현황 및 허용 모델 목록
+  - 유형: T2
+  - 제품/메뉴: Microsoft Foundry
+  - 측정방법: ARM 모델 배포 목록과 고객 허용 모델 목록을 모델·버전 기준 대조; 배포를 분모로 집계
+  - L1: 모델 배포 현황 확인 불가, 허용 모델 목록 없음
+  - L2: 배포 현황은 확인되나 허용 목록 외 모델 비율 20% 이상
+  - L3: 배포 모델의 90% 이상이 허용 모델 목록과 일치함
+  - L4: 허용 외 모델 배포 0건, 정책으로 배포 자체가 제한됨
+  - L5: 모델별 사용량·성능을 모니터링해 교체·폐기를 선제 수행함
+  - scope: in_scope
+  - 분류 근거: Foundry 모델 배포 및 고객 허용 모델 목록이 Azure 담당 범위이다.
+- **BI-SY-07**
+  - 항목명: 환경 분리(개발 / 테스트 / 운영) 현황 및 관리형 환경(Managed Environment) 적용 여부
+  - 유형: T2
+  - 제품/메뉴: Power Platform Admin Center
+  - 측정방법: 타 담당 확인: PPAC 환경 목록, 관리형 환경 설정, 파이프라인 이력; 본 프로젝트에서는 구현하지 않음
+  - L1: 기본 환경 하나에서 모든 Agent를 개발·운영함
+  - L2: 환경은 분리됐으나 관리형 환경 적용률 30% 미만
+  - L3: 개발/테스트/운영 분리, 운영 환경의 관리형 환경 적용 100%
+  - L4: 전 환경 관리형 적용, 파이프라인 외 운영 반영 0건
+  - L5: 환경 사용량·위반 지표를 상시 모니터링하고 자동 조치함
+  - scope: out_of_scope
+  - 분류 근거: 원 항목의 담당 제품은 Power Platform Admin Center이며 Azure/Foundry 담당 범위가 아니다.
+- **BI-SY-08**
+  - 항목명: 품질·안전성 자동 평가(Evaluation) 수행 이력
+  - 유형: T4
+  - 제품/메뉴: Microsoft Foundry
+  - 측정방법: 평가 이력을 Agent·배포 버전에 연결하고 성공 평가 종료일과 실제 배포일 비교; 생성일을 배포일로 대체하지 않음
+  - L1: 평가(Evaluation) 수행 이력 없음
+  - L2: 일부 Agent(30% 미만)만 수동으로 평가를 실행함
+  - L3: 운영 Agent의 80% 이상이 배포 전 평가 이력을 보유함
+  - L4: 배포 Agent 100% 평가, 파이프라인에서 자동 실행됨
+  - L5: 운영 중 지속 평가로 품질 저하를 자동 탐지·알림함
+  - scope: in_scope
+  - 분류 근거: Foundry 평가 이력과 배포 전 평가 여부가 Azure 담당 범위이다.
+- **BI-SY-09**
+  - 항목명: AI 워크로드 보안 태세 점검 결과
+  - 유형: T4
+  - 제품/메뉴: Microsoft Defender
+  - 측정방법: Azure AI 리소스에 연결된 Defender 권고·심각도·조치 이력·보안 점수 조회; 내부 보안 점수 기준 별도 입력
+  - L1: AI 워크로드 보안 태세 점검 기능 미사용
+  - L2: 기능은 활성화되었으나 고위험 권고 사항 다수가 미조치
+  - L3: 고위험 권고 0건, 보안 점수가 내부 기준 이상 유지됨
+  - L4: 신규 권고가 30일 내 조치되고 보안 정책이 자동 적용됨
+  - L5: 공격 경로 분석을 상시 운영하고 위험을 자동 조치함
+  - scope: partial
+  - 분류 근거: Defender for Cloud의 Azure AI 워크로드 권고만 포함하며 타 제품 Defender 영역은 제외한다.
+- **DP-SY-10**
+  - 항목명: 전체 Agent 목록과 배포 범위·게시 상태·소유자
+  - 유형: T2
+  - 제품/메뉴: M365 Admin Center – Agent Registry
+  - 측정방법: 타 담당 확인: Agent Registry 목록 추출, 등록부 대사 결과; 본 프로젝트에서는 구현하지 않음
+  - L1: Agent Registry 확인 불가 또는 목록 추출 불가
+  - L2: 목록은 추출되나 소유자·배포 범위 누락 30% 이상
+  - L3: 누락 10% 미만, 공식 등록부와 Registry 일치율 90% 이상
+  - L4: 누락 2% 미만, 등록부 일치율 98% 이상 유지됨
+  - L5: 불일치 0건, 게시 상태 변경이 자동 동기화·알림됨
+  - scope: out_of_scope
+  - 분류 근거: 원 항목의 담당 제품은 M365 Admin Center – Agent Registry이며 Azure/Foundry 담당 범위가 아니다.
+- **DP-SY-11**
+  - 항목명: Agent 공유 허용 범위 및 사용자 설치 허용 설정
+  - 유형: T1
+  - 제품/메뉴: M365 Admin Center – Copilot &gt; Agents 설정
+  - 측정방법: 타 담당 확인: Copilot &gt; Agents 공유·설치 설정 화면 캡처; 본 프로젝트에서는 구현하지 않음
+  - L1: 공유·설치 설정이 기본값(전체 허용) 상태임
+  - L2: 공유 범위는 일부 제한, 사용자 직접 설치는 허용됨
+  - L3: 조직 전체 공유는 관리자 승인 필수, 설치는 승인 Agent만 허용
+  - L4: 미승인 Agent 설치 0건, 설정 변경이 감사 로그로 추적됨
+  - L5: 설정 준수를 상시 모니터링하고 위반 시 자동 차단함
+  - scope: out_of_scope
+  - 분류 근거: 원 항목의 담당 제품은 M365 Admin Center – Copilot &gt; Agents 설정이며 Azure/Foundry 담당 범위가 아니다.
+- **DP-SY-12**
+  - 항목명: 고유 ID(Agent ID)가 부여된 Agent 수 / 전체 Agent 수
+  - 유형: T3
+  - 제품/메뉴: Microsoft Entra Agent ID
+  - 측정방법: 타 담당 확인: Entra Agent ID 수, Agent Registry 전체 Agent 수; 본 프로젝트에서는 구현하지 않음
+  - L1: Agent ID 미사용, 부여율 0%
+  - L2: Agent ID 부여율 50% 미만
+  - L3: Agent ID 부여율 80% 이상
+  - L4: 부여율 95% 이상, 신규 Agent는 생성 시 자동 부여됨
+  - L5: 부여율 100% 유지, 미부여 Agent 자동 탐지·조치
+  - scope: out_of_scope
+  - 분류 근거: 원 항목의 담당 제품은 Microsoft Entra Agent ID이며 Azure/Foundry 담당 범위가 아니다.
+- **OE-SY-13**
+  - 항목명: 소유자·후원자(Sponsor) 미지정 Agent 및 소유자 퇴사 Agent(고아 Agent) 수
+  - 유형: T3
+  - 제품/메뉴: Microsoft Entra Agent ID / M365 Admin Center
+  - 측정방법: 타 담당 확인: Entra Agent ID 목록 추출, 소유자·후원자 필드 현황; 본 프로젝트에서는 구현하지 않음
+  - L1: Agent ID 미사용, 소유자 정보 확인 불가
+  - L2: 소유자 정보는 있으나 미지정·고아 Agent 비율 30% 이상
+  - L3: 미지정·고아 Agent 비율 10% 미만
+  - L4: 미지정·고아 Agent 비율 2% 미만, 수명주기 정책이 자동 적용됨
+  - L5: 고아 Agent 0건 유지, 소유자 변경 시 자동 재지정·알림 운영
+  - scope: out_of_scope
+  - 분류 근거: 원 항목의 담당 제품은 Microsoft Entra Agent ID / M365 Admin Center이며 Azure/Foundry 담당 범위가 아니다.
+- **OE-SY-14**
+  - 항목명: Agent별 부여 권한(API 권한, 접근 패키지) 및 과다 권한 Agent
+  - 유형: T3
+  - 제품/메뉴: Microsoft Entra – Agent ID, ID Governance
+  - 측정방법: 타 담당 확인: Agent별 API 권한 목록, 접근 검토(Access Review) 결과; 본 프로젝트에서는 구현하지 않음
+  - L1: Agent별 부여 권한 확인 불가
+  - L2: 권한은 확인되나 과다 권한 Agent 비율 20% 이상
+  - L3: 과다 권한 Agent 비율 5% 미만
+  - L4: 과다 권한 1% 미만, 접근 패키지·만료가 자동 적용됨
+  - L5: 과다 권한 0건 유지, 정기 접근 검토가 자동 수행됨
+  - scope: out_of_scope
+  - 분류 근거: 원 항목의 담당 제품은 Microsoft Entra – Agent ID, ID Governance이며 Azure/Foundry 담당 범위가 아니다.
+- **OE-SY-15**
+  - 항목명: Agent 대상 조건부 접근 정책 적용 여부 및 위험 Agent 탐지 건수
+  - 유형: T1
+  - 제품/메뉴: Microsoft Entra – Conditional Access, ID Protection
+  - 측정방법: 타 담당 확인: 조건부 접근 정책 목록, ID Protection 위험 Agent 탐지 건수; 본 프로젝트에서는 구현하지 않음
+  - L1: Agent 대상 조건부 접근 정책 없음, 위험 탐지 미사용
+  - L2: 정책은 있으나 일부 Agent(50% 미만)에만 적용됨
+  - L3: 운영 Agent 90% 이상에 정책 적용, 위험 탐지 활성화됨
+  - L4: 적용률 100%, 고위험 Agent 자동 차단, 미조치 탐지 0건
+  - L5: 탐지 추세를 분석해 정책을 정기 강화하고 자동 대응을 운영함
+  - scope: out_of_scope
+  - 분류 근거: 원 항목의 담당 제품은 Microsoft Entra – Conditional Access, ID Protection이며 Azure/Foundry 담당 범위가 아니다.
+- **OE-SY-16**
+  - 항목명: Agent 활동 감사 로그 보관 여부 및 보관 기간
+  - 유형: T5
+  - 제품/메뉴: Microsoft Purview – Audit
+  - 측정방법: Azure 진단 설정·로그 목적지·Log Analytics 보존 기간 조회; 내부 보관 규정과 대조; Purview와 동등 판정 금지
+  - L1: Agent 활동 감사 로그 미수집
+  - L2: 감사 로그는 수집되나 보관 기간이 기본값(90일 이하)임
+  - L3: 내부 규정 기간(예: 1년) 이상 보관 정책이 적용됨
+  - L4: 보관 정책 100% 적용, 로그 기반 정기 리포트가 자동 생성됨
+  - L5: 감사 로그를 상시 분석해 이상 활동을 자동 경보함
+  - scope: partial
+  - 분류 근거: Azure 진단 로그·Activity Log·보존 설정만 대체 증적으로 수집하며 Purview Audit는 제외한다.
+- **OT-SY-17**
+  - 항목명: 승인되지 않은 Agent(Shadow AI) 탐지 결과 ※ Agent 365 라이선스 필요
+  - 유형: T4
+  - 제품/메뉴: Agent 365 – Shadow AI Detection
+  - 측정방법: 타 담당 확인: Agent 365 Shadow AI 탐지 리포트 ※ Agent 365 미보유 시 평가 제외(N/A); 본 프로젝트에서는 구현하지 않음
+  - L1: Shadow AI 탐지 기능 미사용, 탐지 결과 확인 불가
+  - L2: 탐지는 되나 미승인 Agent 비율 20% 이상, 조치 미흡
+  - L3: 미승인 Agent 비율 5% 미만, 탐지 건 80% 이상 조치됨
+  - L4: 미승인 비율 1% 미만, 탐지 시 자동 차단·통보됨
+  - L5: 미승인 0건 유지, 탐지 추세로 수요를 파악해 공식화함
+  - scope: out_of_scope
+  - 분류 근거: 원 항목의 담당 제품은 Agent 365 – Shadow AI Detection이며 Azure/Foundry 담당 범위가 아니다.
+- **OT-SY-18**
+  - 항목명: Agent별 활성 사용자 수, 최근 사용일, 미사용 Agent 수
+  - 유형: T5
+  - 제품/메뉴: M365 Admin Center – Agent 사용 현황 / Agent 365 – 고급 사용 분석
+  - 측정방법: 최근 90일 관측 구간 전체의 Agent별 호출·토큰·최종 사용일 조회; 수집 공백을 비활성으로 간주하지 않음
+  - L1: Agent별 사용 현황 확인 불가
+  - L2: 사용 현황은 확인되나 90일 미사용 Agent 비율 40% 이상
+  - L3: 90일 미사용 Agent 비율 20% 미만
+  - L4: 미사용 비율 10% 미만, 미사용 Agent가 자동 알림·정리됨
+  - L5: 미사용 5% 미만 유지, 사용 추세로 확대·폐기를 결정함
+  - scope: partial
+  - 분류 근거: Azure Monitor로 확인 가능한 Azure 호스팅 Agent만 포함하며 M365·Agent 365 사용 분석은 제외한다.
+- **OT-SY-19**
+  - 항목명: 사용량 기반 과금 정책 설정 여부 및 Agent별 소비 비용
+  - 유형: T5
+  - 제품/메뉴: M365 Admin Center – Billing policy / Azure Cost Management
+  - 측정방법: 최근 30일 Azure AI 비용 총액 대비 중복 없이 Agent에 귀속 가능한 비용 비율; 통화별 분리 및 월별 집계 증적 구분
+  - L1: 사용량 기반 과금 정책 미설정, 비용 확인 불가
+  - L2: 과금 정책은 있으나 Agent별 비용 구분 불가
+  - L3: Agent별 비용이 80% 이상 식별되고 월별 집계됨
+  - L4: 비용 100% 식별, 조직별 배분·예산 경보가 자동 적용됨
+  - L5: 비용 추세 예측으로 예산 초과를 선제 통제함
+  - scope: partial
+  - 분류 근거: Azure Cost Management 비용만 포함하며 M365 Billing policy는 제외한다.
+- **OT-SY-20**
+  - 항목명: Agent가 접근하는 민감 데이터 노출 현황
+  - 유형: T4
+  - 제품/메뉴: Microsoft Purview – DSPM for AI
+  - 측정방법: 타 담당 확인: DSPM for AI 리포트, 민감 데이터 노출 목록; 본 프로젝트에서는 구현하지 않음
+  - L1: DSPM for AI 미사용, 민감 데이터 노출 확인 불가
+  - L2: 노출은 확인되나 고위험 노출 건 조치율 50% 미만
+  - L3: 고위험 노출 조치율 90% 이상, 레이블 기반 보호 적용
+  - L4: 고위험 노출 미조치 0건, DLP 정책이 자동 적용됨
+  - L5: 노출 위험을 상시 모니터링하고 자동 조치·정책 갱신함
+  - scope: out_of_scope
+  - 분류 근거: 원 항목의 담당 제품은 Microsoft Purview – DSPM for AI이며 Azure/Foundry 담당 범위가 아니다.
+
+## 원본 및 변환 범위
+
+- DOCX 1개, XLSX 1개(5개 시트), TXT 2개를 같은 디렉터리에 `.원본확장자.md`로 변환합니다. 헤더에 원본 파일명을 보존하고 표는 Markdown 표로 유지합니다. PPTX 3개는 보조 제안 자료이며 Step 0의 명시된 DOCX/XLSX/TXT 변환 대상 및 판정 기준 출처에 포함하지 않았습니다. 원본 파일은 변경하지 않습니다. 회의록에는 개인 식별 정보가 있을 수 있으므로 외부 보고서에 그대로 복사하지 않습니다.
+
+## 개발필요항목의 6개 안건 매핑
+
+- **1. 항목 정의**
+  - 프로젝트 산출물: docs/scope.md, docs/candidates.md
+  - 현재 상태/한계: 20개 원 항목과 추가 제안을 구분; 추가 제안은 미구현
+- **2. 측정 방안**
+  - 프로젝트 산출물: docs/design.md, docs/api-notes.md, docs/rbac.md, src/wasm_agent/collectors/
+  - 현재 상태/한계: Step 0.5~6에서 작성/검증 예정
+- **3. 분석 기준**
+  - 프로젝트 산출물: config/criteria.yaml, src/wasm_agent/evaluators/, tests/
+  - 현재 상태/한계: Step 1·7·9 예정; 원문 미정의 구간은 임의 보간 금지
+- **4. 보고서**
+  - 프로젝트 산출물: output/report.md, output/summary.csv
+  - 현재 상태/한계: Step 8 예정; 원 안건의 PPT는 이번 요청 산출물에 포함되지 않음
+- **5. 개선 과제**
+  - 프로젝트 산출물: criteria.yaml 기반 다음 단계 조건, 보고서 개선 후보
+  - 현재 상태/한계: Step 8 예정; 자동 변경/정책 적용은 하지 않음
+- **6. 이기종 적용**
+  - 프로젝트 산출물: 공통 AgentEvidence, templates/manual_agents.csv, docs/heterogeneous.md
+  - 현재 상태/한계: Step 2·7 예정; 사례/AI Gateway/OpenTelemetry는 검증 필요

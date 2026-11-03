@@ -1,0 +1,12 @@
+region: koreacentral
+budget_usd: 100
+resource_group_prefix: rg-seagent-lab
+project_name: governance-lab
+deployment_name: governance-small-model
+model: gpt-4.1-nano
+model_version: "2025-04-14"
+model_sku: GlobalStandard
+model_capacity: 1
+retention_days: 90
+after_run: retain
+auto_grant_needed_read_roles: true
