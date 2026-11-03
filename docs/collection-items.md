@@ -1,5 +1,7 @@
 # 어떤 정보를 수집하나요?
 
+- 수집 대상: Microsoft Foundry, Azure 자체 호스팅 Agent, Azure Monitor·Log Analytics, 비용·보안 권고.
+
 - 이 목록은 **구현된 읽기 수집 항목**입니다. 모든 고객 환경에서 모든 값이 나온다는 뜻은 아닙니다. 권한·API 응답·계측·관측 기간이 부족하면 값을 비워 두고 이유를 기록합니다. 진단 범위는 Azure와 Microsoft Foundry입니다.
 
 ## Agent 공통 정보

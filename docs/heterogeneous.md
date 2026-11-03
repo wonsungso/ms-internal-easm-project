@@ -1,5 +1,7 @@
 # 이기종 Agent 수용
 
+- 수집 대상: Azure·Microsoft Foundry Agent 및 공통 형식으로 수동 등록한 다른 플랫폼 Agent.
+
 - Azure가 아닌 곳의 Agent도 **같은 목록에 함께 정리**할 수 있습니다. 현재는 CSV에 직접 적는 방식이며 Google/AWS 등에 자동 로그인해서 수집하는 기능은 아닙니다. 고객이 적어 준 값과 Azure API로 확인한 값을 보고서에서 구분합니다.
 
 - **공통 스키마**

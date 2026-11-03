@@ -1,5 +1,7 @@
 # 설계
 
+- 수집 대상: Microsoft Foundry, Azure 자체 호스팅 Agent, Azure Monitor·Log Analytics, 비용·보안 권고.
+
 ## 실행 경계
 
 - **관리자 bootstrap**

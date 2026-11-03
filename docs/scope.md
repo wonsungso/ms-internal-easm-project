@@ -1,5 +1,7 @@
 # System Evidence 범위 및 기준
 
+- 수집 대상: Microsoft Foundry, Azure 자체 호스팅 Agent, Azure Monitor·Log Analytics, 비용·보안 권고.
+
 - 기준 원본: [4) AI Agent Governance Readiness 진단_System Evidence 수집 기준.docx](source/4) AI Agent Governance Readiness 진단_System Evidence 수집 기준.docx.md). 평가 모델 XLSX의 `4. 질문별 평가 기준`에 있는 20개 SE 행의 L1~L5와 공백 차이를 제외하고 일치함을 변환 시 검증했습니다.
 
 ## 범위 원칙

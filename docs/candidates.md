@@ -1,5 +1,7 @@
 # Azure/Foundry 관점 추가 제안
 
+- 현재 수집 대상: Microsoft Foundry, Azure 자체 호스팅 Agent, Azure Monitor, 비용·보안 권고.
+
 - 아래는 기존 System Evidence 20개에 추가를 **검토할 후보**이며 현재 구현 대상이 아닙니다. 기존 코드에 몰래 편입하거나 기존 항목의 최종 점수로 사용하지 않습니다.
 
 - **Foundry 프로젝트·Agent 인벤토리**

@@ -1,6 +1,8 @@
 # SP 인증 준비 - 실제 화면 안내
 
-- **인증서와 연합 인증 중 한 가지만 준비합니다.** 현재 앱/SP와 대상 구독 Reader는 이미 생성됐습니다.
+- 수집 대상: Microsoft Foundry, Azure 자체 호스팅 Agent, Azure Monitor, 비용·보안 권고.
+
+- **인증서와 연합 인증 중 한 가지만 준비합니다.** 관리자 셋업에서 생성하거나 지정한 진단 앱을 사용합니다.
 
 - **로컬 Git Bash**
   - 준비할 것: 조직에서 발급한 인증서: 공개 인증서는 앱 등록에, 개인키 포함 PEM/PFX는 보호 경로에 보관
@@ -38,7 +40,17 @@ bash scripts/setup/manage.sh verify \
   --certificate-path "$HOME/.config/wasm-agent/diagnostic.pem"
 ```
 
-- 암호화 인증서의 암호 입력은 [셋업 안내](../scripts/setup/README.md#3-sp-인증---최초-1회-고객-작업)를 참고하세요. 테넌트·Client ID·Principal ID·구독은 `output/setup.json`에서 자동 전달합니다.
+- 테넌트·Client ID·Principal ID·구독은 `output/setup.json`에서 자동 전달합니다.
+- 암호화된 인증서는 실제 암호를 명령줄에 적지 말고 아래 프롬프트에 입력합니다. 입력 내용은 화면에 표시되지 않습니다.
+
+```bash
+read -r -s -p 'Certificate password: ' AZURE_CLIENT_CERTIFICATE_PASSWORD
+printf '\n'
+export AZURE_CLIENT_CERTIFICATE_PASSWORD
+bash scripts/setup/manage.sh verify \
+  --certificate-path "$HOME/.config/wasm-agent/diagnostic.pem"
+unset AZURE_CLIENT_CERTIFICATE_PASSWORD
+```
 
 ## B. 연합 인증 방식
 
