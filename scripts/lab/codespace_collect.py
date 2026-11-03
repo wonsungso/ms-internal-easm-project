@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import re
 import shlex
 import subprocess
 import tempfile
+import zipfile
 from pathlib import Path
 
 import yaml
@@ -87,8 +89,14 @@ def run(codespace: str) -> None:
         destination = ROOT / "output" / "codespace-e2e"
         destination.mkdir(exist_ok=True)
         for name in names:
-            gh("codespace", "cp", "-c", codespace, "--", "-O",
-               f"remote:{WORKSPACE}/output/codespace-e2e/{name}", str(destination / name))
+            result = gh("codespace", "ssh", "-c", codespace, "--",
+                        f"base64 {WORKSPACE}/output/codespace-e2e/{name}")
+            payload = base64.b64decode("".join(result.stdout.split()), validate=True)
+            path = destination / name
+            path.write_bytes(payload)
+            with zipfile.ZipFile(path) as archive:
+                if archive.testzip() is not None:
+                    raise RuntimeError("Codespaces에서 받은 ZIP의 무결성 검사 실패")
         save(ROOT / "output" / "codespace-e2e-verification.json", {
             "codespace": codespace, "collection_exit_code": code, "all_subscriptions": True,
             "remote_private_key_cleaned": remote_cleanup, "temporary_certificate_cleaned": True,

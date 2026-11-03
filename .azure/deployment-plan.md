@@ -12,6 +12,10 @@
 - 추가 기능: --all-subscriptions는 설정 구독 목록을 무시하고 지정 테넌트의 접근 가능한 활성 구독을 열거.
 - 재배포 전 검증: 199개 테스트·Ruff·Bicep·새 generation의 ARM validate/what-if·정책 조회 통과.
 - 기존 소유 그룹 삭제 후 부재 재조회 완료. 이후 아래 배포는 새 리소스 생성이며 기존 완료 기록을 재사용하지 않음.
+- 재구성 E2E 완료: 새 Agent 10개·새 평가 실행 4개·실제 LangChain/Foundry 웹 응답 확인.
+- Codespaces에서 --all-subscriptions로 진단 SP 실측 완료. 12개 Excel 시트·체크리스트 6항목·Agent 10행·평가 4행·ZIP 증적 34개 및 상대 링크 검증.
+- 원격 개인키 경로 삭제·로컬 키 삭제·Graph 공개 인증서 0건 독립 재조회 완료.
+- 결과는 증거 가용성 partial(종료 코드 2): 비용 미반영·범위 밖 중앙 로그·AI 보안 기능 자료 부족을 그대로 보존.
 
 - Status: Validated
 

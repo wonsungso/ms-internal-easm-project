@@ -5,6 +5,7 @@ import json
 import re
 import subprocess
 import sys
+import time
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,6 +16,32 @@ from scripts.lab.certificates import GraphCertificates
 from scripts.setup.setup_account import AzureCLI
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def ready_health(url: str) -> dict:
+    for attempt in range(18):
+        try:
+            response = requests.get(url, timeout=30, allow_redirects=False)
+        except (requests.Timeout, requests.ConnectionError):
+            print("최종 앱 상태 확인: 재시작 연결 대기", flush=True)
+        else:
+            try:
+                if response.status_code in (301, 302, 401, 403, 404):
+                    raise RuntimeError(f"샘플 health 경로 확인 필요: HTTP {response.status_code}")
+                if response.status_code == 200 and response.headers.get("Content-Type", "").startswith(
+                    "application/json",
+                ):
+                    value = response.json()
+                    if value.get("smoke_status") == "failed":
+                        raise RuntimeError("샘플 모델 실행이 실패했습니다.")
+                    if value.get("status") == "ready" and value.get("sample_revision") == "chatbot-v2":
+                        return value
+                print(f"최종 앱 상태 확인: 준비 대기, HTTP {response.status_code}", flush=True)
+            finally:
+                response.close()
+        if attempt < 17:
+            time.sleep(10)
+    raise RuntimeError("실제 샘플 앱의 최신 코드 준비 상태를 확인하지 못했습니다.")
 
 
 def main() -> int:
@@ -45,11 +72,8 @@ def main() -> int:
         raise RuntimeError("진단 앱에 인증서가 남아 있어 정리 완료로 표시하지 않습니다.")
     health = []
     for host in lab["hosts"]:
-        response = requests.get(host["health_url"], timeout=30, allow_redirects=False)
-        value = response.json()
-        if response.status_code != 200 or value.get("status") != "ready":
-            raise RuntimeError("실제 샘플 endpoint 상태가 ready가 아닙니다.")
-        health.append({"name": host["name"], "url": host["health_url"], "http": response.status_code,
+        value = ready_health(host["health_url"])
+        health.append({"name": host["name"], "url": host["health_url"], "http": 200,
                        "current": value, "model_smoke_verified": host["smoke"]["smoke_status"] == "completed"})
         if host.get("chat_url"):
             denied = requests.post(
