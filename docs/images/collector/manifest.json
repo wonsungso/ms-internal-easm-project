@@ -1,0 +1,11 @@
+{
+  "method": "Playwright screenshot of the actual generated EASM report",
+  "highlight_color": "#d40000",
+  "images": [
+    {
+      "file": "report-overview.png",
+      "highlight_count": 3,
+      "environment_identifiers_and_counts_excluded": true
+    }
+  ]
+}

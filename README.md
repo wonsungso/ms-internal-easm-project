@@ -142,6 +142,8 @@ wasm-agent package --output-dir output
 - L1~L5는 확인한 범위의 초안입니다. 비율만 높다고 상위 수준으로 확정하지 않습니다.
 - 청구 반영 지연·장기 관측 부족·공유 비용은 추정값으로 채우지 않습니다.
 
+![보고서의 수집 범위와 결과 파일 링크](docs/images/collector/report-overview.png)
+
 ## 수집 항목
 
 - Agent 정보
