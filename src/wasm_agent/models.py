@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import uuid
+from collections.abc import Sequence
 from datetime import datetime
-from typing import Any, Literal
+from pathlib import Path
+from typing import Any, Literal, Protocol
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+import yaml
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 Reason = Literal["permission_denied", "feature_unavailable", "license_missing", "not_found", "error"]
 Platform = Literal["foundry", "langchain", "other", "manual"]
@@ -85,6 +89,7 @@ class ModelDeployment(EvidenceModel):
     capacity: int | None = None
     state: str | None = None
     rai_policy: str | None = None
+    version_upgrade_option: str | None = None
     evidence_refs: list[str] = Field(default_factory=list)
 
 
@@ -118,6 +123,38 @@ class SecurityRecommendation(EvidenceModel):
     assessment_id: str
     severity: str | None
     status: str | None
+    first_evaluation_date: datetime | None = None
+    status_change_date: datetime | None = None
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class SecureScore(EvidenceModel):
+    subscription_id: str
+    current: float | None = None
+    max: float | None = None
+    percentage: float | None = None
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class PolicyAssignment(EvidenceModel):
+    subscription_id: str
+    assignment_id: str
+    display_name: str | None = None
+    policy_definition_id: str
+    scope: str | None = None
+    enforcement_mode: str | None = None
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class Budget(EvidenceModel):
+    subscription_id: str
+    budget_id: str
+    amount: float | None = None
+    category: str | None = None
+    time_grain: str | None = None
+    enabled_alerts: int = 0
+    forecast_alerts: int = 0
+    thresholds: list[float] = Field(default_factory=list)
     evidence_refs: list[str] = Field(default_factory=list)
 
 
@@ -127,6 +164,68 @@ class LogSetting(EvidenceModel):
     enabled: bool
     workspace_id: str | None = None
     retention_days: int | None = None
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class EntraBlueprint(EvidenceModel):
+    blueprint_id: str
+    display_name: str | None = None
+    created_at: datetime | None = None
+    tags: list[str] = Field(default_factory=list)
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class EntraAgentIdentity(EvidenceModel):
+    identity_id: str
+    display_name: str | None = None
+    blueprint_id: str | None = None
+    created_at: datetime | None = None
+    account_enabled: bool | None = None
+    owner_count: int | None = None
+    sponsor_count: int | None = None
+    owners_all_disabled: bool | None = None
+    app_roles: list[str] = Field(default_factory=list)
+    overprivileged_roles: list[str] = Field(default_factory=list)
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class AgentCaPolicy(EvidenceModel):
+    policy_id: str
+    display_name: str | None = None
+    state: str | None = None
+    include_all_agents: bool = False
+    include_agent_ids: list[str] = Field(default_factory=list)
+    exclude_agent_ids: list[str] = Field(default_factory=list)
+    uses_agent_filter: bool = False
+    agent_risk_levels: list[str] = Field(default_factory=list)
+    grant_controls: list[str] = Field(default_factory=list)
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class RiskyAgent(EvidenceModel):
+    risky_agent_id: str
+    risk_level: str | None = None
+    risk_state: str | None = None
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class ProposalObservation(EvidenceModel):
+    code: str
+    subscription_id: str | None = None
+    subject: str
+    kind: str
+    values: dict[str, Any] = Field(default_factory=dict)
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class ProposalFinding(EvidenceModel):
+    code: str
+    title: str
+    status: Literal["수집됨", "일부 수집", "수집 불가"]
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    observation: str
+    limit: str
+    reason: Reason | None = None
     evidence_refs: list[str] = Field(default_factory=list)
 
 
@@ -147,7 +246,16 @@ class Collection(EvidenceModel):
     evaluations: list[EvaluationRun] = Field(default_factory=list)
     costs: list[CostRecord] = Field(default_factory=list)
     security: list[SecurityRecommendation] = Field(default_factory=list)
+    secure_scores: list[SecureScore] = Field(default_factory=list)
+    policy_assignments: list[PolicyAssignment] = Field(default_factory=list)
+    budgets: list[Budget] = Field(default_factory=list)
+    entra_blueprints: list[EntraBlueprint] = Field(default_factory=list)
+    entra_agent_identities: list[EntraAgentIdentity] = Field(default_factory=list)
+    agent_ca_policies: list[AgentCaPolicy] = Field(default_factory=list)
+    risky_agents: list[RiskyAgent] = Field(default_factory=list)
     logs: list[LogSetting] = Field(default_factory=list)
+    proposal_observations: list[ProposalObservation] = Field(default_factory=list)
+    proposals: list[ProposalFinding] = Field(default_factory=list)
     issues: list[Issue] = Field(default_factory=list)
     subscriptions: list[str] = Field(default_factory=list)
     completed_subscriptions: list[str] = Field(default_factory=list)
@@ -183,3 +291,115 @@ def timestamp(value: object) -> datetime | None:
     if isinstance(value, datetime) and value.tzinfo is not None:
         return value
     raise ValueError("Invalid evidence timestamp")
+
+
+def try_timestamp(value: object) -> datetime | None:
+    try:
+        return timestamp(value)
+    except (ValueError, TypeError):
+        return None
+
+
+class Collector(Protocol):
+    required_roles: tuple[str, ...]
+
+    def discover(self, subscriptions: Sequence[str]) -> Collection: ...
+
+
+class ProjectSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    subscription_id: str
+    resource_id: str
+    endpoint: str
+
+
+CRITERIA_FILE = Path(__file__).with_name("criteria.yaml")
+DEFAULT_TAGS: dict[str, Any] = {
+    "agent_type_key": "agent-type", "langchain_values": ["langchain"],
+    "owner_key": "owner", "sponsor_key": "sponsor", "environment_key": "env",
+    "cost_center_key": "cost-center", "agent_id_key": "agent-id",
+    "model_deployment_key": "model-deployment", "model_resource_key": "model-resource-id",
+    "production_values": ["prod", "production"], "name_patterns": ["langchain", "lc-agent"],
+}
+
+
+class AllowedModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str
+    version: str
+    format: str = "OpenAI"
+
+
+class Settings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tenant_id: str | None = None
+    expected_principal_id: str | None = None
+    subscriptions: list[str] = Field(default_factory=list)
+    workers: int = Field(default=3, ge=1, le=16)
+    evidence_dir: Path = Path(".wasm-agent/evidence")
+    foundry_profile: Literal["agents_v1", "classic_v1"] = "agents_v1"
+    projects: list[ProjectSettings] = Field(default_factory=list)
+    manual_agents: Path | None = None
+    entra: bool = True
+    allowed_models: list[AllowedModel] = Field(default_factory=list)
+    tags: dict[str, Any] = Field(default_factory=dict)
+    model_policy_definition_ids: list[str] = Field(default_factory=list)
+    required_retention_days: int | None = None
+    internal_security_score_min: float | None = None
+    overprivileged_permission_patterns: list[str] = Field(default_factory=list)
+    policy_facts: dict[str, Any] = Field(default_factory=dict)
+    interview_levels: dict[str, float] = Field(default_factory=dict)
+    monitor: dict[str, list[str]] = Field(default_factory=lambda: {
+        "calls_metric_candidates": ["AzureOpenAIRequests", "Requests"],
+        "token_metric_candidates": [
+            "ProcessedPromptTokens", "GeneratedTokens", "InputTokens", "OutputTokens",
+        ],
+    })
+
+    @model_validator(mode="after")
+    def validate_ids(self) -> Settings:
+        for field in ("tenant_id", "expected_principal_id"):
+            if value := getattr(self, field):
+                setattr(self, field, str(uuid.UUID(value)))
+        self.subscriptions = list(dict.fromkeys(str(uuid.UUID(sid)) for sid in self.subscriptions))
+        if any(not 1 <= value <= 5 for value in self.interview_levels.values()):
+            raise ValueError("Interview levels must be between 1 and 5")
+        return self
+
+
+def load_yaml(path: Path) -> dict[str, Any]:
+    value = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
+    if not isinstance(value, dict):
+        raise ValueError(f"{path.name}: YAML object is required")
+    return value
+
+
+def load_settings(path: Path) -> Settings:
+    if not path.is_file():
+        return Settings()
+    return Settings.model_validate(load_yaml(path))
+
+
+def load_criteria(settings: Settings | None = None) -> dict[str, Any]:
+    """내장 판정 기준에 고객 입력(config.yaml)을 덮어쓴다. 값이 없으면 기본값이 유지된다."""
+    criteria = load_yaml(CRITERIA_FILE)
+    if settings is None:
+        return criteria
+    if settings.model_policy_definition_ids:
+        criteria["model_policy_definition_ids"] = settings.model_policy_definition_ids
+    if settings.required_retention_days is not None:
+        criteria["required_retention_days"] = settings.required_retention_days
+    if settings.internal_security_score_min is not None:
+        criteria["internal_security_score_min"] = settings.internal_security_score_min
+    if settings.overprivileged_permission_patterns:
+        criteria["overprivileged_permission_patterns"] = settings.overprivileged_permission_patterns
+        criteria["overprivileged_permissions_sample"] = False
+    return criteria
+
+
+def load_conventions(settings: Settings) -> dict[str, Any]:
+    return {**DEFAULT_TAGS, **settings.tags}
+
+
+def allowed_models(settings: Settings) -> dict[str, Any]:
+    return {"models": [model.model_dump() for model in settings.allowed_models]}

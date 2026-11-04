@@ -12,11 +12,18 @@ from azure.identity import DefaultAzureCredential
 
 from wasm_agent.azure import AccessError
 from wasm_agent.collect import collect
+from wasm_agent.collect_entra import EntraCollector
 from wasm_agent.evaluation import evaluate
-from wasm_agent.models import Collection, Finding
+from wasm_agent.models import (
+    Collection,
+    Finding,
+    allowed_models,
+    load_conventions,
+    load_criteria,
+    load_settings,
+)
+from wasm_agent.proposals import evaluate_proposals
 from wasm_agent.report import load_result, write_reports
-from wasm_agent.report_bundle import create_bundle
-from wasm_agent.settings import load_settings, load_yaml
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -34,10 +41,14 @@ def main(argv: list[str] | None = None) -> int:
     command.add_argument("--tenant-id")
     command.add_argument("--expected-principal-id")
     command.add_argument("--manual-agents", type=Path)
+    command.add_argument(
+        "--no-entra", action="store_true",
+        help="Microsoft Entra Agent ID 수집 생략 (기본은 수집. 진단 SP에 Graph 읽기 권한 필요)",
+    )
     command.add_argument("--output-dir", type=Path, default=Path("output"))
     command.add_argument("--fixture", type=Path)
     command.add_argument("--dry-run", action="store_true")
-    package = subparsers.add_parser("package", help="기존 수집 결과를 읽어 보고서와 다운로드 ZIP 재생성")
+    package = subparsers.add_parser("package", help="raw-data-<타임스탬프>.json을 읽어 Excel 보고서 재생성")
     package.add_argument("--output-dir", type=Path, default=Path("output"))
     package.add_argument("--mode", choices=["live", "fixture"])
     args = parser.parse_args(argv)
@@ -56,13 +67,14 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError("기존 파일의 데이터 구분이 없습니다. --mode live 또는 --mode fixture를 명시하세요.")
             data.facts["data_mode"] = mode
             write_reports(data, findings, args.output_dir, mode)
-            create_bundle(data, args.output_dir, mode)
             return 0
         settings = load_settings(args.config)
+        setup_subscriptions: list[str] = []
         if args.setup_file:
             setup = json.loads(args.setup_file.read_text(encoding="utf-8-sig"))
             settings.tenant_id = setup["tenant_id"]
             settings.expected_principal_id = setup["principal_id"]
+            setup_subscriptions = setup.get("subscription_ids") or []
         if args.tenant_id:
             settings.tenant_id = args.tenant_id
         if args.expected_principal_id:
@@ -71,8 +83,12 @@ def main(argv: list[str] | None = None) -> int:
             settings.subscriptions = args.subscriptions
         elif args.all_subscriptions:
             settings.subscriptions = []
+        elif setup_subscriptions:
+            settings.subscriptions = setup_subscriptions
         if args.manual_agents:
             settings.manual_agents = args.manual_agents
+        if args.no_entra:
+            settings.entra = False
         settings = type(settings).model_validate(settings.model_dump())
         if args.dry_run:
             print(json.dumps({
@@ -81,7 +97,9 @@ def main(argv: list[str] | None = None) -> int:
                 "subscriptions": settings.subscriptions or "auto-enumerate",
                 "output_dir": str(args.output_dir),
                 "foundry_profile": settings.foundry_profile,
-                "roles": ["Reader", "project-scoped Foundry read DataActions when required"],
+                "roles": ["Reader", "project-scoped Foundry read DataActions when required"]
+                + (["Graph: " + ", ".join(EntraCollector.required_roles)] if settings.entra else []),
+                "entra": settings.entra,
                 "azure_calls": False,
             }, ensure_ascii=False, indent=2))
             return 0
@@ -96,12 +114,12 @@ def main(argv: list[str] | None = None) -> int:
                 "explicit_subscription_list" if settings.subscriptions else "all_accessible_active_in_tenant"
             )
         data.facts["data_mode"] = "fixture" if args.fixture else "live"
+        data.proposals = evaluate_proposals(data, load_conventions(settings))
         findings = evaluate(
-            data, load_yaml(settings.criteria_file), load_yaml(settings.allowed_models_file),
-            load_yaml(settings.tag_conventions_file), settings.policy_facts, settings.interview_levels,
+            data, load_criteria(settings), allowed_models(settings),
+            load_conventions(settings), settings.policy_facts, settings.interview_levels,
         )
         write_reports(data, findings, args.output_dir, "fixture" if args.fixture else "live")
-        create_bundle(data, args.output_dir, "fixture" if args.fixture else "live")
         print(f"수집 완료: 구독={len(data.subscriptions)}, Agent/후보={len(data.agents)}, "
               f"이슈={len(data.issues)}, 결과={args.output_dir}")
         return 2 if data.issues else 0

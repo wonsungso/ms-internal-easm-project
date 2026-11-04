@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from scripts.setup import setup_account as setup
+from scripts import setup_account as setup
 
 SID = "11111111-1111-4111-8111-111111111111"
 TENANT = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
@@ -318,6 +318,62 @@ def test_verify_supports_federation_without_certificate(config_file: Path, tmp_p
     assert env["AZURE_TENANT_ID"] == TENANT
 
 
+def test_entra_reader_assigns_only_missing_graph_application_roles_and_is_idempotent() -> None:
+    graph_id = "99999999-9999-4999-8999-999999999999"
+    values = list(setup.ENTRA_GRAPH_ROLES)
+    ids = {value: f"00000000-0000-4000-8000-{index:012d}" for index, value in enumerate(values, 1)}
+    assigned: list[dict] = [{"resourceId": graph_id, "appRoleId": ids[values[0]]}]
+    calls: list[tuple[str, ...]] = []
+
+    class FakeCLI:
+        def run(self, *args: str):
+            calls.append(args)
+            if args[:3] == ("ad", "sp", "show"):
+                return {"id": graph_id, "appRoles": [
+                    {"id": ids[value], "value": value, "allowedMemberTypes": ["Application"]} for value in values
+                ] + [{"id": "x", "value": "Delegated.Only", "allowedMemberTypes": ["User"]}]}
+            if args[:3] == ("rest", "--method", "GET"):
+                return {"value": list(assigned)}
+            if args[:3] == ("rest", "--method", "POST"):
+                body = json.loads(args[args.index("--body") + 1])
+                assigned.append({"resourceId": body["resourceId"], "appRoleId": body["appRoleId"]})
+                return {}
+            raise AssertionError(args)
+
+    principal = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    assert setup.ensure_graph_roles(FakeCLI(), principal) == values
+    posts = [call for call in calls if call[:3] == ("rest", "--method", "POST")]
+    assert len(posts) == len(values) - 1
+    assert all(f"/servicePrincipals/{principal}/appRoleAssignments" in call[call.index("--url") + 1] for call in posts)
+    calls.clear()
+    setup.ensure_graph_roles(FakeCLI(), principal)
+    assert not [call for call in calls if call[:3] == ("rest", "--method", "POST")]
+
+
+def test_entra_reader_requires_available_roles_and_is_apply_only(config_file: Path) -> None:
+    class MissingCLI:
+        def run(self, *args: str):
+            return {"id": "g", "appRoles": []}
+
+    with pytest.raises(ValueError, match="AgentIdentity.Read.All"):
+        setup.ensure_graph_roles(MissingCLI(), "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+    with patch.object(setup.subprocess, "run", side_effect=AssertionError("must not call Azure")):
+        assert setup.main(["--config-file", str(config_file), "--verify", "--entra-reader"]) == 1
+        assert setup.main(["--config-file", str(config_file), "--dry-run", "--no-entra"]) == 1
+
+
+def test_verify_checks_entra_by_default_and_can_skip_it(config_file: Path, tmp_path: Path) -> None:
+    token_file = tmp_path / "token"
+    token_file.write_text("fixture", encoding="utf-8")
+    with patch.dict(setup.os.environ, {"AZURE_FEDERATED_TOKEN_FILE": str(token_file)}, clear=True), patch.object(
+        setup.subprocess, "run", return_value=Mock(returncode=0),
+    ) as run:
+        assert setup.main(["--config-file", str(config_file), "--verify"]) == 0
+        assert "--no-entra" not in run.call_args.args[0]
+        assert setup.main(["--config-file", str(config_file), "--verify", "--no-entra"]) == 0
+    assert "--no-entra" in run.call_args.args[0]
+
+
 def bash_executable() -> str:
     if os.name == "nt":
         path = Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Git" / "bin" / "bash.exe"
@@ -332,7 +388,7 @@ def bash_executable() -> str:
 
 @pytest.mark.parametrize("command", ["plan", "apply"])
 def test_bash_does_not_allow_mode_override(command: str, config_file: Path) -> None:
-    script = Path(__file__).parents[1] / "scripts" / "setup" / "manage.sh"
+    script = Path(__file__).parents[1] / "scripts" / "setup.sh"
     result = subprocess.run(
         [bash_executable(), str(script), command, "--dry-run", "--config-file", str(config_file)],
         capture_output=True, text=True, check=False,
@@ -342,7 +398,7 @@ def test_bash_does_not_allow_mode_override(command: str, config_file: Path) -> N
 
 
 def test_bash_plan_runs_end_to_end_without_azure(config_file: Path, tmp_path: Path) -> None:
-    script = Path(__file__).parents[1] / "scripts" / "setup" / "manage.sh"
+    script = Path(__file__).parents[1] / "scripts" / "setup.sh"
     output = tmp_path / "result.json"
     environment = os.environ.copy()
     environment["WASM_AGENT_PYTHON"] = sys.executable

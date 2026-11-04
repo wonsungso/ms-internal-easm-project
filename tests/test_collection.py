@@ -9,14 +9,12 @@ from urllib.parse import urlparse
 
 import pytest
 
-from wasm_agent.azure import AccessError
+from wasm_agent.azure import AccessError, EvidenceStore, redact
 from wasm_agent.collect import collect
 from wasm_agent.collect_foundry import FoundryCollector, list_data
-from wasm_agent.collect_manual import ManualCollector
+from wasm_agent.collect_inventory import ManualCollector
 from wasm_agent.collect_signals import SignalCollector
-from wasm_agent.evidence import EvidenceStore, redact
-from wasm_agent.models import Collection
-from wasm_agent.settings import load_settings, load_yaml
+from wasm_agent.models import Collection, load_criteria, load_settings
 
 ROOT = Path(__file__).parents[1]
 NOW = datetime(2026, 11, 3, 1, tzinfo=UTC)
@@ -100,6 +98,7 @@ def test_three_subscription_pipeline_and_cross_subscription_model_link(tmp_path:
     settings.tenant_id, settings.expected_principal_id = TENANT, PRINCIPAL
     settings.subscriptions = [entry["subscription_id"] for entry in subs]
     settings.evidence_dir = tmp_path / "evidence"
+    settings.entra = False
 
     def request(method: str, url: str, **kwargs: object) -> Mock:
         body = kwargs.get("json") or {}
@@ -109,7 +108,14 @@ def test_three_subscription_pipeline_and_cross_subscription_model_link(tmp_path:
         elif "Microsoft.ResourceGraph/resources" in path:
             sid = body["subscriptions"][0]
             rows = next(entry["resources"] for entry in subs if entry["subscription_id"] == sid)
-            payload = {"data": [] if "securityresources" in body["query"] else rows}
+            queries = ("securityresources", "policyresources", "microsoft.insights", "identityType")
+            payload = {"data": [] if any(key in body["query"].lower() for key in queries) else rows}
+        elif path.endswith("/redTeams/runs"):
+            payload = {"value": []}
+        elif path.endswith("/config/web"):
+            payload = {"properties": {"ipSecurityRestrictions": [], "linuxFxVersion": "PYTHON|3.11"}}
+        elif path.endswith("/raiPolicies"):
+            payload = {"value": []}
         elif path == "/fixture/account/deployments":
             payload = fixture["model_deployments"]
         elif path == "/fixture/account/projects":
@@ -135,6 +141,12 @@ def test_three_subscription_pipeline_and_cross_subscription_model_link(tmp_path:
             payload = fixture["monitor_definitions"]
         elif path.endswith("/metrics"):
             payload = fixture["monitor_metrics"]
+        elif path.endswith("/secureScores"):
+            payload = {"value": [{"name": "ascScore", "properties": {
+                "score": {"current": 10, "max": 20, "percentage": 0.5},
+            }}]}
+        elif path.endswith("/budgets"):
+            payload = {"value": []}
         else:
             raise AssertionError(f"Unmocked API: {method} {path}")
         return Mock(status_code=200, headers={}, json=Mock(return_value=payload))
@@ -147,6 +159,9 @@ def test_three_subscription_pipeline_and_cross_subscription_model_link(tmp_path:
     assert all(agent.model == "gpt-4o-mini" for agent in data.agents)
     assert all(agent.model_version == "2024-07-18" for agent in data.agents)
     assert len(data.costs) == 3
+    assert len(data.secure_scores) == 3 and not data.budgets
+    assert set(data.facts["budget_complete_subscriptions"]) == set(settings.subscriptions)
+    assert "policy_complete_subscriptions" not in data.facts
 
 
 def test_subscription_failure_preserves_other_subscription_records(tmp_path: Path) -> None:
@@ -188,6 +203,149 @@ def test_manual_template_and_invalid_input(tmp_path: Path) -> None:
         ManualCollector(invalid, NOW).discover([])
 
 
+def test_secure_score_policy_and_budget_collectors_keep_only_evidence_fields() -> None:
+    sid = "11111111-1111-4111-8111-111111111111"
+    required = "/providers/Microsoft.Authorization/policyDefinitions/model-allowlist"
+    criteria = {**load_criteria(), "model_policy_definition_ids": [required.upper()]}
+    http = Mock(subscription=sid, last_ref="fixture://ref")
+    http.list_arm.side_effect = [
+        [{"name": "other"}, {"name": "ascScore", "properties": {"score": {"current": 5, "max": 10, "percentage": 0.5}}}],
+        [
+            {"id": "a1", "properties": {"policyDefinitionId": required, "enforcementMode": "Default",
+                                          "scope": f"/subscriptions/{sid}", "displayName": "Allowed models"}},
+            {"id": "a2", "properties": {"policyDefinitionId": "/providers/Microsoft.Authorization/other"}},
+        ],
+        [{"id": "b1", "properties": {
+            "amount": 100, "category": "Cost", "timeGrain": "Monthly",
+            "notifications": {
+                "on": {"enabled": True, "threshold": 80, "contactEmails": ["owner@example.com"]},
+                "off": {"enabled": False, "threshold": 100},
+            },
+        }}],
+    ]
+    collector = SignalCollector(http, Collection(collected_at=NOW, subscriptions=[sid]), NOW, criteria, {}, [sid])
+    result = Collection(collected_at=NOW)
+    collector.secure_score(sid, result)
+    collector.policies(sid, result)
+    collector.budgets(sid, result)
+    assert [(row.current, row.max, row.percentage) for row in result.secure_scores] == [(5, 10, 0.5)]
+    assert [row.assignment_id for row in result.policy_assignments] == ["a1"]
+    assert result.policy_assignments[0].enforcement_mode == "Default"
+    assert (result.budgets[0].enabled_alerts, result.budgets[0].thresholds) == (1, [80.0])
+    assert "owner@example.com" not in result.model_dump_json()
+    for key in ("secure_score", "policy", "budget"):
+        assert result.facts[key + "_complete_subscriptions"] == [sid]
+
+
+def test_policy_collection_is_skipped_without_customer_policy_ids_and_missing_score_is_reported() -> None:
+    sid = "11111111-1111-4111-8111-111111111111"
+    http = Mock(subscription=sid, last_ref=None)
+    http.list_arm.return_value = []
+    collector = SignalCollector(
+        http, Collection(collected_at=NOW, subscriptions=[sid]), NOW,
+        load_criteria(), {}, [sid],
+    )
+    result = Collection(collected_at=NOW)
+    collector.policies(sid, result)
+    http.list_arm.assert_not_called()
+    assert "policy_complete_subscriptions" not in result.facts
+    with pytest.raises(AccessError) as exc:
+        collector.secure_score(sid, result)
+    assert exc.value.reason == "feature_unavailable"
+
+
+def test_entra_collector_reads_graph_keeps_counts_not_people_and_isolates_failures() -> None:
+    from wasm_agent.collect_entra import EntraCollector
+
+    identity = "11111111-1111-4111-8111-111111111111"
+    graph_sp = "22222222-2222-4222-8222-222222222222"
+    write_role, read_role = "33333333-3333-4333-8333-333333333333", "44444444-4444-4444-8444-444444444444"
+
+    def list_graph(url: str) -> list[dict]:
+        if "agentIdentityBlueprint" in url:
+            return [{"appId": "55555555-5555-4555-8555-555555555555", "displayName": "bp", "createdDateTime":
+                     "2026-11-04T01:08:41Z", "tags": ["agentName:a1", "projectName:p1"]}]
+        if url.endswith("/servicePrincipals/microsoft.graph.agentIdentity?$top=100"):
+            return [{"id": identity, "displayName": "agent", "agentIdentityBlueprintId":
+                     "55555555-5555-4555-8555-555555555555", "createdDateTime": "2026-11-04T01:08:44Z",
+                     "accountEnabled": True}]
+        if "/owners" in url:
+            return [{"id": "o1", "accountEnabled": False, "displayName": "Departed Person"}]
+        if "/sponsors" in url:
+            return []
+        if "/appRoleAssignments" in url:
+            return [
+                {"appRoleId": write_role, "resourceId": graph_sp},
+                {"appRoleId": read_role, "resourceId": graph_sp},
+                {"appRoleId": "00000000-0000-0000-0000-000000000000", "resourceId": graph_sp},
+            ]
+        if "conditionalAccess" in url:
+            return [
+                {"id": "p0", "state": "enabled", "conditions": {"agents": None}},
+                {"id": "p1", "displayName": "agents", "state": "enabled", "grantControls": {"builtInControls": ["block"]},
+                 "conditions": {"agents": {"includeAgentIdServicePrincipals": ["All"],
+                                           "excludeAgentIdServicePrincipals": [identity],
+                                           "agentIdRiskLevels": "high"}}},
+            ]
+        if "riskyAgents" in url:
+            return [{"id": "r1", "riskLevel": "high", "riskState": "atRisk"}]
+        raise AssertionError(url)
+
+    http = Mock(subscription="", last_ref="fixture://graph")
+    http.list_graph.side_effect = list_graph
+    http.request.return_value = {"appRoles": [
+        {"id": write_role, "value": "Mail.ReadWrite.All"}, {"id": read_role, "value": "User.Read.All"},
+    ]}
+    criteria = load_criteria()
+    result = EntraCollector(http, NOW, criteria).discover()
+    assert not result.issues
+    assert [item.blueprint_id for item in result.entra_blueprints] == ["55555555-5555-4555-8555-555555555555"]
+    agent = result.entra_agent_identities[0]
+    assert (agent.owner_count, agent.sponsor_count, agent.owners_all_disabled) == (1, 0, True)
+    assert agent.app_roles == ["Mail.ReadWrite.All", "User.Read.All"]
+    assert agent.overprivileged_roles == ["Mail.ReadWrite.All"]
+    policy = result.agent_ca_policies[0]
+    assert (policy.include_all_agents, policy.exclude_agent_ids, policy.agent_risk_levels) == (True, [identity], ["high"])
+    assert len(result.agent_ca_policies) == 1 and result.risky_agents[0].risk_state == "atRisk"
+    assert "Departed Person" not in result.model_dump_json()
+    assert all(result.facts[key] for key in (
+        "entra_blueprints_complete", "entra_agents_complete", "conditional_access_complete", "risky_agents_complete",
+    ))
+
+    def denied(url: str) -> list[dict]:
+        if "conditionalAccess" in url:
+            raise AccessError("permission_denied", "HTTP 403")
+        return list_graph(url)
+
+    http.list_graph.side_effect = denied
+    partial = EntraCollector(http, NOW, criteria).discover()
+    assert [(item.collector, item.reason, item.target) for item in partial.issues] == [
+        ("conditional_access", "permission_denied", "tenant"),
+    ]
+    assert partial.issues[0].required_roles == ["Policy.Read.All"]
+    assert "conditional_access_complete" not in partial.facts and partial.facts["entra_agents_complete"]
+
+
+def test_entra_graph_requests_use_only_the_graph_host_and_reject_foreign_pagination() -> None:
+    import requests
+
+    from wasm_agent.azure import MSGRAPH_SCOPE, ReaderHTTP, trusted_url
+
+    trusted_url("https://graph.microsoft.com/v1.0/servicePrincipals", MSGRAPH_SCOPE)
+    with pytest.raises(ValueError):
+        trusted_url("https://evil.example/v1.0/servicePrincipals", MSGRAPH_SCOPE)
+    http = ReaderHTTP(fake_credential())
+    pages = [
+        {"value": [{"id": "1"}], "@odata.nextLink": "https://graph.microsoft.com/v1.0/other"},
+    ]
+    with patch.object(requests.Session, "request", return_value=Mock(
+        status_code=200, headers={}, json=Mock(return_value=pages[0]),
+    )), pytest.raises(AccessError, match="pagination"):
+        http.list_graph("https://graph.microsoft.com/v1.0/servicePrincipals")
+    with pytest.raises(ValueError):
+        http.request("POST", "https://graph.microsoft.com/v1.0/security/auditLog/queries", MSGRAPH_SCOPE, {})
+
+
 def test_log_workspace_outside_selected_subscriptions_is_not_queried() -> None:
     sid = "11111111-1111-4111-8111-111111111111"
     foreign = "/subscriptions/99999999-9999-4999-8999-999999999999/resourceGroups/central/providers/Microsoft.OperationalInsights/workspaces/shared"
@@ -196,7 +354,7 @@ def test_log_workspace_outside_selected_subscriptions_is_not_queried() -> None:
     http.list_arm.return_value = [{"properties": {
         "workspaceId": foreign, "logs": [{"enabled": True}],
     }}]
-    collector = SignalCollector(http, base, NOW, load_yaml(ROOT / "config" / "criteria.yaml"), {}, [sid])
+    collector = SignalCollector(http, base, NOW, load_criteria(), {}, [sid])
     result = Collection(collected_at=NOW)
     collector.logs(sid, result)
     http.request.assert_not_called()
@@ -216,9 +374,84 @@ def test_metrics_use_canonical_utc_not_plus_timezone() -> None:
     http = Mock(subscription=sid, last_ref="fixture://metric")
     http.list_arm.return_value = [{"name": {"value": "Requests"}}]
     http.request.return_value = {"value": []}
-    collector = SignalCollector(http, base, NOW, load_yaml(ROOT / "config" / "criteria.yaml"),
+    collector = SignalCollector(http, base, NOW, load_criteria(),
                                 {"calls": ["Requests"]}, [sid])
     collector.metrics(sid, Collection(collected_at=NOW))
     query = parse_qs(urlparse(http.request.call_args.args[1]).query)
     assert query["timespan"][0].endswith("Z")
     assert "+" not in query["timespan"][0]
+
+
+def test_all_subscriptions_overrides_config_and_dry_run_never_calls_azure(
+    tmp_path: Path, capsys: pytest.CaptureFixture,
+) -> None:
+    import yaml
+
+    from wasm_agent.cli import main
+
+    config = tmp_path / "config.yaml"
+    config.write_text(yaml.safe_dump({"subscriptions": ["11111111-1111-4111-8111-111111111111"]}))
+    with patch("wasm_agent.cli.DefaultAzureCredential", side_effect=AssertionError("no Azure calls")):
+        assert main(["collect", "--config", str(config), "--all-subscriptions", "--dry-run"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["subscriptions"] == "auto-enumerate"
+
+
+def test_all_subscriptions_and_explicit_scope_cannot_be_combined() -> None:
+    from wasm_agent.cli import main
+
+    with pytest.raises(SystemExit) as exc:
+        main(["collect", "--all-subscriptions", "--subscriptions", "a"])
+    assert exc.value.code == 2
+
+
+@pytest.mark.parametrize(("extra", "expected"), [
+    ([], ["11111111-1111-4111-8111-111111111111"]),
+    (["--all-subscriptions"], "auto-enumerate"),
+    (["--subscriptions", "22222222-2222-4222-8222-222222222222"], ["22222222-2222-4222-8222-222222222222"]),
+])
+def test_setup_file_subscriptions_are_the_default_scope(
+    tmp_path: Path, capsys: pytest.CaptureFixture, extra: list[str], expected: object,
+) -> None:
+    from wasm_agent.cli import main
+
+    setup = tmp_path / "setup.json"
+    setup.write_text(json.dumps({
+        "tenant_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "principal_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "subscription_ids": ["11111111-1111-4111-8111-111111111111"],
+    }))
+    assert main(["collect", "--setup-file", str(setup), "--dry-run", *extra]) == 0
+    assert json.loads(capsys.readouterr().out)["subscriptions"] == expected
+
+
+def test_auto_enumeration_handles_hundreds_and_filters_tenant_and_state(tmp_path: Path) -> None:
+    from uuid import UUID
+
+    settings = load_settings(ROOT / "config" / "config.yaml")
+    settings.tenant_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    settings.expected_principal_id = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+    settings.evidence_dir = tmp_path / "evidence"
+    settings.entra = False
+    ids = [str(UUID(int=index)) for index in range(1, 201)]
+    rows = [{"subscriptionId": sid, "tenantId": settings.tenant_id, "state": "Enabled"} for sid in ids]
+    rows += [
+        {"subscriptionId": str(UUID(int=999)), "tenantId": "another-tenant", "state": "Enabled"},
+        {"subscriptionId": str(UUID(int=998)), "tenantId": settings.tenant_id, "state": "Disabled"},
+    ]
+    http = Mock()
+    http.list_arm.return_value = rows
+
+    def per_subscription(sid, credential, resolved, store, instant, criteria, tags):
+        assert set(resolved.subscriptions) == set(ids)
+        return Collection(collected_at=instant, completed_subscriptions=[sid], facts={"inventory_complete": True})
+
+    with patch("wasm_agent.collect.verify_identity"), patch(
+        "wasm_agent.collect.ReaderHTTP", return_value=http,
+    ), patch("wasm_agent.collect.collect_subscription", side_effect=per_subscription) as worker:
+        result = collect(settings, Mock(), datetime.now(UTC))
+    assert set(result.subscriptions) == set(ids)
+    assert set(result.completed_subscriptions) == set(ids)
+    assert worker.call_count == 200
+    assert result.facts["inventory_complete"] is True
+    http.close.assert_called_once()

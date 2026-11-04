@@ -23,7 +23,7 @@ wasm-agent = "wasm_agent.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10", "ruff>=0.15,<1"]
-sample = [
+demo = [
   "Flask>=3,<4",
   "gunicorn>=23,<24",
   "azure-identity>=1.19,<2",
@@ -36,8 +36,11 @@ sample = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+wasm_agent = ["criteria.yaml"]
+
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "demo"]
 pythonpath = [".", "src"]
 
 [tool.ruff]

@@ -1,16 +1,23 @@
-tenant_id: null
-expected_principal_id: null
-subscriptions: []
+# 모든 항목은 선택입니다. 비워도 수집은 실행되며, 입력이 필요한 판정은 "판정 보류"로 표시됩니다.
+# 판정 기준(L1~L5 임계값)은 도구에 내장되어 있어 고객이 입력하지 않습니다.
 workers: 3
-evidence_dir: .wasm-agent/evidence
-foundry_profile: agents_v1
-projects: []
-manual_agents: null
-allowed_models_file: allowed_models.yaml
-criteria_file: criteria.yaml
-tag_conventions_file: tag_conventions.yaml
+
+# DS-SY-06: 조직이 허용하는 모델 (없으면 허용 비율은 판정 보류)
+allowed_models: []
+#  - {name: gpt-4.1-nano, version: "2025-04-14"}
+
+# DS-SY-06 L4: 모델 배포를 제한하는 Azure Policy 정의/이니셔티브 ID (없으면 정책 수집 생략)
+model_policy_definition_ids: []
+
+# OE-SY-16 / BI-SY-09 / OE-SY-14: 내부 기준 (없으면 해당 조건은 판정 보류 또는 내장 샘플 패턴)
+required_retention_days: null
+internal_security_score_min: null
+overprivileged_permission_patterns: []
+
+# API로 확인되지 않는 정성 조건 (증적과 함께 입력)
+# policy_facts:
+#   agent_risk_detection_enabled: {value: true, evidence_refs: ["ticket-123"]}
 policy_facts: {}
-interview_levels: {}
-monitor:
-  calls_metric_candidates: [AzureOpenAIRequests, Requests]
-  token_metric_candidates: [ProcessedPromptTokens, GeneratedTokens, InputTokens, OutputTokens]
+
+# LangChain 등 자체 Agent 식별용 태그 규약 (기본값: agent-type, owner, sponsor, env, cost-center)
+# tags: {agent_type_key: agent-type, owner_key: owner}

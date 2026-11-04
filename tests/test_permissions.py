@@ -209,6 +209,33 @@ def test_no_project_does_not_claim_foundry_access() -> None:
     assert evaluation.reason == "not_found"
 
 
+def test_entra_probes_run_while_the_credential_is_still_open(tmp_path) -> None:
+    state = {"open": False}
+
+    class Context:
+        def __enter__(self):
+            state["open"] = True
+            return credential()
+
+        def __exit__(self, *args):
+            state["open"] = False
+
+    def probes(*args, **kwargs):
+        assert state["open"], "credential closed before Entra probes"
+        return []
+
+    with patch("azure.identity.DefaultAzureCredential", Context), patch.object(
+        verify, "verify_identity",
+    ), patch.object(verify, "check_subscription", return_value=[]), patch.object(
+        verify, "check_entra", side_effect=probes,
+    ) as entra:
+        code = verify.main([
+            "--tenant-id", TENANT, "--expected-principal-id", PRINCIPAL, "--subscriptions", SID,
+            "--rbac-path", str(tmp_path / "p.md"), "--output", str(tmp_path / "p.json"),
+        ])
+    assert code == 0 and entra.called
+
+
 def test_rbac_report_contains_permission_denial_and_additional_role() -> None:
     report = verify.render_rbac([
         verify.Result(SID, "BI-SY-08", "sample", "DENIED", "permission_denied", "fixture"),

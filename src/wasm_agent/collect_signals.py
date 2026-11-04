@@ -5,17 +5,21 @@ from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import urlencode
 
-from wasm_agent.azure import ARM, GRAPH_URL, LOG_SCOPE, AccessError, ReaderHTTP
+from wasm_agent.azure import ARM, GRAPH_URL, LOG_SCOPE, AccessError, ReaderHTTP, issue
 from wasm_agent.models import (
+    Budget,
     Collection,
     CostRecord,
     LogSetting,
+    PolicyAssignment,
+    SecureScore,
     SecurityRecommendation,
     Usage,
     timestamp,
+    try_timestamp,
 )
 
-from .collect_inventory import issue
+_when = try_timestamp
 
 
 class SignalCollector:
@@ -34,6 +38,7 @@ class SignalCollector:
         for sid in subscriptions:
             for name, operation in [
                 ("cost", self.costs), ("logs", self.logs), ("metrics", self.metrics), ("security", self.security),
+                ("secure_score", self.secure_score), ("policies", self.policies), ("budgets", self.budgets),
             ]:
                 try:
                     operation(sid, result)
@@ -43,6 +48,9 @@ class SignalCollector:
                         "logs": ("Reader", "Log Analytics Reader"),
                         "metrics": ("Reader", "Monitoring Reader"),
                         "security": ("Reader", "Security Reader"),
+                        "secure_score": ("Reader", "Security Reader"),
+                        "policies": ("Reader",),
+                        "budgets": ("Reader", "Cost Management Reader"),
                     }[name]
                     result.issues.append(issue(self.http, name, sid, exc, roles))
                     if name == "cost":
@@ -181,7 +189,7 @@ class SignalCollector:
             query = (
                 f"AppServiceConsoleLogs | where TimeGenerated >= ago({inactivity}d) "
                 r"| extend event=parse_json(extract(@'(\{.*\})',1,ResultDescription)) "
-                "| where tostring(event.event) == 'seagent.sample.completed' "
+                "| where tostring(event.event) == 'wasmagent.sample.completed' "
                 "| extend agent_id=tostring(event.agent_id), input_tokens=tolong(event.input_tokens),"
                 "output_tokens=tolong(event.output_tokens) "
                 f"| summarize calls_30d=countif(TimeGenerated >= ago({usage_days}d)),"
@@ -280,9 +288,12 @@ class SignalCollector:
             if not any(target.lower() == rid or target.lower().startswith(rid + "/") for rid in ids):
                 continue
             metadata = properties.get("metadata") or {}
+            status = properties.get("status") or {}
             result.security.append(SecurityRecommendation(
                 subscription_id=sid, resource_id=target, assessment_id=row["id"],
-                severity=metadata.get("severity"), status=(properties.get("status") or {}).get("code"),
+                severity=metadata.get("severity"), status=status.get("code"),
+                first_evaluation_date=_when(status.get("firstEvaluationDate")),
+                status_change_date=_when(status.get("statusChangeDate")),
                 evidence_refs=[self.http.last_ref] if self.http.last_ref else [],
             ))
         if not result.security:
@@ -290,3 +301,60 @@ class SignalCollector:
                 "feature_unavailable",
                 "AI 리소스 연결 권고 없음; Defender AI 기능/라이선스 활성화는 이 응답만으로 확인 불가",
             )
+
+    def secure_score(self, sid: str, result: Collection) -> None:
+        url = ARM + f"/subscriptions/{sid}/providers/Microsoft.Security/secureScores?api-version=2020-01-01"
+        for row in self.http.list_arm(url):
+            if row.get("name") != "ascScore":
+                continue
+            score = (row.get("properties") or {}).get("score") or {}
+            result.secure_scores.append(SecureScore(
+                subscription_id=sid, current=score.get("current"), max=score.get("max"),
+                percentage=score.get("percentage"),
+                evidence_refs=[self.http.last_ref] if self.http.last_ref else [],
+            ))
+        if not any(item.subscription_id == sid for item in result.secure_scores):
+            raise AccessError("feature_unavailable", "구독 보안 점수(ascScore) 없음; Defender for Cloud 활성화 확인 필요")
+        result.facts.setdefault("secure_score_complete_subscriptions", []).append(sid)
+
+    def policies(self, sid: str, result: Collection) -> None:
+        required = {str(value).lower() for value in self.criteria.get("model_policy_definition_ids") or []}
+        if not required:
+            return
+        url = (
+            ARM + f"/subscriptions/{sid}/providers/Microsoft.Authorization/policyAssignments"
+            "?api-version=2023-04-01&$filter=atScope()"
+        )
+        for row in self.http.list_arm(url):
+            properties = row.get("properties") or {}
+            definition = str(properties.get("policyDefinitionId") or "")
+            if definition.lower() not in required:
+                continue
+            result.policy_assignments.append(PolicyAssignment(
+                subscription_id=sid, assignment_id=row["id"], display_name=properties.get("displayName"),
+                policy_definition_id=definition, scope=properties.get("scope"),
+                enforcement_mode=properties.get("enforcementMode"),
+                evidence_refs=[self.http.last_ref] if self.http.last_ref else [],
+            ))
+        result.facts.setdefault("policy_complete_subscriptions", []).append(sid)
+
+    def budgets(self, sid: str, result: Collection) -> None:
+        url = ARM + f"/subscriptions/{sid}/providers/Microsoft.Consumption/budgets?api-version=2023-05-01"
+        for row in self.http.list_arm(url):
+            properties = row.get("properties") or {}
+            alerts = [
+                note for note in (properties.get("notifications") or {}).values()
+                if isinstance(note, dict) and note.get("enabled") is True
+            ]
+            result.budgets.append(Budget(
+                subscription_id=sid, budget_id=row["id"], amount=properties.get("amount"),
+                category=properties.get("category"), time_grain=properties.get("timeGrain"),
+                enabled_alerts=len(alerts),
+                forecast_alerts=sum(1 for note in alerts if note.get("thresholdType") == "Forecasted"),
+                thresholds=sorted(
+                    float(note["threshold"]) for note in alerts
+                    if isinstance(note.get("threshold"), (int, float))
+                ),
+                evidence_refs=[self.http.last_ref] if self.http.last_ref else [],
+            ))
+        result.facts.setdefault("budget_complete_subscriptions", []).append(sid)

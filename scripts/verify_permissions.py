@@ -16,13 +16,16 @@ from typing import Any
 from urllib.parse import urlparse
 
 from wasm_agent.azure import (
+    MSGRAPH,
+    MSGRAPH_SCOPE,
     AccessError,
     Credential,
     ReaderHTTP,
+    rejects_broad_permissions,
     trusted_url,
+    verify_identity,
 )
 from wasm_agent.azure import time as time
-from wasm_agent.identity import rejects_broad_permissions, verify_identity
 
 ARM = "https://management.azure.com"
 ARM_SCOPE = ARM + "/.default"
@@ -132,6 +135,19 @@ def check_subscription(
             {"subscriptions": [sid], "query": "securityresources | where type =~ "
              "'microsoft.security/assessments' | project id | limit 1"},
         ))
+        results.append(probe(
+            http, sid, "BI-SY-09", scope, "GET",
+            ARM + scope + "/providers/Microsoft.Security/secureScores?api-version=2020-01-01",
+        ))
+        results.append(probe(
+            http, sid, "DS-SY-06", scope, "GET",
+            ARM + scope + "/providers/Microsoft.Authorization/policyAssignments"
+            "?api-version=2023-04-01&$filter=atScope()",
+        ))
+        results.append(probe(
+            http, sid, "OT-SY-19", scope, "GET",
+            ARM + scope + "/providers/Microsoft.Consumption/budgets?api-version=2023-05-01",
+        ))
         now = datetime.now(UTC)
         results.append(probe(
             http, sid, "OT-SY-19", scope, "POST",
@@ -152,6 +168,26 @@ def check_subscription(
             if not any(result.se_code == code for result in results):
                 results.append(Result(sid, code, scope, status, exc.reason, str(exc)))
         return results
+    finally:
+        http.close()
+
+
+def check_entra(credential: Credential, tenant_id: str) -> list[Result]:
+    http = ReaderHTTP(credential)
+    try:
+        v1, beta = MSGRAPH + "/v1.0", MSGRAPH + "/beta"
+        return [
+            probe(http, tenant_id, "DS-SY-05", "agentIdentityBlueprint", "GET",
+                  v1 + "/applications/microsoft.graph.agentIdentityBlueprint?$top=1", audience=MSGRAPH_SCOPE),
+            probe(http, tenant_id, "OE-SY-13", "agentIdentity", "GET",
+                  v1 + "/servicePrincipals/microsoft.graph.agentIdentity?$top=1", audience=MSGRAPH_SCOPE),
+            probe(http, tenant_id, "OE-SY-14", "servicePrincipals", "GET",
+                  v1 + "/servicePrincipals?$top=1&$select=id", audience=MSGRAPH_SCOPE),
+            probe(http, tenant_id, "OE-SY-15", "conditionalAccess", "GET",
+                  beta + "/identity/conditionalAccess/policies?$top=1", audience=MSGRAPH_SCOPE),
+            probe(http, tenant_id, "OE-SY-15", "riskyAgents", "GET",
+                  beta + "/identityProtection/riskyAgents?$top=1", audience=MSGRAPH_SCOPE),
+        ]
     finally:
         http.close()
 
@@ -184,6 +220,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--subscriptions", nargs="+", type=uuid_arg)
     parser.add_argument("--projects-file", type=Path)
     parser.add_argument("--foundry-profile", choices=["agents_v1", "classic_v1"], default="agents_v1")
+    parser.add_argument("--no-entra", action="store_true", help="Microsoft Graph 읽기 권한(Entra Agent ID) 점검 생략")
     parser.add_argument("--rbac-path", type=Path, default=Path(".wasm-agent") / "permissions.md")
     parser.add_argument("--output", type=Path, default=Path(".wasm-agent") / "permissions.json")
     args = parser.parse_args(argv)
@@ -222,7 +259,8 @@ def main(argv: list[str] | None = None) -> int:
                 groups = list(executor.map(
                     lambda sid: check_subscription(credential, sid, projects, args.foundry_profile), subscriptions,
                 ))
-        results = [result for group in groups for result in group]
+            entra_results = [] if args.no_entra else check_entra(credential, args.tenant_id)
+        results = [result for group in groups for result in group] + entra_results
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(
             {"collected_at": datetime.now(UTC).isoformat(), "results": [asdict(r) for r in results]},

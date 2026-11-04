@@ -61,7 +61,7 @@ def test_authored_documents_and_scripts_use_ascii_hyphens() -> None:
     root = Path(__file__).parents[1]
     extensions = {".md", ".txt", ".py", ".sh", ".ps1", ".json", ".yaml", ".yml", ".toml"}
     files = [path for path in root.iterdir() if path.is_file()]
-    for directory in ("docs", "scripts", "tests", "config", ".github", "src"):
+    for directory in ("docs", "scripts", "tests", "config", ".github", "src", "demo"):
         files.extend((root / directory).rglob("*"))
     violations = []
     for path in files:
@@ -78,12 +78,15 @@ def test_flat_collector_layout_keeps_administrator_code_separate() -> None:
     root = Path(__file__).parents[1]
     package = root / "src" / "wasm_agent"
     assert not [path for path in package.iterdir() if path.is_dir() and path.name != "__pycache__"]
-    assert (root / "scripts" / "setup").is_dir()
-    assert (root / "scripts" / "lab").is_dir()
-    assert (root / "samples" / "app.py").is_file()
+    assert (root / "scripts" / "setup_account.py").is_file()
+    assert not (root / "scripts" / "setup").exists()
+    assert (root / "demo" / "app.py").is_file()
+    assert not (root / "scripts" / "lab").exists()
+    assert not (root / "samples").exists()
+    assert not (root / "infra").exists()
+    assert not (root / "config" / "lab.yaml").exists()
     assert (root / "config" / "manual_agents.csv").is_file()
     assert not (root / "templates").exists()
-    assert not (root / "samples" / "langchain").exists()
     for path in package.glob("*.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
@@ -92,4 +95,13 @@ def test_flat_collector_layout_keeps_administrator_code_separate() -> None:
                 names = [entry.name for entry in node.names]
             elif isinstance(node, ast.ImportFrom):
                 names = [node.module or ""]
-            assert not any(name == "scripts" or name.startswith("scripts.") for name in names), path.name
+            assert not any(name.split(".")[0] in {"scripts", "demo"} for name in names), path.name
+
+
+def test_resource_templates_and_collectors_use_current_brand() -> None:
+    root = Path(__file__).parents[1]
+    extensions = {".py", ".bicep", ".yaml", ".json", ".sh", ".html"}
+    for directory in ("src", "scripts", "demo", "config", ".devcontainer", ".github"):
+        for path in (root / directory).rglob("*"):
+            if path.is_file() and path.suffix in extensions:
+                assert "se" + "agent" not in path.read_text(encoding="utf-8-sig").lower(), path

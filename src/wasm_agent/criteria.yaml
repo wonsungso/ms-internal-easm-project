@@ -1,0 +1,234 @@
+source: "System Evidence 수집 기준.docx, 9. 항목별 5단계 판정 기준"
+interview_gap: 1.5
+inactivity_days: 90
+cost_window_days: 30
+usage_window_days: 30
+required_retention_days: null
+internal_security_score_min: null
+model_policy_definition_ids: []
+overprivileged_permissions_sample: true
+overprivileged_permission_patterns: ["*.ReadWrite.All", "*.Write.All", "*FullControl*"]
+items:
+  DS-SY-06:
+    scope: in_scope
+    metric: allowed_ratio
+    levels:
+      L1: "모델 배포 현황 확인 불가, 허용 모델 목록 없음"
+      L2: "배포 현황은 확인되나 허용 목록 외 모델 비율 20% 이상"
+      L3: "배포 모델의 90% 이상이 허용 모델 목록과 일치함"
+      L4: "허용 외 모델 배포 0건, 정책으로 배포 자체가 제한됨"
+      L5: "모델별 사용량·성능을 모니터링해 교체·폐기를 선제 수행함"
+    rules:
+      - level: L5
+        when: {model_lifecycle_optimized: {eq: true}}
+      - level: L4
+        when: {allowed_ratio: {eq: 1}, model_policy_enforced: {eq: true}}
+      - level: L3
+        when: {allowed_ratio: {gte: 0.9}}
+      - level: L2
+        when: {outside_ratio: {gte: 0.2}}
+      - level: L1
+        when: {declared_no_allowlist: {eq: true}}
+  BI-SY-08:
+    scope: in_scope
+    metric: evaluated_ratio
+    levels:
+      L1: "평가(Evaluation) 수행 이력 없음"
+      L2: "일부 Agent(30% 미만)만 수동으로 평가를 실행함"
+      L3: "운영 Agent의 80% 이상이 배포 전 평가 이력을 보유함"
+      L4: "배포 Agent 100% 평가, 파이프라인에서 자동 실행됨"
+      L5: "운영 중 지속 평가로 품질 저하를 자동 탐지·알림함"
+    rules:
+      - level: L5
+        when: {continuous_evaluation_alerts: {eq: true}}
+      - level: L4
+        when: {evaluated_ratio: {eq: 1}, pipeline_evaluation: {eq: true}}
+      - level: L3
+        when: {evaluated_ratio: {gte: 0.8}}
+      - level: L2
+        when: {evaluated_ratio: {gt: 0, lt: 0.3}, manual_evaluation: {eq: true}}
+      - level: L1
+        when: {evaluation_history_count: {eq: 0}, evaluation_history_complete: {eq: true}}
+  BI-SY-09:
+    scope: partial
+    metric: high_risk_recommendations
+    levels:
+      L1: "AI 워크로드 보안 태세 점검 기능 미사용"
+      L2: "기능은 활성화되었으나 고위험 권고 사항 다수가 미조치"
+      L3: "고위험 권고 0건, 보안 점수가 내부 기준 이상 유지됨"
+      L4: "신규 권고가 30일 내 조치되고 보안 정책이 자동 적용됨"
+      L5: "공격 경로 분석을 상시 운영하고 위험을 자동 조치함"
+    rules:
+      - level: L5
+        when: {continuous_attack_path_remediation: {eq: true}}
+      - level: L4
+        when: {security_policy_automated: {eq: true}, recommendation_max_age_days: {lte: 30}}
+      - level: L3
+        when: {high_risk_recommendations: {eq: 0}, security_score_meets_internal: {eq: true}}
+      - level: L2
+        when: {security_feature_enabled: {eq: true}, many_high_risk_unremediated: {eq: true}}
+      - level: L1
+        when: {security_feature_enabled: {eq: false}}
+  OE-SY-16:
+    scope: partial
+    metric: retention_days
+    levels:
+      L1: "Agent 활동 감사 로그 미수집"
+      L2: "감사 로그는 수집되나 보관 기간이 기본값(90일 이하)임"
+      L3: "내부 규정 기간(예: 1년) 이상 보관 정책이 적용됨"
+      L4: "보관 정책 100% 적용, 로그 기반 정기 리포트가 자동 생성됨"
+      L5: "감사 로그를 상시 분석해 이상 활동을 자동 경보함"
+    rules:
+      - level: L5
+        when: {continuous_audit_alerts: {eq: true}}
+      - level: L4
+        when: {retention_policy_coverage: {eq: 1}, automatic_audit_reports: {eq: true}}
+      - level: L3
+        when: {retention_meets_internal: {eq: true}}
+      - level: L2
+        when: {logs_collected: {eq: true}, retention_days: {lte: 90}}
+      - level: L1
+        when: {logs_collected: {eq: false}}
+  OT-SY-18:
+    scope: partial
+    metric: inactive_ratio
+    levels:
+      L1: "Agent별 사용 현황 확인 불가"
+      L2: "사용 현황은 확인되나 90일 미사용 Agent 비율 40% 이상"
+      L3: "90일 미사용 Agent 비율 20% 미만"
+      L4: "미사용 비율 10% 미만, 미사용 Agent가 자동 알림·정리됨"
+      L5: "미사용 5% 미만 유지, 사용 추세로 확대·폐기를 결정함"
+    rules:
+      - level: L5
+        when: {inactive_ratio: {lt: 0.05}, usage_lifecycle_optimized: {eq: true}}
+      - level: L4
+        when: {inactive_ratio: {lt: 0.1}, inactivity_automatic_cleanup: {eq: true}}
+      - level: L3
+        when: {inactive_ratio: {lt: 0.2}}
+      - level: L2
+        when: {inactive_ratio: {gte: 0.4}}
+  OT-SY-19:
+    scope: partial
+    metric: attributable_cost_ratio
+    levels:
+      L1: "사용량 기반 과금 정책 미설정, 비용 확인 불가"
+      L2: "과금 정책은 있으나 Agent별 비용 구분 불가"
+      L3: "Agent별 비용이 80% 이상 식별되고 월별 집계됨"
+      L4: "비용 100% 식별, 조직별 배분·예산 경보가 자동 적용됨"
+      L5: "비용 추세 예측으로 예산 초과를 선제 통제함"
+    rules:
+      - level: L5
+        when: {cost_forecast_control: {eq: true}}
+      - level: L4
+        when: {attributable_cost_ratio: {eq: 1}, cost_allocation_budget_alerts: {eq: true}}
+      - level: L4
+        when: {attributable_cost_ratio: {eq: 1}, budget_alerts_configured: {eq: true}, cost_allocation_tagged: {eq: true}}
+      - level: L3
+        when: {attributable_cost_ratio: {gte: 0.8}, monthly_cost_aggregation: {eq: true}}
+      - level: L2
+        when: {usage_billing_policy: {eq: true}, attributable_cost_ratio: {eq: 0}}
+      - level: L1
+        when: {declared_no_billing_policy: {eq: true}}
+  DS-SY-05:
+    scope: in_scope
+    requires: entra
+    metric: blueprint_count
+    levels:
+      L1: "Agent ID 미사용 또는 Blueprint 정의 0개"
+      L2: "Blueprint 1~2개 시범 정의, 실제 적용 Agent는 소수"
+      L3: "주요 유형별 Blueprint 정의, 신규 Agent의 50% 이상에 적용"
+      L4: "신규 Agent의 90% 이상이 Blueprint 기반으로 생성됨"
+      L5: "Blueprint 사용 데이터로 템플릿을 정기 개정, 적용률 100% 유지"
+    rules:
+      - level: L5
+        when: {blueprint_based_ratio: {eq: 1}, major_type_blueprints_defined: {eq: true}, blueprint_periodic_review: {eq: true}}
+      - level: L4
+        when: {blueprint_based_ratio: {gte: 0.9}, major_type_blueprints_defined: {eq: true}}
+      - level: L3
+        when: {blueprint_based_ratio: {gte: 0.5}, major_type_blueprints_defined: {eq: true}}
+      - level: L2
+        when: {blueprint_count: {gte: 1, lte: 2}}
+      - level: L1
+        when: {blueprint_count: {eq: 0}}
+  DP-SY-12:
+    scope: partial
+    requires: entra
+    metric: agent_id_ratio
+    levels:
+      L1: "Agent ID 미사용, 부여율 0%"
+      L2: "Agent ID 부여율 50% 미만"
+      L3: "Agent ID 부여율 80% 이상"
+      L4: "부여율 95% 이상, 신규 Agent는 생성 시 자동 부여됨"
+      L5: "부여율 100% 유지, 미부여 Agent 자동 탐지·조치"
+    rules:
+      - level: L5
+        when: {agent_id_ratio: {eq: 1}, unassigned_agent_auto_remediation: {eq: true}}
+      - level: L4
+        when: {agent_id_ratio: {gte: 0.95}, agent_id_auto_assigned: {eq: true}}
+      - level: L3
+        when: {agent_id_ratio: {gte: 0.8}}
+      - level: L2
+        when: {agent_id_ratio: {gt: 0, lt: 0.5}}
+      - level: L1
+        when: {agent_id_ratio: {eq: 0}}
+  OE-SY-13:
+    scope: in_scope
+    requires: entra
+    metric: unassigned_ratio
+    levels:
+      L1: "Agent ID 미사용, 소유자 정보 확인 불가"
+      L2: "소유자 정보는 있으나 미지정·고아 Agent 비율 30% 이상"
+      L3: "미지정·고아 Agent 비율 10% 미만"
+      L4: "미지정·고아 Agent 비율 2% 미만, 수명주기 정책이 자동 적용됨"
+      L5: "고아 Agent 0건 유지, 소유자 변경 시 자동 재지정·알림 운영"
+    rules:
+      - level: L5
+        when: {unassigned_ratio: {eq: 0}, owner_change_automation: {eq: true}}
+      - level: L4
+        when: {unassigned_ratio: {lt: 0.02}, lifecycle_policy_automated: {eq: true}}
+      - level: L3
+        when: {unassigned_ratio: {lt: 0.1}}
+      - level: L2
+        when: {unassigned_ratio: {gte: 0.3}}
+      - level: L1
+        when: {agent_identity_count: {eq: 0}}
+  OE-SY-14:
+    scope: in_scope
+    requires: entra
+    metric: overprivileged_ratio
+    levels:
+      L1: "Agent별 부여 권한 확인 불가"
+      L2: "권한은 확인되나 과다 권한 Agent 비율 20% 이상"
+      L3: "과다 권한 Agent 비율 5% 미만"
+      L4: "과다 권한 1% 미만, 접근 패키지·만료가 자동 적용됨"
+      L5: "과다 권한 0건 유지, 정기 접근 검토가 자동 수행됨"
+    rules:
+      - level: L5
+        when: {overprivileged_ratio: {eq: 0}, access_review_automated: {eq: true}}
+      - level: L4
+        when: {overprivileged_ratio: {lt: 0.01}, access_package_expiry_automated: {eq: true}}
+      - level: L3
+        when: {overprivileged_ratio: {lt: 0.05}}
+      - level: L2
+        when: {overprivileged_ratio: {gte: 0.2}}
+  OE-SY-15:
+    scope: in_scope
+    requires: entra
+    metric: agent_ca_coverage
+    levels:
+      L1: "Agent 대상 조건부 접근 정책 없음, 위험 탐지 미사용"
+      L2: "정책은 있으나 일부 Agent(50% 미만)에만 적용됨"
+      L3: "운영 Agent 90% 이상에 정책 적용, 위험 탐지 활성화됨"
+      L4: "적용률 100%, 고위험 Agent 자동 차단, 미조치 탐지 0건"
+      L5: "탐지 추세를 분석해 정책을 정기 강화하고 자동 대응을 운영함"
+    rules:
+      - level: L5
+        when: {agent_ca_coverage: {eq: 1}, agent_risk_response_automation: {eq: true}}
+      - level: L4
+        when: {agent_ca_coverage: {eq: 1}, agent_high_risk_auto_block: {eq: true}, unremediated_risk_detections: {eq: 0}}
+      - level: L3
+        when: {agent_ca_coverage: {gte: 0.9}, agent_risk_detection_enabled: {eq: true}}
+      - level: L2
+        when: {agent_ca_coverage: {gt: 0, lt: 0.5}}
+      - level: L1
+        when: {agent_ca_policy_count: {eq: 0}, agent_risk_detection_enabled: {eq: false}}

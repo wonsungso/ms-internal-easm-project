@@ -12,7 +12,8 @@ output/
 *.pem
 *.pfx
 *.key
-.azure/validation.json
-infra/*.json
+demo/main.json
+demo/foundry.json
+demo/host.json
 docs/source/
 .devcontainer/.env

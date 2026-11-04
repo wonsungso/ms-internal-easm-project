@@ -7,8 +7,9 @@
 
 ## 범위 원칙
 
-- in_scope 2개, partial 4개, out_of_scope 14개. out_of_scope는 문서에만 표시하며 수집·판정하지 않습니다.
-- Azure 인벤토리의 ID·소유자 태그는 Entra Agent ID, Agent Registry, 퇴사자 확인을 대체하지 않습니다. 따라서 DM-SY-03, DP-SY-10, OE-SY-13을 Azure 인벤토리로 재해석하지 않습니다.
+- in_scope 6개, partial 5개, out_of_scope 9개. out_of_scope는 문서에만 표시하며 수집·판정하지 않습니다.
+- Entra Agent ID 항목(DS-SY-05, DP-SY-12, OE-SY-13~15)은 `--entra`로 명시할 때만 수집하며 진단 SP에 Graph 애플리케이션 읽기 권한과 관리자 동의가 필요합니다. 그 외 Azure 수집에는 Graph 권한이 필요 없습니다.
+- Azure 인벤토리의 ID·소유자 태그는 Agent Registry와 퇴사자 확인을 대체하지 않습니다. 따라서 DM-SY-03, DP-SY-10을 Azure 인벤토리로 재해석하지 않습니다.
 - partial의 수치와 L 레벨은 Azure 부분 범위의 초안이며 조직 전체 원 항목의 최종 점수가 아닙니다. 특히 OE-SY-16의 Azure 로그는 Purview Audit 보관을 입증하지 못합니다.
 - L1~L5는 원문 그대로 보존합니다. 권한 거부·기능 미제공을 L1로 취급하지 않고 null 및 사유를 남깁니다. 실제 통제가 없다는 증거와 통제를 조회할 수 없다는 상태를 구분합니다.
 - 예: DS-SY-06의 80% 초과~90% 미만, BI-SY-08의 30% 이상~80% 미만처럼 원문이 다루지 않는 구간은 임의로 L2/L3에 배정하지 않습니다. L4/L5의 자동화·정책·지속 운영은 비율만으로 충족 처리할 수 없습니다.
@@ -69,14 +70,14 @@
   - 항목명: Agent ID 템플릿(Blueprint) 정의 여부 및 개수
   - 유형: T3
   - 제품/메뉴: Microsoft Entra Agent ID
-  - 측정방법: 타 담당 확인: Entra Agent ID Blueprint 목록, Blueprint별 Agent 수; 본 프로젝트에서는 구현하지 않음
+  - 측정방법: Graph v1.0 agentIdentityBlueprint 목록과 agentIdentity의 Blueprint 연결로 Blueprint 수·적용 비율 집계; 주요 유형별 정의·정기 개정은 고객 입력
   - L1: Agent ID 미사용 또는 Blueprint 정의 0개
   - L2: Blueprint 1~2개 시범 정의, 실제 적용 Agent는 소수
   - L3: 주요 유형별 Blueprint 정의, 신규 Agent의 50% 이상에 적용
   - L4: 신규 Agent의 90% 이상이 Blueprint 기반으로 생성됨
   - L5: Blueprint 사용 데이터로 템플릿을 정기 개정, 적용률 100% 유지
-  - scope: out_of_scope
-  - 분류 근거: 원 항목의 담당 제품은 Microsoft Entra Agent ID이며 Azure/Foundry 담당 범위가 아니다.
+  - scope: in_scope
+  - 분류 근거: Microsoft Entra Agent ID의 Blueprint는 Graph 읽기 권한으로 수집하며 진단 SP의 Graph 애플리케이션 권한과 관리자 동의가 필요하다.
 - **DS-SY-06**
   - 항목명: 사용 중인 모델 배포 현황 및 허용 모델 목록
   - 유형: T2
@@ -153,50 +154,50 @@
   - 항목명: 고유 ID(Agent ID)가 부여된 Agent 수 / 전체 Agent 수
   - 유형: T3
   - 제품/메뉴: Microsoft Entra Agent ID
-  - 측정방법: 타 담당 확인: Entra Agent ID 수, Agent Registry 전체 Agent 수; 본 프로젝트에서는 구현하지 않음
+  - 측정방법: Entra Agent ID와 Blueprint 태그(agentName·projectName·accountName·subscriptionId)로 Azure에서 수집한 Foundry Agent와 매칭해 부여율 산출; 분모는 Azure 수집 Agent이며 Agent Registry 전체가 아님
   - L1: Agent ID 미사용, 부여율 0%
   - L2: Agent ID 부여율 50% 미만
   - L3: Agent ID 부여율 80% 이상
   - L4: 부여율 95% 이상, 신규 Agent는 생성 시 자동 부여됨
   - L5: 부여율 100% 유지, 미부여 Agent 자동 탐지·조치
-  - scope: out_of_scope
-  - 분류 근거: 원 항목의 담당 제품은 Microsoft Entra Agent ID이며 Azure/Foundry 담당 범위가 아니다.
+  - scope: partial
+  - 분류 근거: Azure에서 수집한 Agent 대비 Entra Agent ID 부여율만 산출하며 Agent Registry(M365) 기준 전체 Agent는 제외한다.
 - **OE-SY-13**
   - 항목명: 소유자·후원자(Sponsor) 미지정 Agent 및 소유자 퇴사 Agent(고아 Agent) 수
   - 유형: T3
   - 제품/메뉴: Microsoft Entra Agent ID / M365 Admin Center
-  - 측정방법: 타 담당 확인: Entra Agent ID 목록 추출, 소유자·후원자 필드 현황; 본 프로젝트에서는 구현하지 않음
+  - 측정방법: Graph v1.0 agentIdentity의 owner·sponsor 관계를 조회해 미지정 및 소유자 전원 비활성(고아) Agent 비율 산출
   - L1: Agent ID 미사용, 소유자 정보 확인 불가
   - L2: 소유자 정보는 있으나 미지정·고아 Agent 비율 30% 이상
   - L3: 미지정·고아 Agent 비율 10% 미만
   - L4: 미지정·고아 Agent 비율 2% 미만, 수명주기 정책이 자동 적용됨
   - L5: 고아 Agent 0건 유지, 소유자 변경 시 자동 재지정·알림 운영
-  - scope: out_of_scope
-  - 분류 근거: 원 항목의 담당 제품은 Microsoft Entra Agent ID / M365 Admin Center이며 Azure/Foundry 담당 범위가 아니다.
+  - scope: in_scope
+  - 분류 근거: Microsoft Entra Agent ID의 소유자·후원자를 Graph 읽기 권한으로 수집한다. 소유자 비활성 여부로 고아를 판단하며 퇴사 처리 상태 자체는 확인하지 않는다.
 - **OE-SY-14**
   - 항목명: Agent별 부여 권한(API 권한, 접근 패키지) 및 과다 권한 Agent
   - 유형: T3
   - 제품/메뉴: Microsoft Entra - Agent ID, ID Governance
-  - 측정방법: 타 담당 확인: Agent별 API 권한 목록, 접근 검토(Access Review) 결과; 본 프로젝트에서는 구현하지 않음
+  - 측정방법: Graph v1.0 appRoleAssignments로 Agent별 애플리케이션 권한을 조회하고 고객 승인 과다 권한 패턴과 대조; 접근 패키지·접근 검토 자동화는 고객 입력
   - L1: Agent별 부여 권한 확인 불가
   - L2: 권한은 확인되나 과다 권한 Agent 비율 20% 이상
   - L3: 과다 권한 Agent 비율 5% 미만
   - L4: 과다 권한 1% 미만, 접근 패키지·만료가 자동 적용됨
   - L5: 과다 권한 0건 유지, 정기 접근 검토가 자동 수행됨
-  - scope: out_of_scope
-  - 분류 근거: 원 항목의 담당 제품은 Microsoft Entra - Agent ID, ID Governance이며 Azure/Foundry 담당 범위가 아니다.
+  - scope: in_scope
+  - 분류 근거: Agent별 애플리케이션 권한은 Application.Read.All로 수집한다. 위임(OAuth) 권한 동의는 Directory.Read.All이 필요해 수집하지 않는다.
 - **OE-SY-15**
   - 항목명: Agent 대상 조건부 접근 정책 적용 여부 및 위험 Agent 탐지 건수
   - 유형: T1
   - 제품/메뉴: Microsoft Entra - Conditional Access, ID Protection
-  - 측정방법: 타 담당 확인: 조건부 접근 정책 목록, ID Protection 위험 Agent 탐지 건수; 본 프로젝트에서는 구현하지 않음
+  - 측정방법: Graph beta 조건부 접근 정책의 conditions.agents와 Graph beta riskyAgents로 정책 적용 범위·고위험 차단·미조치 탐지 산출; 라이선스 없으면 license_missing이 아니라 조회 실패 사유로 기록
   - L1: Agent 대상 조건부 접근 정책 없음, 위험 탐지 미사용
   - L2: 정책은 있으나 일부 Agent(50% 미만)에만 적용됨
   - L3: 운영 Agent 90% 이상에 정책 적용, 위험 탐지 활성화됨
   - L4: 적용률 100%, 고위험 Agent 자동 차단, 미조치 탐지 0건
   - L5: 탐지 추세를 분석해 정책을 정기 강화하고 자동 대응을 운영함
-  - scope: out_of_scope
-  - 분류 근거: 원 항목의 담당 제품은 Microsoft Entra - Conditional Access, ID Protection이며 Azure/Foundry 담당 범위가 아니다.
+  - scope: in_scope
+  - 분류 근거: Microsoft Entra 조건부 접근과 ID Protection의 Agent 대상 항목을 Graph 읽기 권한(Policy.Read.All, IdentityRiskyAgent.Read.All)으로 수집한다. 두 기능은 문서상 Agent 365 또는 M365 E7 라이선스가 전제될 수 있다.
 - **OE-SY-16**
   - 항목명: Agent 활동 감사 로그 보관 여부 및 보관 기간
   - 유형: T5
@@ -268,14 +269,14 @@
   - 프로젝트 산출물: docs/api-notes.md의 원문 범위와 추가 제안
   - 현재 상태/한계: 20개 원 항목과 추가 제안을 구분; 추가 제안은 미구현
 - **2. 측정 방안**
-  - 프로젝트 산출물: docs/api-notes.md, docs/guide.md, src/wasm_agent/
+  - 프로젝트 산출물: docs/api-notes.md, README.md, src/wasm_agent/
   - 현재 상태/한계: 읽기 계약과 권한 한계를 아래에 보존; 고객별 지원은 실제 접근 확인 필요
 - **3. 분석 기준**
-  - 프로젝트 산출물: config/criteria.yaml, src/wasm_agent/evaluation.py, tests/
+  - 프로젝트 산출물: src/wasm_agent/criteria.yaml, src/wasm_agent/evaluation.py, tests/
   - 현재 상태/한계: 원문 미정의 구간은 임의 보간 금지
 - **4. 보고서**
-  - 프로젝트 산출물: report.html, report.xlsx, results.zip
-  - 현재 상태/한계: ZIP은 report.html, report.xlsx, data.json(raw + evidence + meta) 3개만 포함. 중복 CSV/Markdown/분리 JSON 사용자 출력 제거. 원 안건의 PPT는 산출물에 포함되지 않음
+  - 프로젝트 산출물: report-<타임스탬프>.xlsx, raw-data-<타임스탬프>.json
+  - 현재 상태/한계: 사용자 전달 파일은 Excel 보고서와 raw-data JSON(raw + evidence + meta) 2개뿐입니다. HTML/ZIP/중복 CSV/Markdown 출력은 제거했습니다. 원 안건의 PPT는 산출물에 포함되지 않음
 - **5. 개선 과제**
   - 프로젝트 산출물: criteria.yaml 기반 다음 단계 조건, 보고서 개선 후보
   - 현재 상태/한계: 자동 변경/정책 적용은 하지 않음
@@ -285,7 +286,7 @@
 
 ## 실행 경계와 설계
 
-- 수집 대상은 Microsoft Foundry, Azure 자체 호스팅 Agent, Azure Monitor/Log Analytics, 비용/보안 권고입니다. 관리자 준비/필드 상세는 [가이드](guide.md), 샘플 배포는 [개발자 데모](demo.md)를 참고합니다.
+- 수집 대상은 Microsoft Foundry, Azure 자체 호스팅 Agent, Azure Monitor/Log Analytics, 비용/보안 권고입니다. 관리자 준비/필드 안내는 [README](../README.md), 샘플 배포는 [개발자 데모](../demo/README.md)를 참고합니다.
 - 관리자 bootstrap: 관리자 디바이스 코드 로그인. 승인된 샘플 배포, 역할, 일회성 공개 인증서 등록/정리만 별도 수행.
 - 진단 수집기: DefaultAzureCredential + 진단 SP. Reader 중심 GET 및 Resource Graph/비용/로그의 읽기 query POST만 허용.
 - 샘플 런타임: 앱 Managed Identity. 해당 모델의 제한된 추론과 합성 smoke 입력만 허용.
@@ -307,11 +308,11 @@
   - Resource Graph 인벤토리와 ARM 하위 리소스 목록 보완.
   - Foundry Agent/버전, 모델 배포, 평가 및 LangChain 태그/이름 후보 정규화.
   - 비용/메트릭/로그/보안 증거 중 귀속 가능한 필드만 연결.
-  - `config/criteria.yaml` 수치/정성 조건 평가, HTML/XLSX 및 통합 데이터 포함 ZIP 생성.
+  - `src/wasm_agent/criteria.yaml`(내장 임계값, 고객 입력은 선택 `config/config.yaml`) 수치/정성 조건 평가, XLSX 및 raw-data JSON 생성.
 - 페이지 처리, 429/일시 오류 재시도와 부분 실패 기록을 유지합니다.
 - Collector Protocol: `discover(subscriptions) -> Collection`, `required_roles` 선언.
 - Evaluator: `Collection + criteria.yaml -> Finding[]`; se_code, metric_value, level, rationale, evidence_refs, N/A 사유/다음 단계/interview_level/gap_flag 반환.
-- 사용자 전달은 `report.html`, `report.xlsx`, `results.zip` 3개이며 ZIP 내용도 `report.html`, `report.xlsx`, `data.json` 3개입니다. `data.json`은 raw + evidence + meta를 통합하고 내부 연동용 데이터/settings는 `.wasm-agent/`에 보존합니다.
+- 사용자 전달은 `report-<타임스탬프>.xlsx`(검토 체크리스트와 Raw 데이터 시트)와 `raw-data-<타임스탬프>.json` 2개입니다. raw-data JSON은 raw + evidence + meta를 통합하며, 같은 폴더의 가장 최근 `raw-data-*.json`으로 `wasm-agent package`가 Excel을 다시 만듭니다. 내부 연동용 설정은 `.wasm-agent/`에 보존합니다.
 
 ### 판정 원칙
 
@@ -426,6 +427,13 @@
   - [Metrics List](https://learn.microsoft.com/rest/api/monitor/metrics/list?view=rest-monitor-2018-01-01). 접근 점검만 수행하며 Agent별 호출/토큰/90일 데이터 존재를 보장하지 않음.
 - 비용: POST `/subscriptions/{id}/providers/Microsoft.CostManagement/query`, `2023-03-01`.
   - [Query Usage](https://learn.microsoft.com/rest/api/cost-management/query/usage?view=rest-cost-management-2023-03-01). Usage/Custom/최근 30일/PreTaxCost 합계 접근만 확인.
+- 구독 보안 점수: GET `/subscriptions/{id}/providers/Microsoft.Security/secureScores`, `2020-01-01`.
+  - [Secure Scores API](https://learn.microsoft.com/rest/api/defenderforcloud-composite/secure-scores) 및 [Defender 보안 점수 문서](https://learn.microsoft.com/azure/defender-for-cloud/secure-score-security-controls#get-your-secure-score-from-the-rest-api). 실측(2026-11-04): `name=ascScore`, `properties.score.{current,max,percentage}`(percentage는 0~1). 평가는 대상 구독 중 최저값 x 100을 내부 기준(%)과 비교. Security Reader로 점수가 0으로 보인 사례가 있어 값이 아닌 조회 성공과 구분해 확인.
+- 권고 평가일: Resource Graph `securityresources`의 assessments `properties.status.{firstEvaluationDate,statusChangeDate}`. 실측으로 두 필드 존재 확인(소수점 7자리 ISO 8601). BI-SY-09 L4의 "30일 내 조치"는 미조치(Unhealthy) 권고의 상태 변경일(없으면 최초 평가일) 기준 경과 일수로 파생하며 원문의 대리 지표입니다.
+- 정책 할당: GET `/subscriptions/{id}/providers/Microsoft.Authorization/policyAssignments?$filter=atScope()`, `2023-04-01`.
+  - [Policy Assignments List](https://learn.microsoft.com/rest/api/policy/policy-assignments/list). 상속 할당 포함, Reader로 조회. 고객이 `config.yaml`의 `model_policy_definition_ids`로 지정한 정의/이니셔티브만 저장하며 `enforcementMode=Default`일 때만 강제로 인정. 어떤 정책이 "모델 제한"인지는 추측하지 않고 고객 지정 값에 의존.
+- 예산: GET `/subscriptions/{id}/providers/Microsoft.Consumption/budgets`, `2023-05-01`.
+  - [Budgets List](https://learn.microsoft.com/rest/api/consumption/budgets/list). 실측으로 `properties.{amount,category,timeGrain,notifications}` 확인. 활성(`enabled=true`) 경보 수와 임계값만 저장하고 `contactEmails` 등 수신자 정보는 저장하지 않음. OT-SY-19 L4의 "예산 경보"에 사용하며 "조직별 배분"은 모든 Azure Agent의 비용센터 태그 유무로 확인(대리 지표).
 - 위 초기 SDK 버전은 REST 프로필 확인 출처이지 설치 의존성이 아닙니다. 실행 의존성은 `pyproject.toml`의 azure-identity와 requests, 인증은 DefaultAzureCredential이며 관리자 Azure CLI는 명시된 예외입니다.
 - Azure Public Cloud만 현재 지원하며 소버린 클라우드 호스트/audience는 추측하지 않습니다.
 
@@ -434,6 +442,13 @@
 - 초기 TODO 중 신규 Agent/버전과 평가 목록은 위 신규 프로필/실측으로 보완했습니다. 게시/운영 배포 API와 Agent-평가-배포 lineage는 실제 프로필/샘플을 더 확인해야 합니다.
 - `created_at`은 생성 시각이지 배포 시각이 아닙니다. 평가 성공/종료 시각/배포 버전 연결은 실제 응답으로 확인하기 전 확정하지 않습니다.
 - Defender AI 활성화/라이선스와 AI 권고 필터는 실측/공식 근거 추가 확인 필요. 빈 권고로 고위험 0건/보안 양호를 판단하지 않습니다.
+- Entra Agent ID(`--entra`, 진단 SP에 Graph 애플리케이션 읽기 권한 5개와 관리자 동의): 모든 호출은 GET이며 `graph.microsoft.com`으로만 토큰을 보냅니다.
+  - Blueprint: `GET /v1.0/applications/microsoft.graph.agentIdentityBlueprint` (`AgentIdentityBlueprint.Read.All`). Agent ID: `GET /v1.0/servicePrincipals/microsoft.graph.agentIdentity` (`AgentIdentity.Read.All`). 공식: [agentIdentityBlueprint 목록](https://learn.microsoft.com/graph/api/agentidentityblueprint-list), [agentIdentity 목록](https://learn.microsoft.com/graph/api/agentidentity-list).
+  - 소유자·후원자: `GET /v1.0/servicePrincipals/{id}/microsoft.graph.agentIdentity/owners|sponsors?$select=id,accountEnabled`. 사람 이름·UPN은 저장하지 않고 수와 비활성 여부만 보관합니다.
+  - 애플리케이션 권한: `GET /v1.0/servicePrincipals/{id}/appRoleAssignments`(`Application.Read.All`)와 리소스 SP의 `appRoles`로 권한 이름 해석. 위임(OAuth) 권한 동의는 `Directory.Read.All`이 필요해 권한 범위를 넓히지 않기 위해 수집하지 않습니다.
+  - 조건부 접근: `GET /beta/identity/conditionalAccess/policies`의 `conditions.agents`(`Policy.Read.All`). 위험 Agent: `GET /beta/identityProtection/riskyAgents`(`IdentityRiskyAgent.Read.All`, 공식 문서상 beta). beta 스키마는 바뀔 수 있습니다.
+  - 실측(2026-11-04, 관리자 읽기 전용 GET): Agent ID 9개, Blueprint 9개, `agentIdentityBlueprintId`가 Blueprint `appId`/`id`와 일치. Blueprint `tags`에 `agentName`, `projectName`, `accountName`, `subscriptionId`가 있어 Foundry Agent와 매칭(DP-SY-12). `riskyAgents`는 관리자 토큰에 필요한 범위가 없어 403이었고 이 경로의 성공 응답과 `conditions.agents`가 채워진 정책은 실환경에서 확인하지 못했습니다(공식 문서와 단위 테스트 기준).
+  - 미구현: Purview 감사(Graph `auditLogQuery`는 질의 생성 POST이며 Agent 활동 레코드 유형과 보존 정책을 확정할 근거가 없음), DSPM for AI(읽기 공식 API 미확인), Power Platform(공식 Power Platform API에서 환경 목록만 확인, Maker 수·데이터 정책·관리형 환경 값은 미확인이며 비공식 BAP admin API는 사용하지 않음).
 - Metric 이름/dimension의 Agent 식별력, 마지막 사용일과 90일 미사용 증명 가능성 검증 필요.
 - LangChain 앱 설정은 list 액션으로 비밀을 반환할 수 있어 기본 수집에서 호출하지 않으며 승인 태그/메타데이터 또는 수동 입력 우선.
 - 사전 점검은 응답 본문/대화/평가 데이터셋을 증적으로 저장하지 않습니다. 수집 증거는 `evidence/<timestamp>/`에 저장하기 전에 비밀/토큰/연결문자열/개인 식별 정보를 마스킹하고 통합 데이터의 evidence로 보존합니다.
@@ -472,6 +487,27 @@
   - 적용 제품/구독 범위, 읽기 전용 API/역할을 공식 문서로 검증.
   - L1~L5와 N/A 기준 별도 승인. 다른 지표의 비율 재사용 금지.
   - 합의 전 수치/성숙도 점수 산출 금지.
+
+## Azure 운영 추가 제안 13개 수집 (AZ-SY-P01~P13)
+
+- 원칙: 승인 전 제안이라 L1~L5·임계값을 만들지 않고 **Azure에서 읽을 수 있는 구성 사실**만 `추가 제안 현황` 시트와 raw-data JSON의 `collection.proposals`에 기록합니다. 상태는 `수집됨/일부 수집/수집 불가`이며 실패는 사유와 함께 남기고 0으로 바꾸지 않습니다. 기존 20개 항목의 판정과 점수는 바꾸지 않습니다.
+- 모든 호출은 GET 또는 기존 허용 POST(Resource Graph)이며 Reader로 가능합니다.
+
+| 코드 | 수집 방법 | 근거/버전 | 중복 구분 |
+| --- | --- | --- | --- |
+| P01 | 수집된 Azure Agent의 소유자·후원자·환경·비용센터 태그 보유 수 | 기존 인벤토리 재사용 | OE-SY-13(Entra 소유자)과 달리 Azure 태그만 |
+| P02 | Resource Graph `identity`(시스템·사용자 할당 principal)와 `GET /subscriptions/{id}/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01`로 Agent 호스트·AI 계정의 ARM 역할 수와 광범위 역할(Owner, Contributor, User Access Administrator, RBAC Administrator) 수, 계정 `disableLocalAuth` | [Role Assignments List](https://learn.microsoft.com/rest/api/authorization/role-assignments/list-for-subscription) | DP-SY-12/OE-SY-14의 Entra·Graph 권한과 구분, ARM만 |
+| P03 | Resource Graph로 AI 계정 `publicNetworkAccess`, `networkAcls.defaultAction`, 프라이빗 엔드포인트 수, 호스트 `httpsOnly`·VNet 통합, `GET sites/{n}/config/web?api-version=2024-04-01`의 `ipSecurityRestrictions` 수 | [Web Apps Get Configuration](https://learn.microsoft.com/rest/api/appservice/web-apps/get-configuration) | 신규 |
+| P04 | `GET {account}/raiPolicies?api-version=2024-10-01`의 사용자 지정 정책 수와 모델 배포 `raiPolicyName` 대조 | [Rai Policies List](https://learn.microsoft.com/rest/api/aiservices/accountmanagement/rai-policies/list) | DS-SY-06의 허용 모델과 구분 |
+| P05 | Foundry 프로젝트 `GET /redTeams/runs?api-version=v1` (azure-ai-projects 2.4.0 `beta.red_teams.list`와 동일 경로, 사전 문서상 beta) | SDK 소스 `build_beta_red_teams_list_request` | BI-SY-08과 구분. 응답 형식은 `value`/`data` 모두 허용, 실패는 사유 기록 |
+| P06, P09 | Resource Graph `microsoft.insights/metricalerts·scheduledqueryrules·activitylogalerts·components·actiongroups`. 경보의 대상 범위가 AI 리소스를 포함하는지, 작업 그룹 연결 여부, 수신자 유형별 개수(주소·이름 미수집), App Insights 보존일 | Resource Graph 테이블 `Resources` | OE-SY-16(진단 설정)과 구분 |
+| P07, P08 | Foundry Agent 정의의 도구 유형, MCP `require_approval` 값, 도구 `server_url`의 호스트(경로·쿼리·인증값 제외) | 기존 Agent 목록 응답 | 신규 |
+| P10 | `Microsoft.Consumption/budgets` 알림의 `thresholdType=Forecasted` 수 | 기존 예산 수집(2023-05-01) | OT-SY-19의 예산 경보 유무와 구분, 예측 경보만 추가 |
+| P11 | AI 계정·호스트·Log Analytics의 `location` 분포와 로그·App Insights 보존일 | 기존 인벤토리·진단 설정 재사용 | OE-SY-16의 필요 보존일 판정과 구분 |
+| P12 | Resource Graph `PolicyResources` 테이블의 `microsoft.policyinsights/policystates`에서 AI 관련 리소스 유형의 준수 상태(리소스 수) | [Policy states in Resource Graph](https://learn.microsoft.com/azure/governance/policy/samples/resource-graph-samples) | DS-SY-06 L4의 고객 지정 정책 할당 확인과 구분 |
+| P13 | 호스트 `linuxFxVersion`, 컨테이너 앱 이미지의 다이제스트 고정 여부, 모델 배포 `versionUpgradeOption` | ARM 배포 속성 | DS-SY-06의 모델 버전 대조와 구분 |
+
+- 한계: 앱 내부 승인 게이트, 실제 방어 효과, SOC 수신, 훈련, 지역별 실제 처리, 소스·빌드 출처는 Reader로 입증할 수 없어 수집하지 않고 각 항목의 `한계` 열에 명시합니다.
 
 ## 이기종 Agent 수용
 

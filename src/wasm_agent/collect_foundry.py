@@ -3,14 +3,18 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlparse
 
-from wasm_agent.azure import AI_SCOPE, ARM, AccessError, ReaderHTTP, trusted_url
-from wasm_agent.evidence import redact
-from wasm_agent.models import AgentEvidence, Collection, EvaluationRun, ModelDeployment, timestamp
-from wasm_agent.settings import Settings
-
-from .collect_inventory import issue
+from wasm_agent.azure import AI_SCOPE, ARM, AccessError, ReaderHTTP, issue, redact, trusted_url
+from wasm_agent.models import (
+    AgentEvidence,
+    Collection,
+    EvaluationRun,
+    ModelDeployment,
+    ProposalObservation,
+    Settings,
+    timestamp,
+)
 
 
 def list_data(
@@ -46,7 +50,35 @@ def list_data(
 
 
 class FoundryCollector:
-    required_roles = ("Reader", "SEAgent Foundry Evidence Reader v2")
+    required_roles = ("Reader", "WASMAgent Foundry Evidence Reader v2")
+
+    def tool_observations(
+        self, project: dict[str, Any], record: AgentEvidence, raw_tools: Any,
+    ) -> list[ProposalObservation]:
+        tools = [tool for tool in raw_tools if isinstance(tool, dict)] if isinstance(raw_tools, list) else []
+        refs = [self.http.last_ref] if self.http.last_ref else []
+        if not tools:
+            return []
+        approvals = sorted({
+            value if isinstance(value, str) else "custom"
+            for tool in tools if tool.get("type") == "mcp"
+            for value in [tool.get("require_approval", "unspecified")]
+        })
+        hosts = sorted({
+            host for tool in tools
+            for host in [urlparse(str(tool.get("server_url") or tool.get("url") or "")).hostname] if host
+        })
+        base = {"subscription_id": project["subscriptionId"], "subject": record.agent_id, "evidence_refs": refs}
+        found = [ProposalObservation(
+            code="AZ-SY-P07", kind="agent_tools",
+            values={"tool_types": sorted({str(tool.get("type")) for tool in tools}), "mcp_approval": approvals},
+            **base,
+        )]
+        if hosts:
+            found.append(ProposalObservation(
+                code="AZ-SY-P08", kind="tool_endpoints", values={"hosts": hosts}, **base,
+            ))
+        return found
 
     def __init__(
         self, http: ReaderHTTP, resources: list[dict[str, Any]], settings: Settings, now: datetime,
@@ -82,6 +114,7 @@ class FoundryCollector:
                         sku=sku.get("name"), capacity=sku.get("capacity"),
                         state=properties.get("provisioningState"),
                         rai_policy=properties.get("raiPolicyName"),
+                        version_upgrade_option=properties.get("versionUpgradeOption"),
                         evidence_refs=[self.http.last_ref] if self.http.last_ref else [],
                     ))
             except AccessError as exc:
@@ -165,6 +198,9 @@ class FoundryCollector:
                             "Agent 버전 생성 시각은 실제 운영 배포 시각의 증거가 아님",
                         )
                         result.agents.append(record)
+                        result.proposal_observations.extend(
+                            self.tool_observations(project, record, raw_tools),
+                        )
             except AccessError as exc:
                 result.issues.append(issue(self.http, "foundry_agents", project["id"], exc, self.required_roles))
             try:
@@ -188,6 +224,25 @@ class FoundryCollector:
                 complete_projects.append(project["id"])
             except AccessError as exc:
                 result.issues.append(issue(self.http, "foundry_evaluations", project["id"], exc, self.required_roles))
+            try:
+                payload = self.http.request(
+                    "GET", endpoint.rstrip("/") + "/redTeams/runs?api-version=v1", AI_SCOPE,
+                )
+                runs = payload.get("value", payload.get("data"))
+                if not isinstance(runs, list):
+                    raise AccessError("error", "red team 목록 형식 불일치")
+                result.proposal_observations.append(ProposalObservation(
+                    code="AZ-SY-P05", subscription_id=project["subscriptionId"], subject=project["id"],
+                    kind="red_team_runs",
+                    values={
+                        "runs_total": len(runs),
+                        "completed": sum(1 for run in runs if isinstance(run, dict) and run.get("status") == "Completed"),
+                        "paged": bool(payload.get("nextLink") or payload.get("has_more")),
+                    },
+                    evidence_refs=[self.http.last_ref] if self.http.last_ref else [],
+                ))
+            except AccessError as exc:
+                result.issues.append(issue(self.http, "foundry_red_teams", project["id"], exc, self.required_roles))
         result.facts["evaluation_complete_projects"] = complete_projects
         result.facts["foundry_project_ids"] = [project["id"] for project in projects.values()]
         return result

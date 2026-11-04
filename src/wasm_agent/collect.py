@@ -6,22 +6,33 @@ from typing import Any
 
 from azure.core.exceptions import ClientAuthenticationError
 
-from wasm_agent.azure import ARM, AccessError, Credential, ReaderHTTP
+from wasm_agent.azure import (
+    ARM,
+    AccessError,
+    Credential,
+    EvidenceStore,
+    ReaderHTTP,
+    issue,
+    verify_identity,
+)
+from wasm_agent.collect_entra import EntraCollector
 from wasm_agent.collect_foundry import FoundryCollector
-from wasm_agent.collect_inventory import InventoryCollector, issue
-from wasm_agent.collect_langchain import LangChainCollector
-from wasm_agent.collect_manual import ManualCollector
+from wasm_agent.collect_inventory import (
+    InventoryCollector,
+    LangChainCollector,
+    ManualCollector,
+)
+from wasm_agent.collect_proposals import ProposalCollector
 from wasm_agent.collect_signals import SignalCollector
-from wasm_agent.evidence import EvidenceStore
-from wasm_agent.identity import verify_identity
-from wasm_agent.models import Collection, Issue
-from wasm_agent.settings import Settings, load_yaml
+from wasm_agent.models import Collection, Issue, Settings, load_conventions, load_criteria
 
 
 def merge(destination: Collection, source: Collection) -> None:
     for field in (
-        "agents", "deployments", "evaluations", "costs", "security", "logs", "issues",
-        "resources", "completed_subscriptions",
+        "agents", "deployments", "evaluations", "costs", "security", "secure_scores",
+        "policy_assignments", "budgets", "entra_blueprints", "entra_agent_identities",
+        "agent_ca_policies", "risky_agents", "logs", "proposal_observations", "issues", "resources",
+        "completed_subscriptions",
     ):
         getattr(destination, field).extend(getattr(source, field))
     for key, value in source.facts.items():
@@ -52,6 +63,7 @@ def collect_subscription(
         merge(result, SignalCollector(
             http, result, now, criteria, settings.monitor, settings.subscriptions,
         ).discover([sid]))
+        merge(result, ProposalCollector(http, result, now).discover([sid]))
     except AccessError as exc:
         result.facts["inventory_complete"] = False
         result.issues.append(issue(http, "subscription", sid, exc, ("Reader",)))
@@ -72,8 +84,8 @@ def collect(settings: Settings, credential: Credential, now: datetime | None = N
     if not settings.tenant_id or not settings.expected_principal_id:
         raise ValueError("tenant_id와 expected_principal_id가 필요합니다. 관리자 계정으로 대체하지 않습니다.")
     verify_identity(credential, settings.tenant_id, settings.expected_principal_id)
-    criteria = load_yaml(settings.criteria_file)
-    tags = load_yaml(settings.tag_conventions_file)
+    criteria = load_criteria(settings)
+    tags = load_conventions(settings)
     subscriptions = settings.subscriptions
     if not subscriptions:
         http = ReaderHTTP(credential)
@@ -98,6 +110,13 @@ def collect(settings: Settings, credential: Credential, now: datetime | None = N
         ]
         for future in as_completed(futures):
             merge(result, future.result())
+    if settings.entra:
+        result.facts["entra_requested"] = True
+        graph = ReaderHTTP(credential, store=store)
+        try:
+            merge(result, EntraCollector(graph, instant, criteria).discover())
+        finally:
+            graph.close()
     if settings.manual_agents:
         merge(result, ManualCollector(settings.manual_agents, instant).discover([]))
     for agent in result.agents:

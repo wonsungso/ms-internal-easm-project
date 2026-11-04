@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from datetime import timedelta
 from typing import Any, Protocol
 
-from wasm_agent.models import Collection, Finding
+from wasm_agent.models import AgentEvidence, Collection, Finding
 
 
 class Evaluator(Protocol):
@@ -34,7 +34,11 @@ def matches(facts: dict[str, Any], conditions: dict[str, dict[str, Any]]) -> boo
 
 def evidence_refs(data: Collection) -> list[str]:
     result = set()
-    for field in ("agents", "deployments", "evaluations", "costs", "security", "logs", "issues"):
+    for field in (
+        "agents", "deployments", "evaluations", "costs", "security", "secure_scores", "policy_assignments",
+        "budgets", "entra_blueprints", "entra_agent_identities", "agent_ca_policies", "risky_agents",
+        "logs", "issues",
+    ):
         for entry in getattr(data, field):
             result.update(entry.evidence_refs)
     return sorted(result)
@@ -145,6 +149,116 @@ def derive_facts(
         facts["high_risk_recommendations"] = sum(
             row.severity == "High" and row.status == "Unhealthy" for row in data.security
         )
+        unhealthy = [row for row in data.security if row.status == "Unhealthy"]
+        starts = [row.status_change_date or row.first_evaluation_date for row in unhealthy]
+        if all(start is not None for start in starts):
+            facts["recommendation_max_age_days"] = max(
+                ((data.collected_at - start).days for start in starts if start is not None), default=0,
+            )
+    approved = set(data.subscriptions)
+    scores = {row.subscription_id: row.percentage for row in data.secure_scores if row.percentage is not None}
+    if approved and approved <= set(data.facts.get("secure_score_complete_subscriptions", [])) and approved <= set(
+        scores,
+    ):
+        facts["security_score"] = min(scores[sid] for sid in approved) * 100
+    required_policies = [str(value).lower() for value in criteria.get("model_policy_definition_ids") or []]
+    if required_policies and approved and approved <= set(data.facts.get("policy_complete_subscriptions", [])):
+        enforced = {
+            (row.subscription_id, row.policy_definition_id.lower())
+            for row in data.policy_assignments if row.enforcement_mode == "Default"
+        }
+        facts["model_policy_enforced"] = all(
+            (sid, definition) in enforced for sid in approved for definition in required_policies
+        )
+    ai_subscriptions = {agent.subscription_id for agent in azure_agents if agent.subscription_id}
+    if ai_subscriptions and ai_subscriptions <= set(data.facts.get("budget_complete_subscriptions", [])):
+        facts["budget_alerts_configured"] = all(
+            any(row.enabled_alerts > 0 for row in data.budgets if row.subscription_id == sid)
+            for sid in ai_subscriptions
+        )
+    if azure_agents:
+        facts["cost_allocation_tagged"] = all(
+            bool(agent.tags.get(conventions["cost_center_key"])) for agent in azure_agents
+        )
+    if data.facts.get("entra_requested"):
+        facts.update(derive_entra_facts(data, azure_agents))
+    return facts
+
+
+def blueprint_tags(tags: list[str]) -> dict[str, str]:
+    return {
+        key.lower(): value.lower()
+        for key, _, value in (tag.partition(":") for tag in tags) if value
+    }
+
+
+def agent_has_entra_identity(agent: AgentEvidence, blueprints: list[Any]) -> bool:
+    if agent.platform != "foundry" or not agent.resource_id or not agent.subscription_id:
+        return False
+    parts = agent.resource_id.lower().split("/")
+    if "accounts" not in parts or "projects" not in parts:
+        return False
+    account, project = parts[parts.index("accounts") + 1], parts[parts.index("projects") + 1]
+    for blueprint in blueprints:
+        tags = blueprint_tags(blueprint.tags)
+        if (
+            tags.get("agentname") == agent.agent_name.lower() and tags.get("projectname") == project
+            and tags.get("accountname") == account and tags.get("subscriptionid") == agent.subscription_id.lower()
+        ):
+            return True
+    return False
+
+
+def derive_entra_facts(data: Collection, azure_agents: list[AgentEvidence]) -> dict[str, Any]:
+    facts: dict[str, Any] = {}
+    identities, blueprints = data.entra_agent_identities, data.entra_blueprints
+    identities_ready = bool(data.facts.get("entra_agents_complete"))
+    blueprints_ready = bool(data.facts.get("entra_blueprints_complete"))
+    if identities_ready:
+        facts["agent_identity_count"] = len(identities)
+    if blueprints_ready:
+        facts["blueprint_count"] = len(blueprints)
+    if identities_ready and blueprints_ready and identities:
+        known = {item.blueprint_id.lower() for item in blueprints}
+        facts["blueprint_based_ratio"] = sum(
+            bool(item.blueprint_id) and item.blueprint_id.lower() in known for item in identities
+        ) / len(identities)
+    if blueprints_ready and azure_agents:
+        facts["agent_id_ratio"] = sum(
+            agent_has_entra_identity(agent, blueprints) for agent in azure_agents
+        ) / len(azure_agents)
+    if identities_ready and identities:
+        facts["unassigned_ratio"] = sum(
+            not item.owner_count or not item.sponsor_count or item.owners_all_disabled is True
+            for item in identities
+        ) / len(identities)
+        facts["overprivileged_ratio"] = sum(bool(item.overprivileged_roles) for item in identities) / len(identities)
+    if data.facts.get("conditional_access_complete"):
+        enabled = [policy for policy in data.agent_ca_policies if policy.state == "enabled"]
+        facts["agent_ca_policy_count"] = len(enabled)
+        facts["agent_high_risk_auto_block"] = any(
+            "block" in [value.lower() for value in policy.grant_controls]
+            and any(level.lower() == "high" for level in policy.agent_risk_levels)
+            for policy in enabled
+        )
+        if identities_ready and identities:
+            everyone = {item.identity_id.lower() for item in identities}
+            covered: set[str] = set()
+            undetermined = False
+            for policy in enabled:
+                excluded = {value.lower() for value in policy.exclude_agent_ids}
+                if policy.include_all_agents:
+                    covered |= everyone - excluded
+                elif policy.include_agent_ids:
+                    covered |= ({value.lower() for value in policy.include_agent_ids} & everyone) - excluded
+                elif policy.uses_agent_filter:
+                    undetermined = True
+            if not undetermined or covered == everyone:
+                facts["agent_ca_coverage"] = len(covered) / len(everyone)
+    if data.facts.get("risky_agents_complete"):
+        facts["unremediated_risk_detections"] = sum(
+            (item.risk_state or "").lower() in ("atrisk", "confirmedcompromised") for item in data.risky_agents
+        )
     return facts
 
 
@@ -168,6 +282,9 @@ def evaluate(
         facts["security_score_meets_internal"] = facts["security_score"] >= criteria["internal_security_score_min"]
     findings = []
     for code, config in criteria["items"].items():
+        if config.get("requires") == "entra" and not data.facts.get("entra_requested"):
+            continue
+        tenant_item = config.get("requires") == "entra" and code != "DP-SY-12"
         value = facts.get(config["metric"])
         matched = next((rule for rule in config["rules"] if matches(facts, rule["when"])), None)
         if value is None and matched and matched["level"] != "L1":
@@ -175,7 +292,7 @@ def evaluate(
         level = matched["level"] if matched else "N/A"
         reason = None
         rationale = "원문 기준에 해당하는 수치·정성 조건을 확인한 판정 초안"
-        if not data.facts.get("inventory_complete"):
+        if not tenant_item and not data.facts.get("inventory_complete"):
             value = None
             level, reason = "N/A", "permission_denied" if any(
                 issue.reason == "permission_denied" and issue.collector == "subscription" for issue in data.issues
@@ -187,10 +304,13 @@ def evaluate(
                 "필요 증적·귀속·관측 기간이 부족하거나 원문에 정의되지 않은 수치 구간/정성 조건임"
             )
             related = {
-                "DS-SY-06": ("model_deployments",),
+                "DS-SY-06": ("model_deployments", "policies"),
                 "BI-SY-08": ("foundry_agents", "foundry_evaluations"),
-                "BI-SY-09": ("security",), "OE-SY-16": ("logs", "agent_usage"),
-                "OT-SY-18": ("agent_usage",), "OT-SY-19": ("cost",),
+                "BI-SY-09": ("security", "secure_score"), "OE-SY-16": ("logs", "agent_usage"),
+                "OT-SY-18": ("agent_usage",), "OT-SY-19": ("cost", "budgets"),
+                "DS-SY-05": ("entra_blueprints",), "DP-SY-12": ("entra_blueprints", "foundry_agents"),
+                "OE-SY-13": ("entra_agents",), "OE-SY-14": ("entra_agents",),
+                "OE-SY-15": ("conditional_access", "risky_agents", "entra_agents"),
             }
             issues = [item for item in data.issues if item.collector in related[code]]
             if issues:
@@ -198,7 +318,7 @@ def evaluate(
                             "feature_unavailable": 3, "not_found": 4}
                 reason = min(issues, key=lambda item: priority[item.reason]).reason
                 rationale += "; " + "; ".join(sorted({item.detail for item in issues}))
-        if code in ("BI-SY-08", "OT-SY-18", "OT-SY-19") and not data.facts.get(
+        if code in ("BI-SY-08", "OT-SY-18", "OT-SY-19", "DP-SY-12") and not data.facts.get(
             "agent_inventory_complete", data.facts.get("inventory_complete"),
         ):
             value, level = None, "N/A"
@@ -210,8 +330,12 @@ def evaluate(
             rationale = "Agent 목록의 일부를 수집하지 못해 전체 Agent 분모/귀속을 확정할 수 없음"
         if config["scope"] == "partial":
             rationale += "; Azure 부분 범위이며 원 제품/조직 전체 점수가 아님"
-        if code == "DS-SY-06" and allowed.get("sample_policy"):
-            rationale += "; 샘플 허용 모델 목록 사용, 고객 정책 승인 필요"
+        if code == "DS-SY-06" and not allowed.get("models"):
+            rationale += "; 허용 모델 목록(config.yaml allowed_models)이 입력되지 않아 허용 비율을 계산하지 않음"
+        if code == "DP-SY-12":
+            rationale += "; 분모는 Azure에서 수집한 Agent이며 Agent Registry 전체가 아님"
+        if code == "OE-SY-14" and criteria.get("overprivileged_permissions_sample"):
+            rationale += "; 샘플 과다 권한 패턴 사용, 고객 기준 승인 필요"
         if level == "N/A":
             next_step = "부족 증적을 확보한 뒤 목표 기준 확인: " + config["levels"]["L3"]
         elif level == "L5":

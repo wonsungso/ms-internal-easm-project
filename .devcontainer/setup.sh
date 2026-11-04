@@ -5,7 +5,7 @@ if [[ ! -x .venv/bin/python ]]; then
   python3 -m venv .venv
 fi
 .venv/bin/python -c 'import sys; assert sys.version_info[:2] == (3, 11), "Python 3.11 required"'
-.venv/bin/python -m pip install -e ".[dev,sample]"
+.venv/bin/python -m pip install -e ".[dev]"
 mkdir -p output .wasm-agent/evidence
 .venv/bin/wasm-agent --help
 az version --output json

@@ -1,0 +1,22 @@
+region: koreacentral
+generation: demo-redeploy-20261104
+budget_usd: 100
+resource_group_prefix: rg-wasmagent-lab
+project_name: governance-lab
+deployment_name: governance-small-model
+model: gpt-4.1-nano
+model_version: "2025-04-14"
+model_sku: GlobalStandard
+model_capacity: 1
+retention_days: 90
+after_run: retain
+auto_grant_needed_read_roles: true
+collect_all_subscriptions: true
+collect_entra: true
+# 허용 모델(주 모델)에 없는 모델 - 모델 허용 비율을 낮춰 평가 결과를 다양하게 만든다
+extra_models:
+  - deploymentName: governance-extra-model
+    model: gpt-4.1-mini
+    version: "2025-04-14"
+    sku: GlobalStandard
+    capacity: 1
