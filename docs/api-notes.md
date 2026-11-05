@@ -3,7 +3,7 @@
 - 수집 대상: Microsoft Foundry, Azure 자체 호스팅 Agent, Azure Monitor·Log Analytics, 비용·보안 권고.
 
 - 기준 원본: `4) AI Agent Governance Readiness 진단_System Evidence 수집 기준.docx`. 평가 모델 XLSX의 `4. 질문별 평가 기준`에 있는 20개 SE 행의 L1~L5와 공백 차이를 제외하고 일치함을 변환 시 검증했습니다.
-- 승인된 원본은 로컬 `docs/source`에 별도 보관하며 저장소에는 포함하지 않습니다. Codespaces에는 원본이 없어도 되므로 로컬 원본 파일을 문서 링크로 연결하지 않습니다.
+- 승인된 원본은 로컬 `source-materials/`(저장소 루트, .gitignore 대상)에 별도 보관하며 저장소에는 포함하지 않습니다. Codespaces에는 원본이 없어도 되므로 로컬 원본 파일을 문서 링크로 연결하지 않습니다.
 
 ## 범위 원칙
 
@@ -488,45 +488,69 @@
   - L1~L5와 N/A 기준 별도 승인. 다른 지표의 비율 재사용 금지.
   - 합의 전 수치/성숙도 점수 산출 금지.
 
-## Azure 운영 추가 제안 13개 수집 (AZ-SY-P01~P13)
+## Azure 운영 추가 제안 13개 수집 (DS-SY-07~OT-SY-21)
 
-- 원칙: 승인 전 제안이라 L1~L5·임계값을 만들지 않고 **Azure에서 읽을 수 있는 구성 사실**만 `추가 제안 현황` 시트와 raw-data JSON의 `collection.proposals`에 기록합니다. 상태는 `수집됨/일부 수집/수집 불가`이며 실패는 사유와 함께 남기고 0으로 바꾸지 않습니다. 기존 20개 항목의 판정과 점수는 바꾸지 않습니다.
+- 원칙: 수집기는 **Azure에서 읽을 수 있는 구성 사실**만 `추가 제안 현황` 시트와 raw-data JSON의 `collection.proposals`에 기록하고 Level은 자동 판정하지 않습니다. 상태는 `수집됨/일부 수집/수집 불가`이며 실패는 사유와 함께 남기고 0으로 바꾸지 않습니다. L1~L5 기준 초안(MS Learn 근거)은 [평가 모델 템플릿](assessment-template.xlsx) 시트 4에 있고 승인 전입니다. 기존 20개 항목의 판정과 점수는 바꾸지 않습니다.
 - 모든 호출은 GET 또는 기존 허용 POST(Resource Graph)이며 Reader로 가능합니다.
-- **진단 영역 매핑:** 영역 정의와 질문은 평가 모델 Excel `2. 질문 및 확인사항`(Demand 요구관리 / Design 업무·기술 설계 / Build 개발·검증 / Deploy 배포·운영 전환 / Operate 운영·변경관리 / Optimize 현황·비용·성과·감사)을 기준으로 합니다. 코드는 그대로 두고 영역은 `src/wasm_agent/proposals.py`의 `DOMAINS`(단일 출처)로 관리하며 보고서, 평가 모델 Excel, README가 같은 값을 씁니다. 1. Demand에 해당하는 제안은 없습니다(Azure 구성 사실로는 요구 접수·적합성 판단을 수집할 수 없음).
+- **코드 체계:** 기존 SY 코드와 같은 `<영역>-SY-<번호>` 형식입니다(영역 접두사 DM/DS/BI/DP/OE/OT, 번호는 기존 20개 다음 이어서 부여). 예전 `AZ-SY-P01~P13` 코드는 폐기했습니다.
+- **진단 영역 매핑:** 영역 정의와 질문은 평가 모델 Excel `2. 질문 및 확인사항`(Demand 요구관리 / Design 업무·기술 설계 / Build 개발·검증 / Deploy 배포·운영 전환 / Operate 운영·변경관리 / Optimize 현황·비용·성과·감사)을 기준으로 합니다. 영역은 `src/wasm_agent/proposals.py`의 `DOMAINS`(단일 출처)로 관리하며 보고서, 평가 모델 Excel, README가 같은 값을 씁니다. 1. Demand에 해당하는 제안은 없습니다(Azure 구성 사실로는 요구 접수·적합성 판단을 수집할 수 없음).
 
 | 영역 | 제안 | 주 영역 근거(원문 질문) | 보조 영역 |
 | --- | --- | --- | --- |
-| 2. Design | P03 | 실행 환경·플랫폼과 보안 요건을 정하는 기술 설계 리뷰 | 3. Build(환경 분리) |
-| 2. Design | P07 | Agent 자율성 수준(조회 전용/사람 승인 후 실행/자율 실행)을 설계 단계에서 결정 | 3. Build |
-| 2. Design | P08 | 외부 연계(커넥터·API·MCP)의 허용 기준과 사전 승인 목록 | 5. Operate |
-| 3. Build | P04 | 보안 위협(유해 입출력·데이터 유출)을 배포 전에 점검 | 2. Design |
-| 3. Build | P05 | 프롬프트 인젝션·데이터 유출·과도한 권한 사용을 배포 전에 점검 | 4. Deploy(릴리스 게이트) |
-| 3. Build | P13 | 프롬프트·설정·소스의 버전 관리(ALM) | 5. Operate(변경 승인·원복) |
-| 4. Deploy | P01 | 배포된 Agent의 기본 정보(목적·소유자·배포 범위)와 Owner·Sponsor 지정 | 6. Optimize(전사 현황) |
-| 4. Deploy | P12 | 승인되지 않은 구성의 적용을 제한하는 설정 | 6. Optimize(준수 감사) |
-| 5. Operate | P02 | Agent 권한의 정기 검토·회수와 권한 현황 | 4. Deploy |
-| 5. Operate | P06 | 비정상 행동의 자동 탐지 수단 | 6. Optimize |
-| 5. Operate | P09 | 장애 접수와 보안 사고 시 즉시 중지·격리하는 긴급 절차 | - |
-| 5. Operate | P11 | 로그·운영 기록의 보존·삭제 관리(OE-SY-16 보완) | 2. Design(데이터 지역) |
-| 6. Optimize | P10 | Agent별·조직별 비용 산정과 자동 측정 | - |
+| 2. Design | DS-SY-07 | 실행 환경·플랫폼과 보안 요건을 정하는 기술 설계 리뷰 | 3. Build(환경 분리) |
+| 2. Design | DS-SY-08 | Agent 자율성 수준(조회 전용/사람 승인 후 실행/자율 실행)을 설계 단계에서 결정 | 3. Build |
+| 2. Design | DS-SY-09 | 외부 연계(커넥터·API·MCP)의 허용 기준과 사전 승인 목록 | 5. Operate |
+| 3. Build | BI-SY-10 | 보안 위협(유해 입출력·데이터 유출)을 배포 전에 점검 | 2. Design |
+| 3. Build | BI-SY-11 | 프롬프트 인젝션·데이터 유출·과도한 권한 사용을 배포 전에 점검 | 4. Deploy(릴리스 게이트) |
+| 3. Build | BI-SY-12 | 프롬프트·설정·소스의 버전 관리(ALM) | 5. Operate(변경 승인·원복) |
+| 3. Build | BI-SY-13 | 개발·배포 시 Agent 자산 대장과 책임 태그(Owner·Sponsor) 표준 적용 | 4. Deploy(배포 후 현황 점검) |
+| 3. Build | BI-SY-14 | 개발·테스트·운영 환경 구성을 Azure Policy로 통제(환경 분리) | 4. Deploy(미승인 구성 배포 제한) |
+| 5. Operate | OE-SY-17 | Agent 권한의 정기 검토·회수와 권한 현황 | 4. Deploy |
+| 5. Operate | OE-SY-18 | 비정상 행동의 자동 탐지 수단 | 6. Optimize |
+| 5. Operate | OE-SY-19 | 장애 접수와 보안 사고 시 즉시 중지·격리하는 긴급 절차 | - |
+| 5. Operate | OE-SY-20 | 로그·운영 기록의 보존·삭제 관리(OE-SY-16 보완) | 2. Design(데이터 지역) |
+| 6. Optimize | OT-SY-21 | Agent별·조직별 비용 산정과 자동 측정 | - |
 
-- 판단이 갈린 항목: P13은 변경 승인·원복 관점이면 Operate/Deploy이지만 수집 값(버전 고정·런타임)이 산출물 버전 관리에 가까워 Build로 두었고, P11은 지역(설계 결정)보다 보존·삭제 관리(운영)에 가까워 Operate로 두었습니다. 고객 합의로 바꾸려면 `DOMAINS`만 수정하면 됩니다.
+- 판단이 갈린 항목: BI-SY-12는 변경 승인·원복 관점이면 Operate/Deploy이지만 수집 값(버전 고정·런타임)이 산출물 버전 관리에 가까워 Build로, OE-SY-20은 지역(설계 결정)보다 보존·삭제 관리(운영)에 가까워 Operate로 두었습니다. BI-SY-13·BI-SY-14는 검토 중 Build로 확정했습니다. 고객 합의로 바꾸려면 `DOMAINS`만 수정하면 됩니다.
 
 | 코드 | 수집 방법 | 근거/버전 | 중복 구분 |
 | --- | --- | --- | --- |
-| P01 | 수집된 Azure Agent의 소유자·후원자·환경·비용센터 태그 보유 수 | 기존 인벤토리 재사용 | OE-SY-13(Entra 소유자)과 달리 Azure 태그만 |
-| P02 | Resource Graph `identity`(시스템·사용자 할당 principal)와 `GET /subscriptions/{id}/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01`로 Agent 호스트·AI 계정의 ARM 역할 수와 광범위 역할(Owner, Contributor, User Access Administrator, RBAC Administrator) 수, 계정 `disableLocalAuth` | [Role Assignments List](https://learn.microsoft.com/rest/api/authorization/role-assignments/list-for-subscription) | DP-SY-12/OE-SY-14의 Entra·Graph 권한과 구분, ARM만 |
-| P03 | Resource Graph로 AI 계정 `publicNetworkAccess`, `networkAcls.defaultAction`, 프라이빗 엔드포인트 수, 호스트 `httpsOnly`·VNet 통합, `GET sites/{n}/config/web?api-version=2024-04-01`의 `ipSecurityRestrictions` 수 | [Web Apps Get Configuration](https://learn.microsoft.com/rest/api/appservice/web-apps/get-configuration) | 신규 |
-| P04 | `GET {account}/raiPolicies?api-version=2024-10-01`의 사용자 지정 정책 수와 모델 배포 `raiPolicyName` 대조 | [Rai Policies List](https://learn.microsoft.com/rest/api/aiservices/accountmanagement/rai-policies/list) | DS-SY-06의 허용 모델과 구분 |
-| P05 | Foundry 프로젝트 `GET /redTeams/runs?api-version=v1` (azure-ai-projects 2.4.0 `beta.red_teams.list`와 동일 경로, 사전 문서상 beta) | SDK 소스 `build_beta_red_teams_list_request` | BI-SY-08과 구분. 응답 형식은 `value`/`data` 모두 허용. `Foundry-Features: RedTeams=V1Preview` 헤더가 없으면 400이며, 헤더를 넣은 Owner 토큰은 200(빈 목록). 읽기 전용 역할 SP는 401이고 서비스 메시지가 `evaluations/write`(`GET .../redTeams/runs`) 요구를 명시하므로 쓰기 권한은 요청하지 않고 `permission_denied`로 기록 |
-| P06, P09 | Resource Graph `microsoft.insights/metricalerts·scheduledqueryrules·activitylogalerts·components·actiongroups`. 경보의 대상 범위가 AI 리소스를 포함하는지, 작업 그룹 연결 여부, 수신자 유형별 개수(주소·이름 미수집), App Insights 보존일 | Resource Graph 테이블 `Resources` | OE-SY-16(진단 설정)과 구분 |
-| P07, P08 | Foundry Agent 정의의 도구 유형, MCP `require_approval` 값, 도구 `server_url`의 호스트(경로·쿼리·인증값 제외) | 기존 Agent 목록 응답 | 신규 |
-| P10 | `Microsoft.Consumption/budgets` 알림의 `thresholdType=Forecasted` 수 | 기존 예산 수집(2023-05-01) | OT-SY-19의 예산 경보 유무와 구분, 예측 경보만 추가 |
-| P11 | AI 계정·호스트·Log Analytics의 `location` 분포와 로그·App Insights 보존일 | 기존 인벤토리·진단 설정 재사용 | OE-SY-16의 필요 보존일 판정과 구분 |
-| P12 | Resource Graph `PolicyResources` 테이블의 `microsoft.policyinsights/policystates`에서 AI 관련 리소스 유형의 준수 상태(리소스 수) | [Policy states in Resource Graph](https://learn.microsoft.com/azure/governance/policy/samples/resource-graph-samples) | DS-SY-06 L4의 고객 지정 정책 할당 확인과 구분 |
-| P13 | 호스트 `linuxFxVersion`, 컨테이너 앱 이미지의 다이제스트 고정 여부, 모델 배포 `versionUpgradeOption` | ARM 배포 속성 | DS-SY-06의 모델 버전 대조와 구분 |
+| BI-SY-13 | 수집된 Azure Agent의 소유자·후원자·환경·비용센터 태그 보유 수 | 기존 인벤토리 재사용 | OE-SY-13(Entra 소유자)과 달리 Azure 태그만 |
+| OE-SY-17 | Resource Graph `identity`(시스템·사용자 할당 principal)와 `GET /subscriptions/{id}/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01`로 Agent 호스트·AI 계정의 ARM 역할 수와 광범위 역할(Owner, Contributor, User Access Administrator, RBAC Administrator) 수, 계정 `disableLocalAuth` | [Role Assignments List](https://learn.microsoft.com/rest/api/authorization/role-assignments/list-for-subscription) | DP-SY-12/OE-SY-14의 Entra·Graph 권한과 구분, ARM만 |
+| DS-SY-07 | Resource Graph로 AI 계정 `publicNetworkAccess`, `networkAcls.defaultAction`, 프라이빗 엔드포인트 수, 호스트 `httpsOnly`·VNet 통합, `GET sites/{n}/config/web?api-version=2024-04-01`의 `ipSecurityRestrictions` 수 | [Web Apps Get Configuration](https://learn.microsoft.com/rest/api/appservice/web-apps/get-configuration) | 신규 |
+| BI-SY-10 | `GET {account}/raiPolicies?api-version=2024-10-01`의 사용자 지정 정책 수와 모델 배포 `raiPolicyName` 대조 | [Rai Policies List](https://learn.microsoft.com/rest/api/aiservices/accountmanagement/rai-policies/list) | DS-SY-06의 허용 모델과 구분 |
+| BI-SY-11 | Foundry 프로젝트 `GET /redTeams/runs?api-version=v1` (azure-ai-projects 2.4.0 `beta.red_teams.list`와 동일 경로, 사전 문서상 beta) | SDK 소스 `build_beta_red_teams_list_request` | BI-SY-08과 구분. 응답 형식은 `value`/`data` 모두 허용. `Foundry-Features: RedTeams=V1Preview` 헤더가 없으면 400이며, 헤더를 넣은 Owner 토큰은 200(빈 목록). 읽기 전용 역할 SP는 401이고 서비스 메시지가 `evaluations/write`(`GET .../redTeams/runs`) 요구를 명시하므로 쓰기 권한은 요청하지 않고 `permission_denied`로 기록 |
+| OE-SY-18, OE-SY-19 | Resource Graph `microsoft.insights/metricalerts·scheduledqueryrules·activitylogalerts·components·actiongroups`. 경보의 대상 범위가 AI 리소스를 포함하는지, 작업 그룹 연결 여부, 수신자 유형별 개수(주소·이름 미수집), App Insights 보존일 | Resource Graph 테이블 `Resources` | OE-SY-16(진단 설정)과 구분 |
+| DS-SY-08, DS-SY-09 | Foundry Agent 정의의 도구 유형, MCP `require_approval` 값, 도구 `server_url`의 호스트(경로·쿼리·인증값 제외) | 기존 Agent 목록 응답 | 신규 |
+| OT-SY-21 | `Microsoft.Consumption/budgets` 알림의 `thresholdType=Forecasted` 수 | 기존 예산 수집(2023-05-01) | OT-SY-19의 예산 경보 유무와 구분, 예측 경보만 추가 |
+| OE-SY-20 | AI 계정·호스트·Log Analytics의 `location` 분포와 로그·App Insights 보존일 | 기존 인벤토리·진단 설정 재사용 | OE-SY-16의 필요 보존일 판정과 구분 |
+| BI-SY-14 | Resource Graph `PolicyResources` 테이블의 `microsoft.policyinsights/policystates`에서 AI 관련 리소스 유형의 준수 상태(리소스 수) | [Policy states in Resource Graph](https://learn.microsoft.com/azure/governance/policy/samples/resource-graph-samples) | DS-SY-06 L4의 고객 지정 정책 할당 확인과 구분 |
+| BI-SY-12 | 호스트 `linuxFxVersion`, 컨테이너 앱 이미지의 다이제스트 고정 여부, 모델 배포 `versionUpgradeOption` | ARM 배포 속성 | DS-SY-06의 모델 버전 대조와 구분 |
 
 - 한계: 앱 내부 승인 게이트, 실제 방어 효과, SOC 수신, 훈련, 지역별 실제 처리, 소스·빌드 출처는 Reader로 입증할 수 없어 수집하지 않고 각 항목의 `한계` 열에 명시합니다.
+
+### Level 기준 초안 근거 (2026-11-05 조사, 승인 전)
+
+L1~L5와 확인 증적은 [scripts/proposal_levels.py](../scripts/proposal_levels.py)에 있고 템플릿 시트 4에 반영됩니다. 구성 요소(무엇을 보는가)는 아래 MS Learn 문서를 근거로 했고, 수치 임계값(90%, 80%, 100%, 20%)은 공식 기준이 아니라 기존 항목(DS-SY-06 90%, BI-SY-08 80%)의 관행을 따른 제안값이라 고객 합의로 조정합니다. 수집기는 이 기준으로 Level을 판정하지 않습니다.
+
+| 코드 | 근거 요약 | MS Learn |
+| --- | --- | --- |
+| DS-SY-07 | 인바운드(공용 접근 플래그)·아웃바운드·에이전트 송신 격리, 규칙 없으면 기본 거부, App Service HTTPS 전용·접근 제한·VNet 통합 | [Foundry 네트워크 격리](https://learn.microsoft.com/en-us/azure/foundry/how-to/configure-private-link), [AI Services 가상 네트워크](https://learn.microsoft.com/en-us/azure/ai-services/cognitive-services-virtual-networks), [App Service 네트워킹](https://learn.microsoft.com/en-us/azure/app-service/networking-features) |
+| DS-SY-08 | 함수·MCP 도구 호출의 사람 승인(human-in-the-loop) 단계 | [도구 승인](https://learn.microsoft.com/en-us/agent-framework/agents/tools/tool-approval), [Foundry human-in-the-loop](https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/add-human-in-the-loop), [MCP 도구](https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/tools/model-context-protocol) |
+| DS-SY-09 | MCP `server_url`·`allowed_tools`, OpenAPI 도구 인증 방식(익명·키·관리 ID) 선택과 서버 사전 검토 권고 | [OpenAPI 도구](https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/tools/openapi), [MCP 도구](https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/tools/model-context-protocol) |
+| BI-SY-10 | 가드레일 개입 지점(입력·도구 호출·도구 응답·출력), 콘텐츠 필터 정책 연결 | [Guardrails 개요](https://learn.microsoft.com/en-us/azure/foundry/guardrails/guardrails-overview) |
+| BI-SY-11 | AI Red Teaming Agent(PyRIT 기반)의 개발·배포 전·배포 후 사용, 공격 성공률(ASR) 스코어카드 | [AI Red Teaming Agent](https://learn.microsoft.com/en-us/azure/foundry/concepts/ai-red-teaming-agent) |
+| BI-SY-12 | 배포 단위 모델 버전 업데이트 정책(자동 업그레이드 거부·기본 버전 전환 시·만료 시), 퇴역 예정 통지 | [모델 버전 관리](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/model-versions) |
+| BI-SY-13 | 단일 조직 인벤토리와 소유권·목적·접근 범위 추적, Entra Agent ID 소유자·스폰서 | [CAF AI Agent 거버넌스](https://learn.microsoft.com/en-us/azure/cloud-adoption-framework/ai-agents/governance-security-across-organization), [Entra Agent ID](https://learn.microsoft.com/en-us/entra/agent-id/) |
+| BI-SY-14 | Foundry Tools 전용 기본 제공 정책, 정책 예외의 만료일(`expiration`), 준수 상태 계산, Defender AI 보안 태세 | [정책 참조](https://learn.microsoft.com/en-us/azure/ai-services/policy-reference), [예외 구조](https://learn.microsoft.com/en-us/azure/governance/policy/concepts/exemption-structure), [준수 상태](https://learn.microsoft.com/en-us/azure/governance/policy/concepts/compliance-states), [AI 보안 태세](https://learn.microsoft.com/en-us/azure/defender-for-cloud/ai-security-posture) |
+| OE-SY-17 | `disableLocalAuth`로 키 인증 비활성, Foundry 전용 최소 권한 역할(Agent Consumer 등), PIM 반복 액세스 검토 | [로컬 인증 비활성화](https://learn.microsoft.com/en-us/azure/ai-services/disable-local-auth), [Foundry RBAC](https://learn.microsoft.com/en-us/azure/foundry/concepts/rbac-foundry), [PIM 액세스 검토](https://learn.microsoft.com/en-us/entra/id-governance/privileged-identity-management/pim-create-roles-and-resource-roles-review) |
+| OE-SY-18 | Agent 모니터링 대시보드(지연·성공률·토큰), 트레이싱(Application Insights), 경보와 작업 그룹 | [Agent 모니터링](https://learn.microsoft.com/en-us/azure/foundry/observability/how-to/how-to-monitor-agents-dashboard), [트레이싱 설정](https://learn.microsoft.com/en-us/azure/foundry/observability/how-to/trace-agent-setup), [경보 개요](https://learn.microsoft.com/en-us/azure/azure-monitor/alerts/alerts-overview) |
+| OE-SY-19 | 작업 그룹 수신·자동화 유형(이메일·웹훅·ITSM·Logic App·Runbook), 경보 권한 분리 | [작업 그룹](https://learn.microsoft.com/en-us/azure/azure-monitor/alerts/action-groups), [경보 개요](https://learn.microsoft.com/en-us/azure/azure-monitor/alerts/alerts-overview) |
+| OE-SY-20 | 배포 유형별 저장·처리 지역, Log Analytics 보존 기간 설정 | [모델 지역 가용성](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure-region-availability), [Log Analytics 보존](https://learn.microsoft.com/en-us/azure/azure-monitor/logs/data-retention-configure) |
+| OT-SY-21 | 실제·예측 비용 경보, 작업 그룹 연계, 비용 이상 탐지, 배포별 할당량 | [예산 만들기](https://learn.microsoft.com/en-us/azure/cost-management-billing/costs/tutorial-acm-create-budgets), [이상 탐지](https://learn.microsoft.com/en-us/azure/cost-management-billing/understand/analyze-unexpected-charges), [할당량](https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/quota) |
+
+- 공식 근거를 찾지 못한 부분(기능 존재를 단정하지 않음): BI-SY-11의 red team 실행 이력을 읽기 전용으로 조회하는 방법(실측에서 쓰기 데이터 작업을 요구), BI-SY-12의 이미지 다이제스트 고정과 프롬프트·도구 버전의 릴리스 연결 기능, OE-SY-19의 중단(kill-switch)·롤백 훈련을 제품 기능으로 설명한 문서, OT-SY-21의 Agent별 비용 귀속 전용 기능(태그 기반 배분은 관행). 이 부분은 L3~L5의 "정의·시행" 문구로만 표현했고 제품 기능으로 단정하지 않았습니다.
+- Guardrails는 Foundry Agent Service에서 만든 Agent에만 적용되고 다른 플랫폼 Agent는 범위 밖이라, BI-SY-10의 L3~L5는 Azure 모델 배포 기준입니다.
 
 ## 이기종 Agent 수용
 

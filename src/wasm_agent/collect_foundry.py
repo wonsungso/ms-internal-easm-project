@@ -70,13 +70,13 @@ class FoundryCollector:
         })
         base = {"subscription_id": project["subscriptionId"], "subject": record.agent_id, "evidence_refs": refs}
         found = [ProposalObservation(
-            code="AZ-SY-P07", kind="agent_tools",
+            code="DS-SY-08", kind="agent_tools",
             values={"tool_types": sorted({str(tool.get("type")) for tool in tools}), "mcp_approval": approvals},
             **base,
         )]
         if hosts:
             found.append(ProposalObservation(
-                code="AZ-SY-P08", kind="tool_endpoints", values={"hosts": hosts}, **base,
+                code="DS-SY-09", kind="tool_endpoints", values={"hosts": hosts}, **base,
             ))
         return found
 
@@ -233,7 +233,7 @@ class FoundryCollector:
                 if not isinstance(runs, list):
                     raise AccessError("error", "red team 목록 형식 불일치")
                 result.proposal_observations.append(ProposalObservation(
-                    code="AZ-SY-P05", subscription_id=project["subscriptionId"], subject=project["id"],
+                    code="BI-SY-11", subscription_id=project["subscriptionId"], subject=project["id"],
                     kind="red_team_runs",
                     values={
                         "runs_total": len(runs),

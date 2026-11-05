@@ -68,11 +68,11 @@ python -m demo.diagnostics codespace --codespace '<Codespace 이름>' --apply
 - 평가는 실제 합성 응답 3문항의 정확 일치 검사입니다. 실행 완료·전체 통과·배포 전 평가는 서로 다릅니다. 종합 안전성이나 업무 품질 인증이 아닙니다.
 - 생성 직후에는 30일 비용이나 90일 관측 기간을 확보할 수 없습니다. API 미지원·권한 부족·로그 유입 지연을 0이나 L1로 대체하지 않습니다.
 
-![실제 로그인 동의 - 식별자 마스킹과 클릭 위치](01-entra-consent.png)
+![실제 로그인 동의 - 식별자 마스킹과 클릭 위치](imgs/01-entra-consent.png)
 
-![실제 LangChain 챗봇 대화](02-langchain-chat.png)
+![실제 LangChain 챗봇 대화](imgs/02-langchain-chat.png)
 
-![실제 Foundry 챗봇 대화와 평가 조건](03-foundry-chat.png)
+![실제 Foundry 챗봇 대화와 평가 조건](imgs/03-foundry-chat.png)
 
 - 캡처는 최초 검증 당시 화면입니다. 새 배포의 완료 증거로 재사용하지 않습니다. [캡처 범위](../docs/manifest.json)를 참고하세요.
 

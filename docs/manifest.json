@@ -24,7 +24,7 @@
         "collected": 11,
         "partial": 1,
         "unavailable": 1,
-        "unavailable_item": "AZ-SY-P05 (HTTP 401)"
+        "unavailable_item": "BI-SY-11 (HTTP 401)"
       },
       "entra_without_consent": {
         "issues_preserved": 11,
@@ -47,7 +47,7 @@
     "verification_limit": "OE-SY-15의 riskyAgents(Graph beta)는 동의 후에도 403이라 조회하지 못함(원인 미확인). 로그 workspace가 승인 구독 밖이고 비용 청구 행이 없어 일부 항목은 판정 보류로 남음.",
     "images": [
       {
-        "file": "07-register-sp.png",
+        "file": "imgs/07-register-sp.png",
         "action": "앱 이름·단일 테넌트·등록 위치. 입력 후 실제 등록",
         "highlight_count": 3,
         "tenant_selector_masked": true,
@@ -60,13 +60,13 @@
         }
       },
       {
-        "file": "08-sp-overview.png",
+        "file": "imgs/08-sp-overview.png",
         "action": "앱 개요의 client·tenant·앱 object ID 확인 위치",
         "highlight_count": 3,
         "client_id_masked": true
       },
       {
-        "file": "09-upload-certificate.png",
+        "file": "imgs/09-upload-certificate.png",
         "action": "공개 인증서 선택·설명·Add 확인 후 실제 등록, Graph에서 인증서 1개·secret 0개 확인",
         "highlight_count": 3,
         "file_selected": true,
@@ -80,13 +80,13 @@
         }
       },
       {
-        "file": "10-reader-role.png",
+        "file": "imgs/10-reader-role.png",
         "action": "구독 IAM에서 Reader 선택 및 Next",
         "highlight_count": 2,
         "subscription_masked": true
       },
       {
-        "file": "11-reader-review.png",
+        "file": "imgs/11-reader-review.png",
         "action": "Reader·진단 SP·Review + assign 확인 후 실제 할당",
         "highlight_count": 3,
         "subscription_and_principal_masked": true,
@@ -99,13 +99,13 @@
         }
       },
       {
-        "file": "12-entra-consent.png",
+        "file": "imgs/12-entra-consent.png",
         "action": "Graph 애플리케이션 읽기 권한 5개 추가 후 동의 전 상태와 Grant admin consent 버튼 위치 (Global Administrator PIM 활성화 상태에서 캡처)",
         "highlight_count": 2,
         "consent_granted": false
       },
       {
-        "file": "13-entra-granted.png",
+        "file": "imgs/13-entra-granted.png",
         "action": "Grant admin consent 실행 후 5개 권한이 모두 Granted. Graph appRoleAssignments 5건으로 재확인",
         "highlight_count": 1,
         "consent_granted": true
@@ -120,21 +120,21 @@
     "account_identifiers_masked": true,
     "images": [
       {
-        "file": "01-entra-consent.png",
+        "file": "imgs/01-entra-consent.png",
         "highlight_count": 1,
         "account_masked": true,
         "application_registration_name_masked": true,
         "flow": "Actual single-tenant Entra basic sign-in consent; no secret generated"
       },
       {
-        "file": "02-langchain-chat.png",
+        "file": "imgs/02-langchain-chat.png",
         "highlight_count": 3,
         "actual_response": true,
         "input_tokens": 64,
         "output_tokens": 88
       },
       {
-        "file": "03-foundry-chat.png",
+        "file": "imgs/03-foundry-chat.png",
         "highlight_count": 3,
         "actual_response": true,
         "input_tokens": 72,

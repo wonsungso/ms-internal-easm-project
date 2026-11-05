@@ -55,7 +55,7 @@ def test_tag_coverage_counts_agents_without_inventing_missing_owners() -> None:
     data = Collection(collected_at=NOW, agents=[
         agent("a", owner="team", tags={"env": "prod", "cost-center": "x"}), agent("b"),
     ])
-    metrics = by_code(data)["AZ-SY-P01"].metrics
+    metrics = by_code(data)["BI-SY-13"].metrics
     assert metrics == {"agents": 2, "with_owner": 1, "with_sponsor": 0, "with_env": 1, "with_cost_center": 1}
 
 
@@ -63,19 +63,19 @@ def test_failed_step_is_unavailable_not_zero() -> None:
     data = Collection(collected_at=NOW, issues=[Issue(
         collector="foundry_red_teams", target="p", reason="feature_unavailable", detail="HTTP 404",
     )], facts={"foundry_project_ids": ["p"]})
-    finding = by_code(data)["AZ-SY-P05"]
+    finding = by_code(data)["BI-SY-11"]
     assert finding.status == "수집 불가" and finding.reason == "feature_unavailable"
     assert "HTTP 404" in finding.observation
 
 
 def test_partial_status_keeps_collected_values() -> None:
     data = Collection(collected_at=NOW, proposal_observations=[ProposalObservation(
-        code="AZ-SY-P03", subscription_id=SID, subject=ACCOUNT, kind="ai_account",
+        code="DS-SY-07", subscription_id=SID, subject=ACCOUNT, kind="ai_account",
         values={"public_network_access": "Enabled", "default_action": "Allow", "private_endpoints": 0},
     )], issues=[Issue(
-        collector="proposal_P03", target=SID, reason="permission_denied", detail="HTTP 403",
+        collector="proposal_DS-SY-07", target=SID, reason="permission_denied", detail="HTTP 403",
     )])
-    finding = by_code(data)["AZ-SY-P03"]
+    finding = by_code(data)["DS-SY-07"]
     assert finding.status == "일부 수집" and finding.metrics["accounts_public"] == 1
 
 
@@ -96,26 +96,26 @@ def test_safety_budget_and_tools_metrics() -> None:
         facts={"budget_complete_subscriptions": [SID]},
         proposal_observations=[
             ProposalObservation(
-                code="AZ-SY-P04", subscription_id=SID, subject=ACCOUNT, kind="ai_account",
+                code="BI-SY-10", subscription_id=SID, subject=ACCOUNT, kind="ai_account",
                 values={"policies": 2, "custom_policies": 1, "custom_enabled_filters": 1,
                         "custom_policy_names": ["strict"]},
             ),
             ProposalObservation(
-                code="AZ-SY-P07", subscription_id=SID, subject="a", kind="agent_tools",
+                code="DS-SY-08", subscription_id=SID, subject="a", kind="agent_tools",
                 values={"tool_types": ["mcp"], "mcp_approval": ["always"]},
             ),
             ProposalObservation(
-                code="AZ-SY-P08", subscription_id=SID, subject="a", kind="tool_endpoints",
+                code="DS-SY-09", subscription_id=SID, subject="a", kind="tool_endpoints",
                 values={"hosts": ["learn.microsoft.com"]},
             ),
         ],
     )
     result = by_code(data)
-    assert result["AZ-SY-P04"].metrics["with_policy"] == 2 and result["AZ-SY-P04"].metrics["with_custom_policy"] == 1
-    assert result["AZ-SY-P10"].metrics["with_forecast_alert"] == 1
-    assert result["AZ-SY-P07"].metrics["mcp_approval"] == {"always": 1}
-    assert result["AZ-SY-P08"].metrics["hosts"] == ["learn.microsoft.com"]
-    assert result["AZ-SY-P13"].metrics["version_upgrade_option"] == {"NoAutoUpgrade": 1, "unknown": 1}
+    assert result["BI-SY-10"].metrics["with_policy"] == 2 and result["BI-SY-10"].metrics["with_custom_policy"] == 1
+    assert result["OT-SY-21"].metrics["with_forecast_alert"] == 1
+    assert result["DS-SY-08"].metrics["mcp_approval"] == {"always": 1}
+    assert result["DS-SY-09"].metrics["hosts"] == ["learn.microsoft.com"]
+    assert result["BI-SY-12"].metrics["version_upgrade_option"] == {"NoAutoUpgrade": 1, "unknown": 1}
 
 
 def collector(rows: dict[str, list[dict]], assignments: list[dict] | None = None) -> ProposalCollector:
@@ -183,20 +183,20 @@ def test_collector_records_identity_network_safety_and_policy_facts() -> None:
     observed = {(item.code, item.kind): item.values for item in result.proposal_observations}
     host = next(
         item.values for item in result.proposal_observations
-        if item.code == "AZ-SY-P02" and item.subject == SITE
+        if item.code == "OE-SY-17" and item.subject == SITE
     )
     assert host["privileged_assignments"] == 1 and host["subscription_scope_assignments"] == 1
     assert host["principal_count"] == 2
     assert not any(item.subject.endswith("-other") for item in result.proposal_observations)
-    assert observed[("AZ-SY-P04", "ai_account")]["custom_policy_names"] == ["strict"]
-    network = [item.values for item in result.proposal_observations if item.code == "AZ-SY-P03"]
+    assert observed[("BI-SY-10", "ai_account")]["custom_policy_names"] == ["strict"]
+    network = [item.values for item in result.proposal_observations if item.code == "DS-SY-07"]
     assert {"public_network_access": "Enabled", "default_action": None, "private_endpoints": 0} in network
     assert any(item["ip_restrictions"] == 1 and item["https_only"] is True for item in network if "https_only" in item)
-    monitoring = [item.values for item in result.proposal_observations if item.code == "AZ-SY-P06"]
+    monitoring = [item.values for item in result.proposal_observations if item.code == "OE-SY-18"]
     assert {"kind": "actiongroups", "receivers": {"webhook": 1}} in monitoring
     assert any(item.get("targets_ai") and item.get("has_action_group") for item in monitoring)
     states = {item.values["state"]: item.values["resources"] for item in result.proposal_observations
-              if item.code == "AZ-SY-P12"}
+              if item.code == "BI-SY-14"}
     assert states == {"Compliant": 1, "NonCompliant": 1}
 
 
@@ -208,6 +208,6 @@ def test_collector_isolates_a_failed_step() -> None:
 
     gathered.http.list_arm.side_effect = broken
     result = gathered.discover([SID])
-    assert {item.collector for item in result.issues} == {"proposal_P02", "proposal_P04"}
-    assert "AZ-SY-P03" in {item.code for item in result.proposal_observations}
-    assert sorted(result.facts["proposal_incomplete"]) == ["AZ-SY-P02", "AZ-SY-P04"]
+    assert {item.collector for item in result.issues} == {"proposal_OE-SY-17", "proposal_BI-SY-10"}
+    assert "DS-SY-07" in {item.code for item in result.proposal_observations}
+    assert sorted(result.facts["proposal_incomplete"]) == ["BI-SY-10", "OE-SY-17"]

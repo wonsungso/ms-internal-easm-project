@@ -58,7 +58,25 @@ def test_screenshot_notes_match_the_documented_example() -> None:
     readme = (root / "README.md").read_text(encoding="utf-8")
     assert "`wasmagent-diagnostic`" in readme
     assert "식별자·테넌트 이름은 마스킹" in readme
-    assert "docs/12-entra-consent.png" in readme
+    assert "docs/imgs/12-entra-consent.png" in readme
+
+
+def test_summary_table_links_resolve_to_checklist_sections_with_images() -> None:
+    root = Path(__file__).parents[1]
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    detail = (root / "docs" / "checklist.md").read_text(encoding="utf-8")
+
+    def anchor(heading: str) -> str:
+        return re.sub(r"[^\w\- ]", "", heading.lower()).replace(" ", "-")
+
+    anchors = {anchor(h) for h in re.findall(r"^## (.+)$", detail, re.M)}
+    links = re.findall(r"^\| \[([A-Z]{2}-SY-[P\d]+)\]\(docs/checklist\.md#([^)]+)\)", readme, re.M)
+    assert len(links) == 33
+    assert {target for _, target in links} == anchors
+    implemented = re.findall(r"^- \*\*구현:\*\* (?!❌)", detail, re.M)
+    assert len(implemented) == 24
+    assert len(re.findall(r"^!\[[^\]]+\]\(portal/imgs/[^)]+\.png\)$", detail, re.M)) == 24
+    assert "<img" not in readme and not re.search(r"^\|.*!\[", readme, re.M)
 
 
 def test_chatbot_guide_uses_real_masked_highlighted_screenshots() -> None:
@@ -82,7 +100,7 @@ def test_chatbot_guide_uses_real_masked_highlighted_screenshots() -> None:
 def test_consolidated_document_links_and_collapsed_demo_are_preserved() -> None:
     root = Path(__file__).parents[1]
     docs = root / "docs"
-    assert {path.name for path in docs.glob("*.md")} == {"api-notes.md"}
+    assert {path.name for path in docs.glob("*.md")} == {"api-notes.md", "checklist.md"}
     for path in [root / "README.md", *docs.glob("*.md"), *(root / "demo").glob("*.md")]:
         for target in re.findall(r"!?\[[^\]]*\]\(([^)]+)\)", path.read_text(encoding="utf-8")):
             target = unquote(target.split("#", 1)[0].strip("<>"))
@@ -95,11 +113,12 @@ def test_consolidated_document_links_and_collapsed_demo_are_preserved() -> None:
     assert "수집은 나중에 수동 실행" in readme
     assert "raw-data-<타임스탬프>.json" in readme and "report-<타임스탬프>.xlsx" in readme
     assert "results.zip" not in readme and "report.html" not in readme
-    assert "docs/assessment-sy.xlsx" in readme
+    assert "docs/assessment-template.xlsx" in readme
     assert "bash demo/run.sh --apply --collect" in readme
     assert "bash demo/run.sh --apply\n" in readme
     manifests = json.loads((docs / "manifest.json").read_text(encoding="utf-8"))
-    assert {path.name for path in docs.glob("*.png")} == {
-        image["file"] for image in manifests["authentication"]["images"]
+    assert (docs / "imgs").is_dir() and not list(docs.glob("*.png"))
+    assert {path.name for path in (docs / "imgs").glob("*.png")} == {
+        Path(image["file"]).name for image in manifests["authentication"]["images"]
     }
     assert not (docs / "images").exists()

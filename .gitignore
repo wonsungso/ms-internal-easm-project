@@ -15,5 +15,5 @@ output/
 demo/main.json
 demo/foundry.json
 demo/host.json
-docs/source/
+source-materials/
 .devcontainer/.env
