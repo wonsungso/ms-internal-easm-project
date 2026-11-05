@@ -31,21 +31,18 @@ ARM = "https://management.azure.com"
 ARM_SCOPE = ARM + "/.default"
 AI_SCOPE = "https://ai.azure.com/.default"
 GRAPH_URL = ARM + "/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01"
-SE_CODES = ("DS-SY-06", "BI-SY-08", "BI-SY-09", "OE-SY-16", "OT-SY-18", "OT-SY-19")
+SE_CODES = ("DS-SY-06", "BI-SY-08", "BI-SY-09", "OE-SY-15", "OT-SY-18", "OT-SY-19")
 PROJECT_PATH = re.compile(r"^/api/projects/[^/?#]+$")
 RBAC_REFERENCE = """# 읽기 권한 및 접근 확인
 
 - 수집 대상: Microsoft Foundry, Azure 자체 호스팅 Agent, Azure Monitor, 비용·보안 권고.
 - 진단은 별도 Reader 계정으로 실행합니다. 관리자 준비와 진단 수집을 분리합니다.
-- 기본 읽기 권한
-  - 구독·리소스·프로젝트·모델 배포·진단 설정: 구독 Reader.
-  - 일반 Azure Monitor 메트릭: Reader로 우선 확인. Monitoring Reader는 선택.
-- 추가 읽기 권한
-  - Foundry Agent·평가: 지정 프로젝트의 사용자 지정 읽기 역할.
+- 기본 읽기 권한 (관리자 setup apply에서 함께 부여)
+  - 승인 구독: Reader, Cost Management Reader, Log Analytics Reader, Security Reader.
+  - Foundry Agent·평가: 승인 구독의 사용자 지정 읽기 역할.
   - v2 DataActions: agents/read, evaluations/read, assets/read.
-  - Agent 귀속 로그: 지정 workspace의 Log Analytics Reader 및 계측.
-  - 비용: 계약·공개 정책에 따라 Cost Management Reader.
-  - Defender 권고: 보안 정책에 따라 Security Reader 및 기능 활성화.
+  - Entra Agent ID: AgentIdentity.Read.All, AgentIdentityBlueprint.Read.All, Application.Read.All과 관리자 동의.
+  - 승인 구독 밖 workspace·청구 범위 접근과 제품 기능·라이선스는 별도 확인.
 - 최소 권한의 한계
   - agents/read의 서비스 권한 단위에는 대화 읽기도 포함되지만 수집기는 대화 본문을 조회하지 않습니다.
   - assets/read는 프로젝트 asset 메타데이터 읽기를 포함합니다.
@@ -104,18 +101,18 @@ def check_subscription(
                 raise AccessError("error", "구독 밖의 리소스 ID 응답")
             results.append(probe(http, sid, "DS-SY-06", rid, "GET",
                                  ARM + rid + "/deployments?api-version=2024-10-01"))
-            results.append(probe(http, sid, "OE-SY-16", rid, "GET",
+            results.append(probe(http, sid, "OE-SY-15", rid, "GET",
                                  ARM + rid + "/providers/Microsoft.Insights/diagnosticSettings"
                                  "?api-version=2021-05-01-preview"))
             results.append(probe(http, sid, "OT-SY-18", rid, "GET",
                                  ARM + rid + "/providers/Microsoft.Insights/metrics"
                                  "?api-version=2018-01-01"))
-        results.append(probe(http, sid, "OE-SY-16", scope, "GET",
+        results.append(probe(http, sid, "OE-SY-15", scope, "GET",
                              ARM + scope + "/providers/Microsoft.Insights/diagnosticSettings"
                              "?api-version=2021-05-01-preview"))
         for resource in resources:
             if resource.get("type", "").lower() == "microsoft.operationalinsights/workspaces":
-                results.append(probe(http, sid, "OE-SY-16", resource["id"], "GET",
+                results.append(probe(http, sid, "OE-SY-15", resource["id"], "GET",
                                      ARM + resource["id"] + "?api-version=2022-10-01"))
         for project in projects:
             if project["subscription_id"] != sid:
@@ -176,7 +173,7 @@ def check_subscription(
 def check_entra(credential: Credential, tenant_id: str) -> list[Result]:
     http = ReaderHTTP(credential)
     try:
-        v1, beta = MSGRAPH + "/v1.0", MSGRAPH + "/beta"
+        v1 = MSGRAPH + "/v1.0"
         return [
             probe(http, tenant_id, "DS-SY-05", "agentIdentityBlueprint", "GET",
                   v1 + "/applications/microsoft.graph.agentIdentityBlueprint?$top=1", audience=MSGRAPH_SCOPE),
@@ -184,10 +181,6 @@ def check_entra(credential: Credential, tenant_id: str) -> list[Result]:
                   v1 + "/servicePrincipals/microsoft.graph.agentIdentity?$top=1", audience=MSGRAPH_SCOPE),
             probe(http, tenant_id, "OE-SY-14", "servicePrincipals", "GET",
                   v1 + "/servicePrincipals?$top=1&$select=id", audience=MSGRAPH_SCOPE),
-            probe(http, tenant_id, "OE-SY-15", "conditionalAccess", "GET",
-                  beta + "/identity/conditionalAccess/policies?$top=1", audience=MSGRAPH_SCOPE),
-            probe(http, tenant_id, "OE-SY-15", "riskyAgents", "GET",
-                  beta + "/identityProtection/riskyAgents?$top=1", audience=MSGRAPH_SCOPE),
         ]
     finally:
         http.close()
@@ -221,7 +214,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--subscriptions", nargs="+", type=uuid_arg)
     parser.add_argument("--projects-file", type=Path)
     parser.add_argument("--foundry-profile", choices=["agents_v1", "classic_v1"], default="agents_v1")
-    parser.add_argument("--no-entra", action="store_true", help="Microsoft Graph 읽기 권한(Entra Agent ID) 점검 생략")
     parser.add_argument("--rbac-path", type=Path, default=Path(".wasm-agent") / "permissions.md")
     parser.add_argument("--output", type=Path, default=Path(".wasm-agent") / "permissions.json")
     args = parser.parse_args(argv)
@@ -260,7 +252,7 @@ def main(argv: list[str] | None = None) -> int:
                 groups = list(executor.map(
                     lambda sid: check_subscription(credential, sid, projects, args.foundry_profile), subscriptions,
                 ))
-            entra_results = [] if args.no_entra else check_entra(credential, args.tenant_id)
+            entra_results = check_entra(credential, args.tenant_id)
         results = [result for group in groups for result in group] + entra_results
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(

@@ -17,7 +17,6 @@ from pydantic import BaseModel
 
 from wasm_agent.azure import redact
 from wasm_agent.models import (
-    AgentCaPolicy,
     AgentEvidence,
     Budget,
     Collection,
@@ -32,11 +31,10 @@ from wasm_agent.models import (
     PolicyAssignment,
     ProposalFinding,
     ProposalObservation,
-    RiskyAgent,
     SecureScore,
     SecurityRecommendation,
 )
-from wasm_agent.proposals import DOMAINS
+from wasm_agent.proposals import DOMAINS, TITLES
 
 LABELS = {
     "permission_denied": "조회 권한 부족",
@@ -64,14 +62,14 @@ SE_NAMES = {
     "DS-SY-06": "허용 모델 사용 관리",
     "BI-SY-08": "배포 전 Agent 품질 평가",
     "BI-SY-09": "AI 워크로드 보안 관리",
-    "OE-SY-16": "Agent 활동 감사 로그 관리",
+    "OE-SY-15": "Agent 활동 감사 로그 관리",
     "OT-SY-18": "장기 미사용 Agent 관리",
     "OT-SY-19": "Agent별 비용 식별 및 배분",
     "DS-SY-05": "Agent ID 템플릿(Blueprint) 정의",
     "DP-SY-12": "Agent ID 부여율(Azure Agent 기준)",
     "OE-SY-13": "소유자·후원자 미지정 Agent",
     "OE-SY-14": "Agent 부여 권한·과다 권한",
-    "OE-SY-15": "Agent 조건부 접근·위험 Agent",
+    **TITLES,
 }
 FIELD_NAMES = {
     "tenant_id": "테넌트", "subscription_id": "구독", "resource_group": "리소스 그룹",
@@ -85,7 +83,8 @@ FIELD_NAMES = {
     "usage_coverage_start": "사용 관측 시작 시각",
     "evaluated_before_deploy": "배포 전 평가 여부", "guardrail_applied": "안전장치 적용 여부",
 }
-RATIOS = {"DS-SY-06", "BI-SY-08", "OT-SY-18", "OT-SY-19", "DP-SY-12", "OE-SY-13", "OE-SY-14", "OE-SY-15"}
+RATIOS = {"DS-SY-06", "BI-SY-08", "OT-SY-18", "OT-SY-19", "DP-SY-12", "OE-SY-13", "OE-SY-14"}
+RATIOS.update(TITLES)
 EMPTY = "수집된 데이터 없음 - 미수행 또는 0건으로 확정하지 않음"
 ORIGINAL = "원본 JSON"
 FONT_SIZE = 14
@@ -110,7 +109,7 @@ def metric(finding: Finding) -> str:
     value = finding.metric_value
     if finding.se_code in RATIOS:
         return f"{value * 100:.2f}%"
-    return f"{value:g}" + ("일" if finding.se_code == "OE-SY-16" else "건")
+    return f"{value:g}" + ("일" if finding.se_code == "OE-SY-15" else "건")
 
 
 def _value(value: Any) -> Any:
@@ -275,8 +274,6 @@ def write_workbook(
         ("예산 Raw 데이터", Budget, data.budgets),
         ("Blueprint Raw 데이터", EntraBlueprint, data.entra_blueprints),
         ("AgentID Raw 데이터", EntraAgentIdentity, data.entra_agent_identities),
-        ("조건부접근 Raw 데이터", AgentCaPolicy, data.agent_ca_policies),
-        ("위험Agent Raw 데이터", RiskyAgent, data.risky_agents),
         ("수집이슈 Raw 데이터", Issue, data.issues),
     ]
     for title, model, records in sections:

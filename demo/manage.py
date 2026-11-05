@@ -186,11 +186,8 @@ def collect_live(setup: dict, lab: dict, cli: AzureCLI, options: dict) -> int:
                    "--output-dir", str(ROOT / "output")]
         if options.get("collect_all_subscriptions"):
             command.append("--all-subscriptions")
-        if options.get("collect_entra"):
-            ensure_graph_roles(cli, setup["principal_id"])
-            time.sleep(30)
-        else:
-            command.append("--no-entra")
+        ensure_graph_roles(cli, setup["principal_id"])
+        time.sleep(30)
         code = child(command, environment)
         if code == 1:
             time.sleep(15)
@@ -215,12 +212,6 @@ def collect_live(setup: dict, lab: dict, cli: AzureCLI, options: dict) -> int:
                     ensure_assignment(cli, setup["principal_id"], "ServicePrincipal", scope, ROLES[role])
                     changes.append(record)
             if changes:
-                before = state / "before-additional-read-roles"
-                before.mkdir(exist_ok=True)
-                output = ROOT / "output"
-                for source in [*output.glob("report-*.xlsx"), *output.glob("raw-data-*.json")]:
-                    if source.exists():
-                        source.replace(before / source.name)
                 time.sleep(30)
                 code = child(command, environment)
                 if code not in (0, 2):

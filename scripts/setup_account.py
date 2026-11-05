@@ -25,8 +25,8 @@ ROLES = {
 GRAPH_APP_ID = "00000003-0000-0000-c000-000000000000"
 ENTRA_GRAPH_ROLES = (
     "AgentIdentity.Read.All", "AgentIdentityBlueprint.Read.All", "Application.Read.All",
-    "Policy.Read.All", "IdentityRiskyAgent.Read.All",
 )
+DEFAULT_ROLES = ("Reader", "Cost Management Reader", "Log Analytics Reader", "Security Reader")
 PROJECT_SCOPE = re.compile(
     r"^/subscriptions/([0-9a-fA-F-]{36})/resourceGroups/([^/]+)/providers/"
     r"Microsoft\.CognitiveServices/accounts/([^/]+)/projects/([^/]+)$",
@@ -87,7 +87,7 @@ class AzureCLI:
 
 
 def parser() -> argparse.ArgumentParser:
-    result = argparse.ArgumentParser(description="관리자 전용: 구독 Reader 및 선택 읽기 역할 설정")
+    result = argparse.ArgumentParser(description="관리자 전용: 전체 진단에 필요한 읽기 권한 일괄 설정")
     result.add_argument("--config-file", type=Path)
     result.add_argument("--result-file", type=Path)
     result.add_argument("--tenant-id", type=guid)
@@ -107,7 +107,6 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--foundry-project-scopes", nargs="+", default=[])
     result.add_argument("--create-foundry-read-role", action="store_true")
     result.add_argument("--entra-reader", action="store_true", help="진단 SP에 Entra Agent ID용 Graph 읽기 권한 부여")
-    result.add_argument("--no-entra", action="store_true", help="verify에서 Graph 읽기 권한 점검 생략")
     result.add_argument("--foundry-read-role-id", type=guid)
     mode = result.add_mutually_exclusive_group()
     mode.add_argument("--apply", action="store_true")
@@ -152,17 +151,10 @@ def validate(args: argparse.Namespace) -> None:
         raise ValueError("중복 구독 ID를 제거하세요.")
     if not re.fullmatch(r"[A-Za-z0-9_.@+-]{1,128}", args.account_name):
         raise ValueError("계정 이름/UPN은 영문·숫자·_.@+-만 허용합니다.")
-    if args.create_principal and args.account_type == "user":
-        raise ValueError(
-            "user 모드는 기존 Entra 사용자를 지정하세요. 새 사용자는 고객 관리자가 "
-            "Entra 관리센터에서 생성하세요. 비밀번호를 CLI 인자·출력·파일로 전달하지 않습니다."
-        )
+    if args.account_type != "service-principal":
+        raise ValueError("전체 진단은 service-principal 모드의 진단 앱을 사용하세요. 사용자 계정으로 대체하지 않습니다.")
     if args.create_foundry_read_role and args.foundry_read_role_id:
         raise ValueError("역할 생성과 기존 역할 지정 중 하나만 선택하세요.")
-    if bool(args.foundry_project_scopes) != bool(
-        args.create_foundry_read_role or args.foundry_read_role_id
-    ):
-        raise ValueError("Foundry 역할 옵션과 프로젝트 scope 목록을 함께 지정하세요.")
     for scope in args.foundry_project_scopes:
         match = PROJECT_SCOPE.fullmatch(scope)
         if not match or guid(match.group(1)) not in args.subscriptions:
@@ -172,16 +164,7 @@ def validate(args: argparse.Namespace) -> None:
 
 
 def selected_roles(args: argparse.Namespace) -> list[str]:
-    names = ["Reader"]
-    for flag, name in [
-        ("cost_reader", "Cost Management Reader"),
-        ("monitoring_reader", "Monitoring Reader"),
-        ("log_analytics_reader", "Log Analytics Reader"),
-        ("security_reader", "Security Reader"),
-    ]:
-        if getattr(args, flag):
-            names.append(name)
-    return names
+    return [*DEFAULT_ROLES, *(["Monitoring Reader"] if args.monitoring_reader else [])]
 
 
 def role_spec(subscriptions: list[str]) -> dict[str, Any]:
@@ -200,7 +183,7 @@ def verify_custom_role(role: dict[str, Any], expected: dict[str, Any]) -> None:
         if permission.get(key):
             raise ValueError(f"Foundry 읽기 역할의 {key}는 비어 있어야 합니다.")
     if set(permission.get("dataActions", [])) != set(expected["DataActions"]):
-        raise ValueError("Foundry 읽기 역할의 DataActions가 승인된 두 read 작업과 다릅니다.")
+        raise ValueError("Foundry 읽기 역할의 DataActions가 승인된 세 read 작업과 다릅니다.")
     allowed_scopes = {s.lower() for s in expected["AssignableScopes"]}
     actual_scopes = {s.lower() for s in role.get("assignableScopes", [])}
     if actual_scopes != allowed_scopes:
@@ -315,11 +298,12 @@ def execute(args: argparse.Namespace, cli: AzureCLI) -> None:
         (f"/subscriptions/{sid}", name, ROLES[name])
         for sid in args.subscriptions for name in roles
     ]
-    if args.foundry_project_scopes:
+    scopes = args.foundry_project_scopes or [f"/subscriptions/{sid}" for sid in args.subscriptions]
+    if scopes:
         spec = role_spec(args.subscriptions)
         role_name = args.foundry_read_role_id or spec["Name"]
         found = cli.run("role", "definition", "list", "--name", role_name, "--subscription", args.subscriptions[0])
-        if not found and args.create_foundry_read_role:
+        if not found and not args.foundry_read_role_id:
             cli.run(
                 "role", "definition", "create", "--role-definition",
                 json.dumps(spec), "--subscription", args.subscriptions[0],
@@ -332,19 +316,15 @@ def execute(args: argparse.Namespace, cli: AzureCLI) -> None:
             raise ValueError("Foundry 사용자 지정 역할이 유일하게 확인되지 않았습니다.")
         verify_custom_role(found[0], spec)
         role_id = found[0]["name"]
-        assignments.extend((scope, spec["Name"], role_id) for scope in args.foundry_project_scopes)
+        assignments.extend((scope, spec["Name"], role_id) for scope in scopes)
     print("| 주체 object ID | scope | 역할 | 검증 |")
     print("| --- | --- | --- | --- |")
     for scope, name, role_id in assignments:
         ensure_assignment(cli, principal, principal_type, scope, role_id)
         print(f"| {principal} | {scope} | {name} | 확인됨 |")
-    graph_roles: list[str] = []
-    if args.entra_reader:
-        if args.account_type != "service-principal":
-            raise ValueError("--entra-reader는 서비스 주체에만 사용할 수 있습니다.")
-        graph_roles = ensure_graph_roles(cli, principal)
-        for role in graph_roles:
-            print(f"| {principal} | Microsoft Graph (application) | {role} | 확인됨 |")
+    graph_roles = ensure_graph_roles(cli, principal)
+    for role in graph_roles:
+        print(f"| {principal} | Microsoft Graph (application) | {role} | 확인됨 |")
     if args.account_type == "service-principal":
         print(
             f"SP client ID: {identity.get('appId')}. 시크릿은 생성하지 않았습니다. "
@@ -418,8 +398,6 @@ def run_verify(args: argparse.Namespace) -> int:
     ]
     if args.projects_file:
         command.extend(["--projects-file", str(args.projects_file.resolve())])
-    if args.no_entra:
-        command.append("--no-entra")
     return subprocess.run(command, env=environment, cwd=root, check=False).returncode
 
 
@@ -429,13 +407,15 @@ def main(argv: list[str] | None = None) -> int:
         load_config(args)
         validate(args)
         if (args.login or args.verify) and (
-            args.create_principal or selected_roles(args) != ["Reader"]
+            args.create_principal or any((
+                args.cost_reader, args.monitoring_reader, args.log_analytics_reader, args.security_reader,
+            ))
             or args.foundry_project_scopes or args.create_foundry_read_role
             or args.foundry_read_role_id or args.entra_reader
         ):
             raise ValueError("역할/계정 생성 옵션은 plan 또는 apply에서만 사용하세요.")
-        if (args.certificate_path or args.projects_file or args.no_entra) and not args.verify:
-            raise ValueError("--certificate-path, --projects-file, --no-entra는 verify에서만 사용하세요.")
+        if (args.certificate_path or args.projects_file) and not args.verify:
+            raise ValueError("--certificate-path, --projects-file은 verify에서만 사용하세요.")
         if args.login:
             environment = os.environ.copy()
             environment["AZURE_CORE_LOGIN_EXPERIENCE_V2"] = "off"
@@ -457,9 +437,11 @@ def main(argv: list[str] | None = None) -> int:
                 "create_principal": args.create_principal,
                 "subscription_roles": selected_roles(args),
                 "subscriptions": args.subscriptions,
-                "foundry_project_scopes": args.foundry_project_scopes,
-                "foundry_custom_role": role_spec(args.subscriptions) if args.foundry_project_scopes else None,
-                "graph_application_roles": list(ENTRA_GRAPH_ROLES) if args.entra_reader else [],
+                "foundry_project_scopes": args.foundry_project_scopes or [
+                    f"/subscriptions/{sid}" for sid in args.subscriptions
+                ],
+                "foundry_custom_role": role_spec(args.subscriptions),
+                "graph_application_roles": list(ENTRA_GRAPH_ROLES),
             }, ensure_ascii=False, indent=2))
             return 0
         execute(args, AzureCLI())

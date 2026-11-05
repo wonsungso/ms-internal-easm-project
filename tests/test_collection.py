@@ -98,7 +98,6 @@ def test_three_subscription_pipeline_and_cross_subscription_model_link(tmp_path:
     settings.tenant_id, settings.expected_principal_id = TENANT, PRINCIPAL
     settings.subscriptions = [entry["subscription_id"] for entry in subs]
     settings.evidence_dir = tmp_path / "evidence"
-    settings.entra = False
 
     def request(method: str, url: str, **kwargs: object) -> Mock:
         body = kwargs.get("json") or {}
@@ -146,6 +145,8 @@ def test_three_subscription_pipeline_and_cross_subscription_model_link(tmp_path:
                 "score": {"current": 10, "max": 20, "percentage": 0.5},
             }}]}
         elif path.endswith("/budgets"):
+            payload = {"value": []}
+        elif urlparse(url).hostname == "graph.microsoft.com":
             payload = {"value": []}
         else:
             raise AssertionError(f"Unmocked API: {method} {path}")
@@ -279,16 +280,6 @@ def test_entra_collector_reads_graph_keeps_counts_not_people_and_isolates_failur
                 {"appRoleId": read_role, "resourceId": graph_sp},
                 {"appRoleId": "00000000-0000-0000-0000-000000000000", "resourceId": graph_sp},
             ]
-        if "conditionalAccess" in url:
-            return [
-                {"id": "p0", "state": "enabled", "conditions": {"agents": None}},
-                {"id": "p1", "displayName": "agents", "state": "enabled", "grantControls": {"builtInControls": ["block"]},
-                 "conditions": {"agents": {"includeAgentIdServicePrincipals": ["All"],
-                                           "excludeAgentIdServicePrincipals": [identity],
-                                           "agentIdRiskLevels": "high"}}},
-            ]
-        if "riskyAgents" in url:
-            return [{"id": "r1", "riskLevel": "high", "riskState": "atRisk"}]
         raise AssertionError(url)
 
     http = Mock(subscription="", last_ref="fixture://graph")
@@ -304,26 +295,24 @@ def test_entra_collector_reads_graph_keeps_counts_not_people_and_isolates_failur
     assert (agent.owner_count, agent.sponsor_count, agent.owners_all_disabled) == (1, 0, True)
     assert agent.app_roles == ["Mail.ReadWrite.All", "User.Read.All"]
     assert agent.overprivileged_roles == ["Mail.ReadWrite.All"]
-    policy = result.agent_ca_policies[0]
-    assert (policy.include_all_agents, policy.exclude_agent_ids, policy.agent_risk_levels) == (True, [identity], ["high"])
-    assert len(result.agent_ca_policies) == 1 and result.risky_agents[0].risk_state == "atRisk"
+    assert not result.agent_ca_policies and not result.risky_agents
     assert "Departed Person" not in result.model_dump_json()
     assert all(result.facts[key] for key in (
-        "entra_blueprints_complete", "entra_agents_complete", "conditional_access_complete", "risky_agents_complete",
+        "entra_blueprints_complete", "entra_agents_complete",
     ))
 
     def denied(url: str) -> list[dict]:
-        if "conditionalAccess" in url:
+        if "agentIdentityBlueprint" in url:
             raise AccessError("permission_denied", "HTTP 403")
         return list_graph(url)
 
     http.list_graph.side_effect = denied
     partial = EntraCollector(http, NOW, criteria).discover()
     assert [(item.collector, item.reason, item.target) for item in partial.issues] == [
-        ("conditional_access", "permission_denied", "tenant"),
+        ("entra_blueprints", "permission_denied", "tenant"),
     ]
-    assert partial.issues[0].required_roles == ["Policy.Read.All"]
-    assert "conditional_access_complete" not in partial.facts and partial.facts["entra_agents_complete"]
+    assert partial.issues[0].required_roles == ["AgentIdentityBlueprint.Read.All"]
+    assert "entra_blueprints_complete" not in partial.facts and partial.facts["entra_agents_complete"]
 
 
 def test_entra_graph_requests_use_only_the_graph_host_and_reject_foreign_pagination() -> None:
@@ -432,7 +421,6 @@ def test_auto_enumeration_handles_hundreds_and_filters_tenant_and_state(tmp_path
     settings.tenant_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
     settings.expected_principal_id = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
     settings.evidence_dir = tmp_path / "evidence"
-    settings.entra = False
     ids = [str(UUID(int=index)) for index in range(1, 201)]
     rows = [{"subscriptionId": sid, "tenantId": settings.tenant_id, "state": "Enabled"} for sid in ids]
     rows += [
@@ -441,6 +429,7 @@ def test_auto_enumeration_handles_hundreds_and_filters_tenant_and_state(tmp_path
     ]
     http = Mock()
     http.list_arm.return_value = rows
+    http.list_graph.return_value = []
 
     def per_subscription(sid, credential, resolved, store, instant, criteria, tags):
         assert set(resolved.subscriptions) == set(ids)
@@ -454,4 +443,18 @@ def test_auto_enumeration_handles_hundreds_and_filters_tenant_and_state(tmp_path
     assert set(result.completed_subscriptions) == set(ids)
     assert worker.call_count == 200
     assert result.facts["inventory_complete"] is True
-    http.close.assert_called_once()
+    assert http.close.call_count == 2
+    assert result.facts["entra_blueprints_complete"] and result.facts["entra_agents_complete"]
+
+
+def test_entra_cannot_be_disabled_by_cli_or_settings() -> None:
+    from pydantic import ValidationError
+
+    from wasm_agent.cli import main
+    from wasm_agent.models import Settings
+
+    with pytest.raises(SystemExit) as exc:
+        main(["collect", "--no-entra", "--dry-run"])
+    assert exc.value.code == 2
+    with pytest.raises(ValidationError):
+        Settings.model_validate({"entra": False})

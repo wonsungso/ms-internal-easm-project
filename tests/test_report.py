@@ -38,8 +38,7 @@ SHEETS = [
     "읽는법", "진단 체크리스트", "추가 제안 현황", "Agent Raw 데이터", "제안 Raw 데이터", "평가 Raw 데이터",
     "모델배포 Raw 데이터",
     "비용 Raw 데이터", "로그 Raw 데이터", "보안 Raw 데이터", "보안점수 Raw 데이터", "정책할당 Raw 데이터",
-    "예산 Raw 데이터", "Blueprint Raw 데이터", "AgentID Raw 데이터", "조건부접근 Raw 데이터",
-    "위험Agent Raw 데이터", "수집이슈 Raw 데이터",
+    "예산 Raw 데이터", "Blueprint Raw 데이터", "AgentID Raw 데이터", "수집이슈 Raw 데이터",
     "필드누락사유", "증거참조", "증거 첨부 상태", "수집 메타데이터",
 ]
 SECRETS = (
@@ -124,14 +123,17 @@ def test_fixture_cli_is_offline_and_writes_only_workbook_and_raw_data(tmp_path: 
             "--fixture", str(ROOT / "tests" / "fixtures" / "three_subscriptions.json"),
             "--output-dir", str(tmp_path),
         ]) == 0
-    names = sorted(path.name for path in tmp_path.iterdir())
+    runs = list(tmp_path.iterdir())
+    assert len(runs) == 1 and runs[0].is_dir()
+    assert re.fullmatch(r"\d{8}T\d{12}Z(?:-\d+)?", runs[0].name)
+    names = sorted(path.name for path in runs[0].iterdir())
     assert len(names) == 2
     assert re.fullmatch(r"raw-data-\d{8}T\d{6}Z\.json", next(n for n in names if n.startswith("raw-data-")))
     assert re.fullmatch(r"report-\d{8}T\d{6}Z\.xlsx", next(n for n in names if n.startswith("report-")))
     result = load_result(tmp_path)
     assert result["mode"] == "fixture"
     agents = result["collection"]["agents"]
-    assert len(agents) == 3 and len(result["findings"]) == 6
+    assert len(agents) == 3 and len(result["findings"]) == 23
     assert {
         "collected_at", "tenant_id", "subscription_id", "resource_group", "platform",
         "agent_id", "agent_name", "resource_id", "hosting_type", "owner", "sponsor",
@@ -144,8 +146,8 @@ def test_fixture_cli_is_offline_and_writes_only_workbook_and_raw_data(tmp_path: 
 def test_raw_data_keeps_machine_contract_and_manifest_matches_files(tmp_path: Path) -> None:
     data, output, source, workbook = prepared(tmp_path)
     before = data.model_dump(mode="json")
-    assert workbook == output / report_name(data)
-    assert {path.name for path in output.iterdir()} == {workbook.name, raw_name(data)}
+    assert workbook.parent.parent == output and workbook.name == report_name(data)
+    assert {path.name for path in workbook.parent.iterdir()} == {workbook.name, raw_name(data)}
     assert workbook.name[len("report-"):-len(".xlsx")] == raw_name(data)[len("raw-data-"):-len(".json")]
     result = load_result(output)
     assert set(result) == {
@@ -170,6 +172,35 @@ def test_load_result_rejects_missing_or_unsupported_files(tmp_path: Path) -> Non
     (tmp_path / "raw-data-20261104T000000Z.json").write_text(json.dumps({"schema_version": 2}), encoding="utf-8")
     with pytest.raises(ValueError, match="스키마"):
         load_result(tmp_path)
+
+
+def test_legacy_audit_code_migrates_without_reusing_retired_risk_score(tmp_path: Path) -> None:
+    data = sample().model_dump(mode="json")
+    data["agent_ca_policies"] = []
+    data["risky_agents"] = []
+    data["agents"][0]["se_codes"] = ["OE-SY-15", "OE-SY-16"]
+    data["issues"].append({
+        "collector": "risky_agents", "target": "tenant", "reason": "license_missing", "detail": "legacy",
+    })
+    payload = {
+        "schema_version": 1, "collection": data, "mode": "fixture",
+        "findings": [
+            finding(se_code="OE-SY-15", level="L1", metric_value=0).model_dump(mode="json"),
+            finding(se_code="OE-SY-16", level="L3", metric_value=365).model_dump(mode="json"),
+        ],
+    }
+    (tmp_path / raw_name(sample())).write_text(json.dumps(payload), encoding="utf-8")
+    result = load_result(tmp_path)
+    assert [(row["se_code"], row["level"], row["metric_value"]) for row in result["findings"]] == [
+        ("OE-SY-15", "L3", 365),
+    ]
+    assert "risky_agents" not in result["collection"] and "agent_ca_policies" not in result["collection"]
+    assert result["collection"]["agents"][0]["se_codes"] == ["OE-SY-15"]
+    assert not any(row["collector"] == "risky_agents" for row in result["collection"]["issues"])
+    with NO_AZURE:
+        assert main(["package", "--output-dir", str(tmp_path)]) == 0
+    headers = load_workbook(tmp_path / report_name(sample())).sheetnames
+    assert "위험Agent Raw 데이터" not in headers and "조건부접근 Raw 데이터" not in headers
 
 
 # --- evidence attachment and provenance ---
@@ -264,7 +295,8 @@ def test_package_cli_rebuilds_workbook_from_raw_data_without_azure_or_evidence(t
     after = load_result(output)
     for key in ("collection", "findings", "evidence", "provenance", "mode"):
         assert after[key] == before[key]
-    assert {path.name for path in output.iterdir()} == {workbook.name, latest_raw(output).name}
+    assert {path.name for path in workbook.parent.iterdir()} == {workbook.name, latest_raw(output).name}
+    assert list(output.iterdir()) == [workbook.parent]
     assert re.fullmatch(r"raw-data-\d{8}T\d{6}Z\.json", latest_raw(output).name)
     assert after["manifest"]["files"][0]["sha256"] == hashlib.sha256(workbook.read_bytes()).hexdigest()
     status = record(load_workbook(workbook)["증거 첨부 상태"])
@@ -287,12 +319,12 @@ def test_package_cli_rejects_mode_mismatch_and_missing_raw_data(tmp_path: Path) 
 def test_failed_replace_preserves_existing_files_and_leaves_no_pending_files(tmp_path: Path) -> None:
     data, output, _, _ = prepared(tmp_path)
     (output / "unrelated.txt").write_bytes(b"keep")
-    originals = {path.name: path.read_bytes() for path in output.iterdir()}
+    originals = {path.relative_to(output): path.read_bytes() for path in output.rglob("*") if path.is_file()}
     data.agents[0].agent_name = "new name"
     with patch("wasm_agent.report.os.replace", side_effect=OSError("locked")), pytest.raises(OSError):
         write_reports(data, [], output)
-    assert {path.name: path.read_bytes() for path in output.iterdir()} == originals
-    assert not [path for path in output.iterdir() if "pending" in path.name]
+    assert {path.relative_to(output): path.read_bytes() for path in output.rglob("*") if path.is_file()} == originals
+    assert not [path for path in output.rglob("*") if "pending" in path.name]
 
 
 def test_failed_replace_on_first_write_leaves_empty_output(tmp_path: Path) -> None:
@@ -300,6 +332,53 @@ def test_failed_replace_on_first_write_leaves_empty_output(tmp_path: Path) -> No
     with patch("wasm_agent.report.os.replace", side_effect=OSError("locked")), pytest.raises(OSError):
         write_reports(sample(), [], output)
     assert list(output.iterdir()) == []
+
+
+def test_repeated_collection_timestamp_creates_distinct_runs_without_overwrite(tmp_path: Path) -> None:
+    data = sample()
+    first = write_reports(data, [], tmp_path)
+    original = first.read_bytes()
+    data.agents[0].agent_name = "second run"
+    second = write_reports(data, [], tmp_path)
+    assert first.parent != second.parent and first.name == second.name
+    assert first.read_bytes() == original
+    assert latest_raw(tmp_path).parent == second.parent
+    assert load_result(first.parent)["collection"]["agents"][0]["agent_name"] == "테스트 Agent"
+    assert load_result(second.parent)["collection"]["agents"][0]["agent_name"] == "second run"
+
+
+def test_run_collision_uses_sequence_and_latest_discovery_is_numeric(tmp_path: Path) -> None:
+    from wasm_agent.report import create_run_directory
+
+    fixed = datetime(2026, 11, 5, 1, 2, 3, 456789, tzinfo=UTC)
+    with patch("wasm_agent.report.datetime", wraps=datetime) as clock:
+        clock.now.return_value = fixed
+        runs = [create_run_directory(tmp_path) for _ in range(12)]
+    for run in runs:
+        (run / raw_name(sample())).write_text("{}", encoding="utf-8")
+    assert len(set(runs)) == 12
+    assert runs[-1].name.endswith("-11")
+    assert latest_raw(tmp_path).parent == runs[-1]
+
+
+def test_latest_raw_supports_legacy_files_without_searching_unrelated_folders(tmp_path: Path) -> None:
+    legacy = tmp_path / "raw-data-20261104T000000Z.json"
+    legacy.write_text("{}", encoding="utf-8")
+    ignored = tmp_path / "unrelated"
+    ignored.mkdir()
+    (ignored / "raw-data-20990101T000000Z.json").write_text("{}", encoding="utf-8")
+    assert latest_raw(tmp_path) == legacy
+    current = tmp_path / "20261105T000000000001Z"
+    current.mkdir()
+    (current / "raw-data-20200101T000000Z.json").write_text("{}", encoding="utf-8")
+    assert latest_raw(tmp_path).parent == current
+
+
+def test_package_rebuilds_explicit_legacy_directory_without_nesting(tmp_path: Path) -> None:
+    path = write_reports(sample(), [], tmp_path, new_run=False)
+    with NO_AZURE:
+        assert main(["package", "--output-dir", str(tmp_path)]) == 0
+    assert set(tmp_path.iterdir()) == {path, tmp_path / raw_name(sample())}
 
 
 # --- workbook structure ---

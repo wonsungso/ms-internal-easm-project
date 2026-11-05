@@ -32,7 +32,7 @@ DOMAINS = {
     "DS-SY-09": ("2. Design", "5. Operate", "외부 연계(커넥터·API·MCP)의 허용 기준과 사전 승인 목록(Design 기술)"),
     "OE-SY-19": ("5. Operate", "", "장애 접수와 보안 사고 시 즉시 중지·격리하는 긴급 절차(Operate 질문)"),
     "OT-SY-21": ("6. Optimize", "", "Agent별·조직별 비용 산정과 자동 측정 체계(Optimize 질문)"),
-    "OE-SY-20": ("5. Operate", "2. Design", "로그·운영 기록의 보존·삭제 관리(OE-SY-16 보완). 데이터 지역 결정은 Design 보조"),
+    "OE-SY-20": ("5. Operate", "2. Design", "로그·운영 기록의 보존·삭제 관리(OE-SY-15 보완). 데이터 지역 결정은 Design 보조"),
     "BI-SY-14": ("3. Build", "4. Deploy", "개발·테스트·운영 환경 구성을 Azure Policy로 통제(Build 기술: 환경 분리). 승인되지 않은 구성의 배포 제한은 Deploy 보조"),
     "BI-SY-12": ("3. Build", "5. Operate", "프롬프트·설정·모델·소스의 버전 관리(Build 기술). 변경 승인과 원복은 Deploy·Operate 보조"),
 }
@@ -303,7 +303,7 @@ def evaluate_proposals(data: Collection, tags: dict[str, Any]) -> list[ProposalF
         refs = sorted({ref for item in observations(data, code) for ref in item.evidence_refs})
         findings.append(ProposalFinding(
             code=code, title=title, area=DOMAINS[code][0], status=status, metrics=metrics, observation=summary,
-            limit=LIMITS[code] + ". 승인 전 제안이라 Level은 판정하지 않음", reason=reason,
+            limit=LIMITS[code] + ". Level은 진단 체크리스트에서 증적 포함 기준으로 판정", reason=reason,
             evidence_refs=refs,
         ))
     return findings

@@ -38,7 +38,7 @@ python -m demo.diagnostics codespace --codespace '<Codespace 이름>' --apply
 - 실패한 단계만 같은 명령으로 재개합니다. `.wasm-agent/demo/lab.json`, `runthrough.json`, `chatbot-expansion/`의 배포·평가 영수증을 확인합니다.
 - `collect`는 임시 공개 인증서와 저장소 밖 사용자 전용 개인키를 사용하고 종료 시 새 인증서만 정리합니다. 기존 인증서는 보존합니다. 강제 종료한 경우 별도 확인이 필요합니다.
 - 권한 거부가 실제 확인된 경우에만 설정에 따라 Cost Management Reader 또는 워크스페이스 Log Analytics Reader를 추가합니다. `auto_grant_needed_read_roles: false`로 끌 수 있습니다. 관리자 수집으로 대체하지 않습니다.
-- 결과는 `output/report-<타임스탬프>.xlsx`와 `output/raw-data-<타임스탬프>.json` 두 개입니다. 종료 코드 `2`의 자료 미확보 사유를 보존합니다.
+- 결과는 실행별 `output/<실행시각-UTC>/` 폴더의 Excel과 raw-data JSON 두 개입니다. 재실행·권한 보완 후 수집도 별도 폴더에 보존하며 Codespaces 다운로드도 실행 폴더를 유지합니다. 종료 코드 `2`의 자료 미확보 사유를 보존합니다.
 - `verify`는 기존 수집 결과·역할·인증서 잔여 수·HTTP 상태를 읽고 테스트합니다. 배포·추론·역할 변경은 하지 않습니다. 전체 통합 수집 결과가 있어야 합니다.
 
 ## 제안 항목별 데모 구성

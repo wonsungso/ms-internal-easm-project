@@ -12,7 +12,6 @@ retention_days: 90
 after_run: retain
 auto_grant_needed_read_roles: true
 collect_all_subscriptions: true
-collect_entra: true
 # 허용 모델(주 모델)에 없는 모델 - 모델 허용 비율을 낮춰 평가 결과를 다양하게 만든다
 extra_models:
   - deploymentName: governance-extra-model

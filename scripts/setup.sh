@@ -18,8 +18,9 @@ case "$command" in
     printf '%s\n' \
       'Usage: bash scripts/setup.sh <login|plan|apply|verify> [options]' \
       'Default config: .wasm-agent/setup.json (no secrets).' \
-      'Options: --config-file FILE, --cost-reader, --monitoring-reader,' \
-      '  --log-analytics-reader, --security-reader, --certificate-path FILE.' \
+      'Defaults: Reader, Cost Management Reader, Log Analytics Reader, Security Reader,' \
+      '  Foundry read-only DataActions, and the three required Graph application roles.' \
+      'Options: --config-file FILE, --certificate-path FILE, --projects-file FILE.' \
       'login: human administrator device-code login; SP authentication is separate.' \
       'plan: no Azure calls. apply: explicit role changes. verify: read-only SP checks.'
     exit 0

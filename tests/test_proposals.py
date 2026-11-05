@@ -35,7 +35,7 @@ def by_code(data: Collection) -> dict:
     return {item.code: item for item in evaluate_proposals(data, TAGS)}
 
 
-def test_every_proposal_is_reported_without_levels() -> None:
+def test_every_proposal_has_collection_details() -> None:
     findings = evaluate_proposals(Collection(collected_at=NOW), TAGS)
     assert [item.code for item in findings] == list(TITLES)
 
@@ -47,7 +47,7 @@ def test_every_proposal_maps_to_one_lifecycle_domain() -> None:
                for primary, secondary, _ in DOMAINS.values())
     findings = evaluate_proposals(Collection(collected_at=NOW), TAGS)
     assert {item.code: item.area for item in findings} == {code: v[0] for code, v in DOMAINS.items()}
-    assert all("Level은 판정하지 않음" in item.limit for item in findings)
+    assert all("Level은 진단 체크리스트" in item.limit for item in findings)
     assert {item.status for item in findings} <= {"수집됨", "일부 수집", "수집 불가"}
 
 

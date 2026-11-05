@@ -1,10 +1,11 @@
-# 점검 항목 상세 (System Evidence 20개 + Azure 추가 제안 13개)
+# 점검 항목 상세 (System Evidence 32개)
 
-항목별 점검 내용, Azure Portal 기준 확인 경로, 확인 화면입니다. 요약표는 [README](../README.md#점검-항목-system-evidence-20개--azure-추가-제안-13개)에 있습니다.
+항목별 점검 내용, Azure Portal 기준 확인 경로, 확인 화면입니다. 요약표는 [README](../README.md#점검-항목-system-evidence-32개)에 있습니다.
 
 - 구현 표기: ✅ 구현 / ⚠️ 일부 구현 / ⚠️ 읽기 전용 불가(구현했으나 읽기 전용 역할로는 조회 불가) / ❌ 미구현 (M365·Agent 365·Purview·Power Platform 영역)
 - Azure Portal 기준(참고): 같은 값을 사람이 포털에서 확인하는 경로와 캡처이며 수집기 동작에는 영향이 없습니다
 - 캡처의 빨간 네모는 확인 위치이고 식별자는 마스킹했습니다. 표시 값은 데모 환경 기준이며 고객 환경과 다를 수 있습니다
+- 심사 Level과 점수는 [평가 템플릿](assessment-template.xlsx), [검토 기준·증적 입력](api-notes.md#심사기준-검토와-점수-반영-2026-11-05)을 따릅니다. 아래 구성 수집 사실만으로 승인·유효성·자동화를 확정하지 않습니다
 
 ## DM-SY-01 Agent 제작 허용 사용자 범위 및 허용 Agent 유형 설정
 
@@ -111,7 +112,7 @@
 - **진단 영역:** 3. Build
 - **제품/메뉴:** Microsoft Defender
 - **구현:** ✅ 구현
-- **점검 내용:** AI 리소스 연결 Defender 권고(심각도·상태·최초 평가일·상태 변경일)와 구독 보안 점수 수집. 미조치 권고의 30일 경과는 상태 변경일로, 보안 점수는 `internal_security_score_min`과 비교. 공격 경로 분석·정책 자동 적용은 수집하지 않음. 보안 점수는 Security Reader 필요 가능
+- **점검 내용:** AI 리소스 연결 Defender 권고와 구독 보안 점수 수집. 보안 점수는 `internal_security_score_min`과 비교. 상태 변경일 경과는 참고값이며 30일 내 조치 SLA 충족 증거가 아님. L4에는 실제 조치 이력(`recommendation_sla_verified`)과 정책 자동화 증적이 필요. 보안 점수는 Security Reader 필요 가능
 - **Azure Portal 기준(참고):** Azure Portal > Microsoft Defender for Cloud > Recommendations(AI 리소스 필터), Security posture(보안 점수)
 
 ![BI-SY-09 확인 화면](portal/imgs/BI-SY-09.png)
@@ -212,17 +213,7 @@
 
 ![OE-SY-14 확인 화면](portal/imgs/OE-SY-14.png)
 
-## OE-SY-15 Agent 대상 조건부 접근 정책 적용 및 위험 Agent 탐지 건수
-
-- **진단 영역:** 5. Operate
-- **제품/메뉴:** Microsoft Entra - Conditional Access, ID Protection
-- **구현:** ✅ 구현
-- **점검 내용:** Graph beta로 Agent 대상 조건부 접근 정책(전체 Agent 포함 여부·위험 수준 조건·차단 제어)과 위험 Agent 탐지 목록·미조치 건수 수집. Agent 365 또는 M365 E7 라이선스가 필요하며, 검증 테넌트는 위험 Agent 조회가 "tenant is not licensed"(HTTP 403)로 응답해 `license_missing`으로 기록
-- **Azure Portal 기준(참고):** Azure Portal > Microsoft Entra ID > 보안 > 조건부 액세스 > 정책, ID Protection > 위험 에이전트
-
-![OE-SY-15 확인 화면(조건부 액세스 정책)](portal/imgs/OE-SY-15.png)
-
-## OE-SY-16 Agent 활동 감사 로그 보관 여부 및 보관 기간
+## OE-SY-15 Agent 활동 감사 로그 보관 여부 및 보관 기간
 
 - **진단 영역:** 5. Operate
 - **제품/메뉴:** Microsoft Purview - Audit
@@ -230,7 +221,7 @@
 - **점검 내용:** Agent 관련 리소스의 진단 설정(로그 목적지)과 Log Analytics 보존일을 수집해 `required_retention_days`와 비교. Purview 감사와 동등하지 않은 Azure 대체 증적이며 중앙 workspace가 승인 구독 밖이면 권한 거부로 기록
 - **Azure Portal 기준(참고):** Azure Portal > Microsoft Foundry > (계정) > Monitoring > Diagnostic settings, Log Analytics workspaces > (workspace) > Tables(보존 기간)
 
-![OE-SY-16 확인 화면](portal/imgs/OE-SY-16.png)
+![OE-SY-15 확인 화면](portal/imgs/OE-SY-15.png)
 
 ## OE-SY-17 관리 ID와 ARM 역할 범위
 

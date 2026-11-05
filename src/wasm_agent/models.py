@@ -252,8 +252,9 @@ class Collection(EvidenceModel):
     budgets: list[Budget] = Field(default_factory=list)
     entra_blueprints: list[EntraBlueprint] = Field(default_factory=list)
     entra_agent_identities: list[EntraAgentIdentity] = Field(default_factory=list)
-    agent_ca_policies: list[AgentCaPolicy] = Field(default_factory=list)
-    risky_agents: list[RiskyAgent] = Field(default_factory=list)
+    # Legacy result input only; these diagnostics are no longer collected or exported.
+    agent_ca_policies: list[AgentCaPolicy] = Field(default_factory=list, exclude=True)
+    risky_agents: list[RiskyAgent] = Field(default_factory=list, exclude=True)
     logs: list[LogSetting] = Field(default_factory=list)
     proposal_observations: list[ProposalObservation] = Field(default_factory=list)
     proposals: list[ProposalFinding] = Field(default_factory=list)
@@ -341,7 +342,6 @@ class Settings(BaseModel):
     foundry_profile: Literal["agents_v1", "classic_v1"] = "agents_v1"
     projects: list[ProjectSettings] = Field(default_factory=list)
     manual_agents: Path | None = None
-    entra: bool = True
     allowed_models: list[AllowedModel] = Field(default_factory=list)
     tags: dict[str, Any] = Field(default_factory=dict)
     model_policy_definition_ids: list[str] = Field(default_factory=list)

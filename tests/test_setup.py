@@ -21,7 +21,7 @@ PROJECT = f"/subscriptions/{SID}/resourceGroups/test/providers/Microsoft.Cogniti
 def arguments(*extra: str) -> list[str]:
     return [
         "--tenant-id", TENANT, "--subscriptions", SID,
-        "--account-type", "user", "--account-name", "diagnostic@example.invalid",
+        "--account-type", "service-principal", "--account-name", "diagnostic",
         *extra,
     ]
 
@@ -146,7 +146,7 @@ def test_duplicate_sp_names_are_not_arbitrarily_selected() -> None:
 
 
 def test_user_creation_never_prompts_for_or_passes_password() -> None:
-    assert setup.main(arguments("--create-principal")) == 1
+    assert setup.main(arguments("--account-type", "user", "--create-principal")) == 1
 
 
 @pytest.fixture
@@ -168,11 +168,13 @@ def test_config_plan_needs_no_repeated_ids_or_azure(
     with patch.object(setup, "AzureCLI", side_effect=AssertionError("must not authenticate")):
         assert setup.main([
             "--config-file", str(config_file), "--result-file", str(output), "--dry-run",
-            "--cost-reader",
         ]) == 0
     plan = json.loads(capsys.readouterr().out.split("\n", 1)[1])
     assert plan["subscriptions"] == [SID]
-    assert plan["subscription_roles"] == ["Reader", "Cost Management Reader"]
+    assert plan["subscription_roles"] == list(setup.DEFAULT_ROLES)
+    assert plan["graph_application_roles"] == list(setup.ENTRA_GRAPH_ROLES)
+    assert plan["foundry_custom_role"]["DataActions"] == setup.role_spec([SID])["DataActions"]
+    assert plan["foundry_project_scopes"] == [f"/subscriptions/{SID}"]
     assert not output.exists()
 
 
@@ -221,6 +223,13 @@ def test_apply_reuses_identity_and_persists_only_allowlisted_metadata(
                 "id": PRINCIPAL, "appId": client_id, "displayName": "diagnostic",
                 "passwordCredentials": [{"secretText": "must-not-be-persisted"}],
             }
+        if args[:3] == ("role", "definition", "list"):
+            spec = setup.role_spec([SID])
+            return [{
+                "name": "dddddddd-dddd-4ddd-8ddd-dddddddddddd", "roleType": "CustomRole",
+                "assignableScopes": spec["AssignableScopes"],
+                "permissions": [{"dataActions": spec["DataActions"]}],
+            }]
         if args[:3] == ("role", "assignment", "list"):
             return [{
                 "principalId": PRINCIPAL, "scope": f"/subscriptions/{SID}",
@@ -229,7 +238,9 @@ def test_apply_reuses_identity_and_persists_only_allowlisted_metadata(
         raise AssertionError(f"Unexpected mutation: {args[:3]}")
 
     cli.run.side_effect = run
-    with patch.object(setup, "AzureCLI", return_value=cli):
+    with patch.object(setup, "AzureCLI", return_value=cli), patch.object(
+        setup, "ensure_assignment",
+    ) as assign, patch.object(setup, "ensure_graph_roles", return_value=list(setup.ENTRA_GRAPH_ROLES)) as graph:
         assert setup.main([
             "--config-file", str(config_file), "--result-file", str(output), "--apply",
         ]) == 0
@@ -239,6 +250,9 @@ def test_apply_reuses_identity_and_persists_only_allowlisted_metadata(
     assert payload["client_id"] == client_id
     assert payload["verified_assignments"][0]["role"] == "Reader"
     assert payload["diagnostic_preflight"] == "not_run"
+    assert assign.call_count == len(setup.DEFAULT_ROLES) + 1
+    graph.assert_called_once_with(cli, PRINCIPAL)
+    assert payload["verified_graph_roles"] == list(setup.ENTRA_GRAPH_ROLES)
     assert "must-not-be-persisted" not in text
     assert "passwordCredentials" not in text
 
@@ -350,6 +364,55 @@ def test_entra_reader_assigns_only_missing_graph_application_roles_and_is_idempo
     assert not [call for call in calls if call[:3] == ("rest", "--method", "POST")]
 
 
+def test_default_graph_roles_match_collector_and_do_not_include_retired_diagnostics() -> None:
+    from wasm_agent.collect_entra import EntraCollector
+
+    assert setup.ENTRA_GRAPH_ROLES == EntraCollector.required_roles
+    assert set(setup.ENTRA_GRAPH_ROLES) == {
+        "AgentIdentity.Read.All", "AgentIdentityBlueprint.Read.All", "Application.Read.All",
+    }
+
+
+def test_default_apply_creates_only_read_foundry_role_and_grants_full_bundle(config_file: Path) -> None:
+    args = setup.parser().parse_args(["--config-file", str(config_file), "--apply"])
+    setup.load_config(args)
+    spec = setup.role_spec([SID])
+    role = {
+        "name": "dddddddd-dddd-4ddd-8ddd-dddddddddddd", "roleType": "CustomRole",
+        "assignableScopes": spec["AssignableScopes"],
+        "permissions": [{"dataActions": spec["DataActions"]}],
+    }
+    cli = Mock()
+    created = False
+
+    def run(*command: str):
+        nonlocal created
+        if command[:2] == ("account", "show"):
+            return {"tenantId": TENANT}
+        if command[:3] == ("ad", "sp", "show"):
+            return {"id": PRINCIPAL, "appId": args.client_id, "displayName": args.account_name}
+        if command[:3] == ("role", "definition", "list"):
+            return [role] if created else []
+        if command[:3] == ("role", "definition", "create"):
+            definition = json.loads(command[command.index("--role-definition") + 1])
+            assert definition == spec and definition["Actions"] == []
+            created = True
+            return role
+        raise AssertionError(command)
+
+    cli.run.side_effect = run
+    with patch.object(setup, "ensure_assignment") as assign, patch.object(
+        setup, "ensure_graph_roles", return_value=list(setup.ENTRA_GRAPH_ROLES),
+    ) as graph:
+        setup.execute(args, cli)
+    assert created and assign.call_count == 5
+    assert {call.args[3] for call in assign.call_args_list} == {f"/subscriptions/{SID}"}
+    assert {call.args[4] for call in assign.call_args_list} == {
+        *(setup.ROLES[name] for name in setup.DEFAULT_ROLES), role["name"],
+    }
+    graph.assert_called_once_with(cli, PRINCIPAL)
+
+
 def test_entra_reader_requires_available_roles_and_is_apply_only(config_file: Path) -> None:
     class MissingCLI:
         def run(self, *args: str):
@@ -359,10 +422,12 @@ def test_entra_reader_requires_available_roles_and_is_apply_only(config_file: Pa
         setup.ensure_graph_roles(MissingCLI(), "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
     with patch.object(setup.subprocess, "run", side_effect=AssertionError("must not call Azure")):
         assert setup.main(["--config-file", str(config_file), "--verify", "--entra-reader"]) == 1
-        assert setup.main(["--config-file", str(config_file), "--dry-run", "--no-entra"]) == 1
+        with pytest.raises(SystemExit) as exc:
+            setup.main(["--config-file", str(config_file), "--dry-run", "--no-entra"])
+        assert exc.value.code == 2
 
 
-def test_verify_checks_entra_by_default_and_can_skip_it(config_file: Path, tmp_path: Path) -> None:
+def test_verify_always_checks_entra_and_rejects_skip(config_file: Path, tmp_path: Path) -> None:
     token_file = tmp_path / "token"
     token_file.write_text("fixture", encoding="utf-8")
     with patch.dict(setup.os.environ, {"AZURE_FEDERATED_TOKEN_FILE": str(token_file)}, clear=True), patch.object(
@@ -370,8 +435,9 @@ def test_verify_checks_entra_by_default_and_can_skip_it(config_file: Path, tmp_p
     ) as run:
         assert setup.main(["--config-file", str(config_file), "--verify"]) == 0
         assert "--no-entra" not in run.call_args.args[0]
-        assert setup.main(["--config-file", str(config_file), "--verify", "--no-entra"]) == 0
-    assert "--no-entra" in run.call_args.args[0]
+        with pytest.raises(SystemExit) as exc:
+            setup.main(["--config-file", str(config_file), "--verify", "--no-entra"])
+        assert exc.value.code == 2
 
 
 def bash_executable() -> str:
@@ -410,5 +476,5 @@ def test_bash_plan_runs_end_to_end_without_azure(config_file: Path, tmp_path: Pa
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout.split("\n", 1)[1])
     assert payload["account_name"] == "diagnostic"
-    assert payload["subscription_roles"] == ["Reader", "Monitoring Reader"]
+    assert payload["subscription_roles"] == [*setup.DEFAULT_ROLES, "Monitoring Reader"]
     assert not output.exists()

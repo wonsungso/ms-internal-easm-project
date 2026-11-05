@@ -12,7 +12,7 @@ import time
 import zipfile
 from datetime import UTC, datetime
 from io import BytesIO
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import requests
 import yaml
@@ -20,7 +20,7 @@ import yaml
 from demo.auth import GraphCertificates, TemporaryCertificate
 from demo.manage import ROOT, save
 from scripts.setup_account import AzureCLI
-from wasm_agent.report import load_result
+from wasm_agent.report import RUN_PATTERN, load_result
 
 WORKSPACE = "/workspaces/ms-internal-wasm-project"
 
@@ -83,18 +83,37 @@ def run(codespace: str) -> None:
                     gh("codespace", "ssh", "-c", codespace, "--",
                        f"rm -f {directory}/credential.pem {directory}/collection.yaml; rmdir {directory}")
                     remote_cleanup = True
-        destination = ROOT / "output"
-        destination.mkdir(exist_ok=True)
+        script = (
+            "from pathlib import Path; import json; from wasm_agent.report import latest_raw; "
+            "p=latest_raw(Path('output')); "
+            "assert p is not None, 'No collection result'; "
+            "print(json.dumps([str(p.with_name(p.name.replace('raw-data-', 'report-').replace('.json', '.xlsx'))), str(p)]))"
+        )
         listing = gh("codespace", "ssh", "-c", codespace, "--",
-                     f"ls -1t {WORKSPACE}/output/report-*.xlsx | head -1; "
-                     f"ls -1t {WORKSPACE}/output/raw-data-*.json | head -1")
-        names = [line.strip().rsplit("/", 1)[-1] for line in listing.stdout.splitlines() if line.strip()]
-        if len(names) != 2 or not re.fullmatch(r"report-\d{8}T\d{6}Z\.xlsx", names[0]) or not re.fullmatch(
-            r"raw-data-\d{8}T\d{6}Z\.json", names[1],
-        ):
+                     f"cd {WORKSPACE}; .venv/bin/python -c {shlex.quote(script)}")
+        paths = json.loads(listing.stdout)
+        if not isinstance(paths, list) or len(paths) != 2 or not all(isinstance(p, str) for p in paths):
+            raise RuntimeError("Codespaces 결과 경로 형식 오류")
+        sources = [PurePosixPath(path) for path in paths]
+        if any(
+            source.is_absolute() or ".." in source.parts or len(source.parts) not in (2, 3)
+            or source.parts[0] != "output"
+            or (len(source.parts) == 3 and not RUN_PATTERN.fullmatch(source.parts[1]))
+            for source in sources
+        ) or sources[0].parent != sources[1].parent:
+            raise RuntimeError("Codespaces 결과 경로를 확인하지 못했습니다.")
+        names = [source.name for source in sources]
+        if not re.fullmatch(r"report-\d{8}T\d{6}Z\.xlsx", names[0]) or names[1] != names[0].replace(
+            "report-", "raw-data-",
+        ).replace(".xlsx", ".json"):
             raise RuntimeError("Codespaces 결과 파일명을 확인하지 못했습니다.")
-        for name in names:
-            result = gh("codespace", "ssh", "-c", codespace, "--", f"base64 {WORKSPACE}/output/{name}")
+        destination = ROOT.joinpath(*sources[0].parent.parts)
+        destination.mkdir(parents=True, exist_ok=True)
+        for source, name in zip(sources, names, strict=True):
+            result = gh(
+                "codespace", "ssh", "-c", codespace, "--",
+                f"base64 {shlex.quote(WORKSPACE + '/' + str(source))}",
+            )
             payload = base64.b64decode("".join(result.stdout.split()), validate=True)
             if name.endswith(".xlsx"):
                 with zipfile.ZipFile(BytesIO(payload)) as archive:
@@ -106,7 +125,7 @@ def run(codespace: str) -> None:
         save(ROOT / ".wasm-agent" / "demo" / "codespace-e2e-verification.json", {
             "codespace": codespace, "collection_exit_code": code, "all_subscriptions": True,
             "remote_private_key_cleaned": remote_cleanup, "temporary_certificate_cleaned": True,
-            "files": names, "administrator_collection_fallback": False,
+            "files": [str(source) for source in sources], "administrator_collection_fallback": False,
         })
     finally:
         if not remote_cleanup:

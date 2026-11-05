@@ -23,7 +23,7 @@ from wasm_agent.models import (
     load_settings,
 )
 from wasm_agent.proposals import evaluate_proposals
-from wasm_agent.report import load_result, write_reports
+from wasm_agent.report import latest_raw, load_result, write_reports
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -41,10 +41,6 @@ def main(argv: list[str] | None = None) -> int:
     command.add_argument("--tenant-id")
     command.add_argument("--expected-principal-id")
     command.add_argument("--manual-agents", type=Path)
-    command.add_argument(
-        "--no-entra", action="store_true",
-        help="Microsoft Entra Agent ID 수집 생략 (기본은 수집. 진단 SP에 Graph 읽기 권한 필요)",
-    )
     command.add_argument("--output-dir", type=Path, default=Path("output"))
     command.add_argument("--fixture", type=Path)
     command.add_argument("--dry-run", action="store_true")
@@ -56,7 +52,10 @@ def main(argv: list[str] | None = None) -> int:
     logging.getLogger("azure.identity").setLevel(logging.ERROR)
     try:
         if args.command == "package":
-            result = load_result(args.output_dir)
+            source = latest_raw(args.output_dir)
+            if source is None:
+                raise ValueError("수집 결과 raw-data JSON을 찾을 수 없습니다.")
+            result = load_result(source.parent)
             data = Collection.model_validate(result["collection"])
             findings = [Finding.model_validate(row) for row in result["findings"]]
             recorded_mode = result.get("mode") or data.facts.get("data_mode")
@@ -66,7 +65,7 @@ def main(argv: list[str] | None = None) -> int:
             if mode not in ("live", "fixture"):
                 raise ValueError("기존 파일의 데이터 구분이 없습니다. --mode live 또는 --mode fixture를 명시하세요.")
             data.facts["data_mode"] = mode
-            write_reports(data, findings, args.output_dir, mode)
+            write_reports(data, findings, source.parent, mode, new_run=False)
             return 0
         settings = load_settings(args.config)
         setup_subscriptions: list[str] = []
@@ -87,8 +86,6 @@ def main(argv: list[str] | None = None) -> int:
             settings.subscriptions = setup_subscriptions
         if args.manual_agents:
             settings.manual_agents = args.manual_agents
-        if args.no_entra:
-            settings.entra = False
         settings = type(settings).model_validate(settings.model_dump())
         if args.dry_run:
             print(json.dumps({
@@ -97,9 +94,12 @@ def main(argv: list[str] | None = None) -> int:
                 "subscriptions": settings.subscriptions or "auto-enumerate",
                 "output_dir": str(args.output_dir),
                 "foundry_profile": settings.foundry_profile,
-                "roles": ["Reader", "project-scoped Foundry read DataActions when required"]
-                + (["Graph: " + ", ".join(EntraCollector.required_roles)] if settings.entra else []),
-                "entra": settings.entra,
+                "roles": [
+                    "Reader", "Cost Management Reader", "Log Analytics Reader", "Security Reader",
+                    "Foundry: agents/read, evaluations/read, assets/read",
+                ]
+                + ["Graph: " + ", ".join(EntraCollector.required_roles)],
+                "entra": True,
                 "azure_calls": False,
             }, ensure_ascii=False, indent=2))
             return 0
@@ -119,9 +119,9 @@ def main(argv: list[str] | None = None) -> int:
             data, load_criteria(settings), allowed_models(settings),
             load_conventions(settings), settings.policy_facts, settings.interview_levels,
         )
-        write_reports(data, findings, args.output_dir, "fixture" if args.fixture else "live")
+        workbook = write_reports(data, findings, args.output_dir, "fixture" if args.fixture else "live")
         print(f"수집 완료: 구독={len(data.subscriptions)}, Agent/후보={len(data.agents)}, "
-              f"이슈={len(data.issues)}, 결과={args.output_dir}")
+              f"이슈={len(data.issues)}, 결과={workbook.parent}")
         return 2 if data.issues else 0
     except (ValueError, KeyError, TypeError, OSError, AccessError, ClientAuthenticationError) as exc:
         detail = str(exc) if isinstance(exc, AccessError) else type(exc).__name__

@@ -10,12 +10,21 @@ from zipfile import ZipFile
 import pytest
 from openpyxl import load_workbook
 
-from scripts.merge_assessment import ROOT, SOURCE_SHEET, merge_assessment, xml_bytes
+from scripts.merge_assessment import (
+    ROOT,
+    SHEET_CRITERIA,
+    SOURCE_SHEET,
+    Q,
+    merge_assessment,
+    text_cell,
+    xml_bytes,
+)
 from scripts.proposal_levels import LEVELS
+from wasm_agent.models import load_criteria
 from wasm_agent.proposals import DOMAINS, TITLES
 
 UNTOUCHED = (
-    "xl/worksheets/sheet1.xml", "xl/worksheets/sheet3.xml", "xl/worksheets/sheet5.xml",
+    "xl/worksheets/sheet1.xml", "xl/worksheets/sheet3.xml",
     "xl/styles.xml", "xl/sharedStrings.xml", "xl/theme/theme1.xml", "docMetadata/LabelInfo.xml",
 )
 
@@ -71,15 +80,19 @@ def test_merged_workbook_keeps_original_and_adds_proposals_in_domain_blocks(
     merged_book = load_workbook(output)
     assert merged_book.sheetnames == load_workbook(source).sheetnames
     merged = merged_book[SOURCE_SHEET]
-    assert merged.max_row == original.max_row + 13
+    assert merged.max_row == original.max_row + 12
     original_rows = [
         [cell.value for cell in row] for row in original.iter_rows(min_row=1)
+        if row[1].value != "OE-SY-15"
     ]
     kept = [
         [cell.value for cell in row] for row in merged.iter_rows(min_row=1)
         if str(row[1].value) not in DOMAINS
     ]
-    assert kept == original_rows
+    assert len(kept) == len(original_rows)
+    for number, (old, new) in enumerate(zip(original_rows, kept, strict=True), 1):
+        if number >= 5 and "-SY-" not in str(old[1]):
+            assert new[:6] == old[:6]
     seen = {}
     for row in merged.iter_rows(min_row=5):
         code = row[1].value
@@ -89,7 +102,7 @@ def test_merged_workbook_keeps_original_and_adds_proposals_in_domain_blocks(
             assert row[4].value == "System Evidence" and TITLES[code] in row[5].value
             assert [row[col].value for col in range(6, 11)] == list(LEVELS[code][:5])
             assert row[11].value == LEVELS[code][5]
-            assert row[13].value == "초안 - 점수 산정 제외"
+            assert row[13].value in (None, "")
             assert all(len(text) <= 70 and "\n" not in text for text in LEVELS[code])
     assert seen.keys() == DOMAINS.keys()
     covered = set()
@@ -97,19 +110,80 @@ def test_merged_workbook_keeps_original_and_adds_proposals_in_domain_blocks(
         start, _, end = token.partition(":")
         covered.update(range(int(start[1:]), int((end or start)[1:]) + 1))
     for row in seen.values():
-        assert row[1].row not in covered
-    assert {r for r in range(5, merged.max_row + 1)} - covered == {row[1].row for row in seen.values()}
+        assert row[1].row in covered
+    assert covered == set(range(5, merged.max_row + 1))
     sheet5 = merged_book.worksheets[4]
-    assert [c.value for r in sheet5.iter_rows() for c in r if str(c.value).startswith("=")] == [
+    assert [c.value for r in sheet5.iter_rows(max_row=58) for c in r if str(c.value).startswith("=")] == [
         c.value for r in load_workbook(source).worksheets[4].iter_rows() for c in r
         if str(c.value).startswith("=")
     ]
 
 
-def test_delivered_merged_workbook_matches_current_source(source: Path, tmp_path: Path) -> None:
+def test_delivered_workbook_preserves_user_formatting_and_is_idempotent(tmp_path: Path) -> None:
     delivered = ROOT / "docs" / "assessment-template.xlsx"
     rebuilt = tmp_path / "rebuilt.xlsx"
-    merge_assessment(source, rebuilt)
+    merge_assessment(delivered, rebuilt)
     with ZipFile(delivered) as old, ZipFile(rebuilt) as new:
         assert old.namelist() == new.namelist()
-        assert all(old.read(name) == new.read(name) for name in old.namelist())
+        for name in UNTOUCHED:
+            assert old.read(name) == new.read(name), name
+    before, after = load_workbook(delivered), load_workbook(rebuilt)
+    for old_sheet, new_sheet in zip(before, after, strict=True):
+        for row in old_sheet:
+            for cell in row:
+                updated = new_sheet[cell.coordinate]
+                assert cell.style_id == updated.style_id
+                assert cell.value == updated.value
+
+
+def test_delivered_criteria_and_scoring_include_every_system_evidence() -> None:
+    book = load_workbook(ROOT / "docs" / "assessment-template.xlsx")
+    sheet = book[SOURCE_SHEET]
+    rows = {row[1].value: row for row in sheet if "-SY-" in str(row[1].value)}
+    assert len(rows) == 32
+    for code, config in load_criteria()["items"].items():
+        assert [rows[code][i].value for i in range(6, 11)] == list(config["levels"].values())
+    formulas = [cell.value for row in book.worksheets[4].iter_rows(min_row=64, max_row=69) for cell in row if cell.data_type == "f"]
+    for row in rows.values():
+        assert sum(f"'{SOURCE_SHEET}'!M{row[1].row}" in formula for formula in formulas) == 1
+    assert str(sheet.data_validations.dataValidation[0].sqref) == "M5:M90"
+    assert "N/A" in sheet.data_validations.dataValidation[0].formula1
+    assert "OE-SY-16" not in rows
+    assert "감사 로그" in rows["OE-SY-15"][5].value
+    assert "조건부 접근" not in str(book.worksheets[1]["H8"].value)
+
+
+def test_legacy_audit_score_and_notes_follow_the_audit_not_the_removed_risk_item(
+    source: Path, tmp_path: Path,
+) -> None:
+    book = load_workbook(source)
+    sheet = book[SOURCE_SHEET]
+    scored, output = tmp_path / "scored.xlsx", tmp_path / "updated.xlsx"
+    with ZipFile(source) as archive, ZipFile(scored, "w") as out:
+        raw = archive.read(SHEET_CRITERIA)
+        root = ET.fromstring(raw)
+        for row in sheet:
+            if row[1].value not in ("OE-SY-15", "OE-SY-16"):
+                continue
+            number = row[1].row
+            xml_row = root.find(f"{Q}sheetData/{Q}row[@r='{number}']")
+            score, note = (5, "retired risk") if row[1].value == "OE-SY-15" else (2, "audit evidence")
+            for column, value in (("M", score), ("N", note)):
+                ref = f"{column}{number}"
+                old = xml_row.find(f"{Q}c[@r='{ref}']")
+                style = old.get("s", "0") if old is not None else "0"
+                if old is not None:
+                    xml_row.remove(old)
+                if column == "M":
+                    cell = ET.SubElement(xml_row, f"{Q}c", {"r": ref, "s": style})
+                    ET.SubElement(cell, f"{Q}v").text = str(value)
+                else:
+                    xml_row.append(text_cell(ref, style, value))
+        for entry in archive.infolist():
+            out.writestr(entry, xml_bytes(root, raw) if entry.filename == SHEET_CRITERIA else archive.read(entry.filename))
+    merge_assessment(scored, output)
+    sheet = load_workbook(output)[SOURCE_SHEET]
+    audit = [row for row in sheet if row[1].value == "OE-SY-15"]
+    assert len(audit) == 1
+    assert (audit[0][12].value, audit[0][13].value) == (2, "audit evidence")
+    assert not any(row[1].value == "OE-SY-16" for row in sheet)

@@ -397,7 +397,8 @@ def test_remote_key_is_removed_on_collection_failure(tmp_path: Path) -> None:
     assert any("rm -f /home/vscode/wasm-agent-auth-12345678/credential.pem" in cmd[-1] for cmd in commands)
 
 
-def test_codespace_download_uses_validated_ssh_stream(tmp_path: Path) -> None:
+@pytest.mark.parametrize("run_folder", ["", "20261105T010203456789Z/"])
+def test_codespace_download_uses_validated_ssh_stream(tmp_path: Path, run_folder: str) -> None:
     output = tmp_path / ".wasm-agent"
     output.mkdir()
     (output / "setup.json").write_text(json.dumps({
@@ -425,9 +426,9 @@ def test_codespace_download_uses_validated_ssh_stream(tmp_path: Path) -> None:
             text = "/home/vscode/wasm-agent-auth-12345678\n"
         elif "WASM_COLLECTION_EXIT" in command:
             text = "WASM_COLLECTION_EXIT=2\n"
-        elif command.startswith("ls -1t"):
-            base = "/workspaces/ms-internal-wasm-project/output/"
-            text = f"{base}{name}\n{base}{raw_file}\n"
+        elif "latest_raw" in command:
+            base = "output/" + run_folder
+            text = json.dumps([base + name, base + raw_file])
         elif command.startswith("base64 ") and command.endswith(raw_file):
             text = base64.b64encode(raw).decode()
         elif command.startswith("base64 "):
@@ -439,8 +440,9 @@ def test_codespace_download_uses_validated_ssh_stream(tmp_path: Path) -> None:
     ) as certificate:
         certificate.return_value.__enter__.return_value = {"AZURE_CLIENT_CERTIFICATE_PATH": "fixture.pem"}
         remote.run("approved-codespace")
-    assert (tmp_path / "output" / name).read_bytes() == buffer.getvalue()
-    assert set(path.name for path in (tmp_path / "output").iterdir()) == {name, raw_file}
+    destination = tmp_path / "output" / run_folder.rstrip("/")
+    assert (destination / name).read_bytes() == buffer.getvalue()
+    assert set(path.name for path in destination.iterdir()) == {name, raw_file}
     proof = json.loads((output / "demo" / "codespace-e2e-verification.json").read_text(encoding="utf-8"))
     assert proof["collection_exit_code"] == 2 and proof["remote_private_key_cleaned"]
     assert any(command[-1].startswith("base64 ") for command in commands)
@@ -478,7 +480,7 @@ def test_demo_configuration_yields_mixed_model_allowlist_results() -> None:
     }, options)
     parameters = dict(item.split("=", 1) for item in deployment_parameters(lab, 0))
     assert json.loads(parameters["extraModels"]) == extra
-    assert options["collect_entra"] is True
+    assert "collect_entra" not in options
 
 
 def read_bicep(name: str) -> str:

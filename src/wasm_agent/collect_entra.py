@@ -7,16 +7,13 @@ from typing import Any
 
 from wasm_agent.azure import MSGRAPH, MSGRAPH_SCOPE, AccessError, ReaderHTTP, issue
 from wasm_agent.models import (
-    AgentCaPolicy,
     Collection,
     EntraAgentIdentity,
     EntraBlueprint,
-    RiskyAgent,
     try_timestamp,
 )
 
 V1 = MSGRAPH + "/v1.0"
-BETA = MSGRAPH + "/beta"
 GUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 DEFAULT_ROLE_ID = "00000000-0000-0000-0000-000000000000"
 
@@ -40,7 +37,6 @@ class EntraCollector:
 
     required_roles = (
         "AgentIdentity.Read.All", "AgentIdentityBlueprint.Read.All", "Application.Read.All",
-        "Policy.Read.All", "IdentityRiskyAgent.Read.All",
     )
 
     def __init__(self, http: ReaderHTTP, now: datetime, criteria: dict[str, Any]) -> None:
@@ -53,8 +49,6 @@ class EntraCollector:
         for name, operation, roles in (
             ("entra_blueprints", self.blueprints, ("AgentIdentityBlueprint.Read.All",)),
             ("entra_agents", self.agent_identities, ("AgentIdentity.Read.All", "Application.Read.All")),
-            ("conditional_access", self.conditional_access, ("Policy.Read.All",)),
-            ("risky_agents", self.risky_agents, ("IdentityRiskyAgent.Read.All",)),
         ):
             try:
                 operation(result)
@@ -116,32 +110,3 @@ class EntraCollector:
                 }
             names.append(self.role_names[resource].get(role_id) or f"unresolved:{role_id}")
         return sorted(set(names))
-
-    def conditional_access(self, result: Collection) -> None:
-        rows = self.http.list_graph(BETA + "/identity/conditionalAccess/policies?$top=100")
-        for row in rows:
-            agents = (row.get("conditions") or {}).get("agents")
-            if not isinstance(agents, dict):
-                continue
-            include = text_list(agents.get("includeAgentIdServicePrincipals"))
-            agent_filter = agents.get("agentIdServicePrincipalFilter")
-            if not (include or agent_filter or agents.get("includeAgentUsers") or agents.get("includeAgentContexts")):
-                continue
-            result.agent_ca_policies.append(AgentCaPolicy(
-                policy_id=str(row.get("id")), display_name=row.get("displayName"), state=row.get("state"),
-                include_all_agents=any(value.lower() == "all" for value in include),
-                include_agent_ids=[value for value in include if value.lower() != "all"],
-                exclude_agent_ids=text_list(agents.get("excludeAgentIdServicePrincipals")),
-                uses_agent_filter=bool(agent_filter), agent_risk_levels=text_list(agents.get("agentIdRiskLevels")),
-                grant_controls=text_list((row.get("grantControls") or {}).get("builtInControls")),
-                evidence_refs=self.ref(),
-            ))
-        result.facts["conditional_access_complete"] = True
-
-    def risky_agents(self, result: Collection) -> None:
-        for row in self.http.list_graph(BETA + "/identityProtection/riskyAgents"):
-            result.risky_agents.append(RiskyAgent(
-                risky_agent_id=str(row.get("id")), risk_level=row.get("riskLevel"),
-                risk_state=row.get("riskState"), evidence_refs=self.ref(),
-            ))
-        result.facts["risky_agents_complete"] = True

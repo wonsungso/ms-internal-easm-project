@@ -1,7 +1,7 @@
-"""원본 평가 모델 XLSX에 Azure 추가 제안 13개를 같은 시트/서식으로 병합한다.
+"""평가 모델의 SE 기준과 실제 점수 집계를 같은 시트/서식으로 반영한다.
 
 원본 zip에서 시트 2, 4 XML만 직접 고치고 나머지 파트(스타일, 시트 1/3/5, 민감도 라벨 등)는
-바이트 그대로 보존한다. 추가 제안의 L1-L5는 승인 전 초안이라 점수 산정 시트(5)는 건드리지 않는다.
+바이트 그대로 보존한다. 검토된 템플릿을 입력하면 사용자 셀 서식·점수·메모를 유지한다.
 """
 
 from __future__ import annotations
@@ -15,7 +15,10 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 from zipfile import ZIP_DEFLATED, ZipFile
 
+from openpyxl import load_workbook
+
 from scripts.proposal_levels import LEVELS
+from wasm_agent.models import load_criteria
 from wasm_agent.proposals import DOMAINS, PRODUCTS, TITLES
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,11 +29,77 @@ SHEET_QUESTIONS = "xl/worksheets/sheet2.xml"
 SHEET_CRITERIA = "xl/worksheets/sheet4.xml"
 DOMAIN_COLUMN = {"2. Design": "E", "3. Build": "F", "4. Deploy": "G", "5. Operate": "H", "6. Optimize": "I"}
 NOTE = (
-    "- 추가 제안 13개(DS-SY-07~09, BI-SY-10~14, OE-SY-17~20, OT-SY-21)의 L1~L5는 MS Learn 근거 초안(승인 전)이며 "
-    "시트 5 점수 산정·보정에는 포함하지 않음"
+    "- System Evidence 32개를 시트 4에서 평가하고 시트 5 실제 집계에 반영. "
+    "미확보·조회 실패·대상 없음은 N/A이며 L1 또는 0점으로 환산하지 않음"
 )
 ROW_HEIGHT = "25.05"
 FIRST_DATA_ROW = 5
+SHEET_SCORING = "xl/worksheets/sheet5.xml"
+MANUAL_LEVELS = {
+    "DM-SY-01": (
+        "제작 허용 주체·Agent 유형의 통제 기준이 없음을 확인",
+        "일부 제한은 있으나 승인 주체·유형 기준 또는 적용 범위 미흡",
+        "승인 제작 주체·Agent 유형 기준과 실제 허용 범위 일치",
+        "L3 충족, 지원 설정·승인 절차로 미승인 제작 통제와 변경 추적",
+        "L4 충족, 위험·변경 이력으로 허용 범위 지속 개선",
+    ),
+    "DM-SY-02": (
+        "제작 권한·환경 관리 기준이 없음을 확인",
+        "환경·권한 일부 관리, 승인 대장과 미대사 또는 편차 존재",
+        "승인 제작자와 유효 권한 대사, 용도별 환경·접근 분리",
+        "L3 충족, 생성·권한 변경 승인과 편차 탐지·회수 운영",
+        "L4 충족, 실제 사용·위반 이력으로 환경·권한 지속 개선",
+    ),
+    "DM-SY-03": (
+        "생성 승인·요청 관리 절차가 없음을 확인",
+        "최근 6개월 신규 Agent와 승인 요청 매칭률 80% 미만",
+        "신규 Agent 80% 이상 승인 요청 매칭, 누락·중복 대사",
+        "매칭률 95% 이상, 미승인 생성 자동 탐지·통보",
+        "매칭률 100%, L4 충족과 추세 기반 수요 계획 개선",
+    ),
+    "DS-SY-04": (
+        "대상 환경 확인 완료, 유효 데이터 정책 적용률 0%",
+        "유효 데이터 정책 적용률 0% 초과~80% 미만",
+        "대상 환경 80% 이상 승인 커넥터 분류·차단 정책 검증",
+        "적용률 100%, 신규 환경 편입과 정책 편차 통제 자동화",
+        "L4 충족, 위반·우회 시험으로 분류·정책 지속 개선",
+    ),
+    "BI-SY-07": (
+        "개발·테스트와 운영의 접근·변경 분리 통제가 없음",
+        "환경 일부 분리, 운영 접근·변경 또는 관리 기준 미흡",
+        "개발·테스트·운영 분리, 라이선스·지원 범위 내 관리 기준 충족",
+        "L3 충족, 지원 배포 경로·권한 통제로 미승인 운영 반영 차단",
+        "L4 충족, 환경 이용·위반 이력으로 분리 통제 개선",
+    ),
+    "DP-SY-10": (
+        "Agent 자산·배포 등록 절차가 없음을 확인",
+        "승인 등록부·실제 Agent 정합률 90% 미만",
+        "Agent·책임자·배포 범위·상태 정합률 90% 이상",
+        "정합률 98% 이상, 등록 편차·변경 자동 탐지·추적",
+        "정합률 100%, L4 충족과 대사·변경 관리 개선 이력",
+    ),
+    "DP-SY-11": (
+        "Agent 공유·설치의 승인 범위 통제 기준이 없음",
+        "공유·설치 일부 제한, 승인 대상·범위와 불일치",
+        "지원 제품별 공유·설치 범위가 승인 대상과 일치",
+        "L3 충족, 지원 설정·승인 경로로 편차 통제와 감사 추적",
+        "L4 충족, 설치·공유·위반 이력으로 허용 기준 개선",
+    ),
+    "OT-SY-17": (
+        "승인되지 않은 Agent 탐지·대사 절차가 없음을 확인",
+        "미승인 비율 5% 이상 또는 탐지 건 조치율 80% 미만",
+        "관측 범위·기간 명시, 미승인 비율 5% 미만과 조치율 80% 이상",
+        "미승인 비율 1% 미만, L3 충족과 지원 경로별 자동 통보·통제",
+        "관측 범위 내 미승인 0건, L4 충족과 탐지·수요 전환 개선",
+    ),
+    "OT-SY-20": (
+        "민감 데이터 노출 점검·조치 절차가 없음을 확인",
+        "확인된 고위험 노출 조치율 90% 미만",
+        "고위험 노출 조치율 90% 이상, 지원 데이터 경로별 보호 검증",
+        "미조치 고위험 0건, L3 충족과 지원 DLP·접근 통제 자동화",
+        "L4 충족, 노출·오탐·사고 이력으로 보호 정책 개선",
+    ),
+}
 
 
 def xml_bytes(root: ET.Element, original: bytes) -> bytes:
@@ -206,10 +275,16 @@ def merge_assessment(source: Path, output: Path) -> dict[str, str | int]:
         if SOURCE_SHEET not in archive.read("xl/workbook.xml").decode("utf-8"):
             raise ValueError("질문별 평가 기준 시트가 있는 원본 평가 모델이 필요합니다.")
         strings = shared_strings(archive)
-        patched = {
+        book = load_workbook(BytesIO(raw))
+        existing = {row[1].value for row in book[SOURCE_SHEET]}
+        present = existing & DOMAINS.keys()
+        if present and present != DOMAINS.keys():
+            raise ValueError("SE 항목이 일부만 병합된 파일입니다. 전체 원본 또는 검토 템플릿을 사용하세요.")
+        patched = {} if present else {
             SHEET_CRITERIA: patch_criteria(archive.read(SHEET_CRITERIA), strings),
             SHEET_QUESTIONS: patch_questions(archive.read(SHEET_QUESTIONS), strings),
         }
+        patched = review_parts(archive, patched)
         result = BytesIO()
         with ZipFile(result, "w", ZIP_DEFLATED) as out:
             for entry in archive.infolist():
@@ -219,6 +294,193 @@ def merge_assessment(source: Path, output: Path) -> dict[str, str | int]:
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(result.getvalue())
     return {"merged_proposals": len(DOMAINS), "source_sha256": hashlib.sha256(raw).hexdigest()}
+
+
+def replace_text(row: ET.Element, column: str, text: str) -> None:
+    number = row.get("r")
+    cell = row.find(f"{Q}c[@r='{column}{number}']")
+    if cell is None:
+        raise ValueError(f"필수 셀 없음: {column}{number}")
+    replacement = text_cell(cell.get("r"), cell.get("s", "0"), text)
+    row.insert(list(row).index(cell), replacement)
+    row.remove(cell)
+
+
+def review_parts(archive: ZipFile, patched: dict[str, bytes]) -> dict[str, bytes]:
+    strings = shared_strings(archive)
+
+    def value(cell: ET.Element | None) -> str:
+        if cell is None:
+            return ""
+        if cell.get("t") == "inlineStr":
+            return "".join(cell.find(f"{Q}is").itertext())
+        node = cell.find(f"{Q}v")
+        return strings[int(node.text)] if cell.get("t") == "s" else node.text if node is not None else ""
+
+    raw = patched.get(SHEET_CRITERIA, archive.read(SHEET_CRITERIA))
+    root = ET.fromstring(raw)
+    data = root.find(f"{Q}sheetData")
+    old_audit = next((
+        row for row in data if value(row.find(f"{Q}c[@r='B{row.get('r')}']")) == "OE-SY-16"
+    ), None)
+    if old_audit is not None:
+        retired = next((
+            row for row in data if value(row.find(f"{Q}c[@r='B{row.get('r')}']")) == "OE-SY-15"
+        ), None)
+        if retired is None:
+            raise ValueError("감사 로그 코드 이전에 필요한 기존 항목이 없습니다.")
+        removed = int(retired.get("r"))
+        data.remove(retired)
+        for row in data:
+            number = int(row.get("r"))
+            if number > removed:
+                set_row_number(row, number - 1)
+        replace_text(old_audit, "B", "OE-SY-15")
+        dimension = root.find(f"{Q}dimension")
+        dimension.set("ref", re.sub(
+            r"(\d+)$", lambda match: str(int(match[1]) - 1), dimension.get("ref"),
+        ))
+    criteria = load_criteria()["items"]
+    groups: dict[tuple[str, str], list[int]] = {}
+    seen = set()
+    for row in data.findall(f"{Q}row"):
+        number = int(row.get("r"))
+        code = value(row.find(f"{Q}c[@r='B{number}']"))
+        if number >= FIRST_DATA_ROW and code:
+            domain = value(row.find(f"{Q}c[@r='C{number}']"))
+            perspective = value(row.find(f"{Q}c[@r='E{number}']"))
+            groups.setdefault((domain, perspective), []).append(number)
+        if code not in criteria and code not in MANUAL_LEVELS:
+            continue
+        seen.add(code)
+        levels = criteria[code]["levels"].values() if code in criteria else MANUAL_LEVELS[code]
+        for column, text in zip("GHIJK", levels, strict=True):
+            replace_text(row, column, text)
+        if code in DOMAINS:
+            replace_text(row, "L", criteria[code]["evidence"])
+            memo = row.find(f"{Q}c[@r='N{number}']")
+            if value(memo) == "초안 - 점수 산정 제외":
+                replace_text(row, "N", "")
+    if seen != criteria.keys() | MANUAL_LEVELS.keys():
+        raise ValueError("System Evidence 32개 코드가 정확히 일치하지 않습니다.")
+    rows = {int(row.get("r")): row for row in data}
+    replace_text(rows[3], "B", "인터뷰 54개 + SE 32개 = 86개. 1~5 정수 또는 N/A. 미확보·대상 없음은 N/A, L1은 확인된 부재. 비율 임계값은 본 진단 기준이며 Microsoft 인증 기준 아님")
+    validation = root.find(f"{Q}dataValidations/{Q}dataValidation")
+    validation.set("type", "custom")
+    validation.set("sqref", f"M5:M{max(rows)}")
+    validation.set("error", "1~5 정수 또는 N/A만 입력하세요.")
+    validation.set("prompt", "미확보·조회 실패·대상 없음은 N/A")
+    validation.attrib.pop("operator", None)
+    validation.find(f"{Q}formula1").text = 'OR(M5="",M5="N/A",AND(ISNUMBER(M5),M5=INT(M5),M5>=1,M5<=5))'
+    second = validation.find(f"{Q}formula2")
+    if second is not None:
+        validation.remove(second)
+    patched[SHEET_CRITERIA] = xml_bytes(root, raw)
+
+    raw = patched.get(SHEET_QUESTIONS, archive.read(SHEET_QUESTIONS))
+    root = ET.fromstring(raw)
+    for row in root.findall(f"{Q}sheetData/{Q}row"):
+        for cell in list(row):
+            text = value(cell)
+            if "▸ Agent 대상 조건부 접근" in text:
+                text = "\n\n".join(
+                    block for block in text.split("\n\n")
+                    if not block.startswith("▸ Agent 대상 조건부 접근")
+                )
+                replace_text(row, cell_ref(cell.get("r"))[0], text)
+            if "(추가 제안)" in text:
+                replace_text(row, cell_ref(cell.get("r"))[0], text.replace(" (추가 제안)", ""))
+            elif "점수 산정" in text and "포함하지 않음" in text:
+                lines = [line for line in text.splitlines() if "추가 제안 13개" not in line]
+                replace_text(row, cell_ref(cell.get("r"))[0], "\n".join([*lines, NOTE]))
+    patched[SHEET_QUESTIONS] = xml_bytes(root, raw)
+
+    raw = archive.read(SHEET_SCORING)
+    root = ET.fromstring(raw)
+    data = root.find(f"{Q}sheetData")
+    example = {int(row.get("r")): row for row in data}
+    if (
+        value(example[46].find(f"{Q}c[@r='C46']")) == "OE-SY-15"
+        and value(example[47].find(f"{Q}c[@r='C47']")) == "OE-SY-16"
+    ):
+        replace_text(example[46], "C", "OE-SY-15")
+        old = example[46].find(f"{Q}c[@r='D46']")
+        audit_score = deepcopy(example[47].find(f"{Q}c[@r='D47']"))
+        audit_score.set("r", "D46")
+        audit_score.set("s", old.get("s", "0"))
+        example[46].insert(list(example[46]).index(old), audit_score)
+        example[46].remove(old)
+        replace_text(example[47], "C", "")
+        replace_text(example[47], "D", "")
+    # Rows 1-58 remain the original worked example; the actual assessment is separate.
+    for row in list(data):
+        if int(row.get("r")) >= 61:
+            data.remove(row)
+    new_formulas: list[str] = []
+
+    def append(number: int, values: dict[str, str]) -> None:
+        row = ET.SubElement(data, f"{Q}row", {"r": str(number), "ht": "40", "customHeight": "1"})
+        for column, text in values.items():
+            ref = f"{column}{number}"
+            if text.startswith("="):
+                cell = ET.SubElement(row, f"{Q}c", {"r": ref, "s": "51"})
+                ET.SubElement(cell, f"{Q}f").text = text[1:]
+                new_formulas.append(ref)
+            else:
+                row.append(text_cell(ref, "23" if number == 63 else "61", text))
+
+    append(61, {"B": "실제 평가 집계 - 시트 4 입력 점수 연동 (인터뷰 54개 + System Evidence 32개)"})
+    append(62, {"B": "빈칸·N/A는 평균 제외. 4개 인터뷰 관점과 SE 확보 시 영역 산정, 6개 영역 확보 시 종합 산정. 미확보는 0점 아님"})
+    headers = ("영역", "Process", "People", "Data", "Technology", "System Evidence", "인터뷰 평균", "괴리", "최종 점수", "Level", "상태")
+    append(63, dict(zip("BCDEFGHIJKL", headers, strict=True)))
+    for number, domain in enumerate(("1. Demand", "2. Design", "3. Build", "4. Deploy", "5. Operate", "6. Optimize"), 64):
+        values = {"B": domain}
+        for column, perspective in zip("CDEFG", headers[1:6], strict=True):
+            numbers = groups[(domain, perspective)]
+            refs = ",".join(f"'{SOURCE_SHEET}'!M{n}" for n in numbers)
+            values[column] = f'=IF(COUNT({refs})=0,"",ROUND(AVERAGE({refs}),1))'
+        values.update({
+            "H": f'=IF(COUNT(C{number}:F{number})<4,"",ROUND(AVERAGE(C{number}:F{number}),1))',
+            "I": f'=IF(COUNT(G{number}:H{number})<2,"",H{number}-G{number})',
+            "J": f'=IF(COUNT(G{number}:H{number})<2,"",IF(I{number}>=$C$29,ROUND(G{number}+$C$30,1),H{number}))',
+            "K": f'=IF(COUNT(J{number})=0,"",LOOKUP(J{number},$C$21:$C$25,$D$21:$D$25))',
+            "L": f'=IF(COUNT(J{number})=0,"판정 보류",IF(I{number}>=$C$29,"인터뷰-실측 괴리","미보정"))',
+        })
+        append(number, values)
+    append(71, {
+        "B": "종합 점수",
+        "J": '=IF(COUNT(J64:J69)<6,"",ROUND(AVERAGE(J64:J69),1))',
+        "K": '=IF(COUNT(J71)=0,"",LOOKUP(J71,$C$21:$C$25,$D$21:$D$25))',
+        "L": '=IF(COUNT(J64:J69)<6,"판정 보류","6개 영역 집계")',
+    })
+    merges = root.find(f"{Q}mergeCells")
+    for ref in ("B61:L61", "B62:L62"):
+        if not any(cell.get("ref") == ref for cell in merges):
+            ET.SubElement(merges, f"{Q}mergeCell", {"ref": ref})
+    merges.set("count", str(len(merges)))
+    root.find(f"{Q}dimension").set("ref", "B2:L71")
+    columns = root.find(f"{Q}cols")
+    for index in range(10, 13):
+        if not any(int(col.get("min")) <= index <= int(col.get("max")) for col in columns):
+            ET.SubElement(columns, f"{Q}col", {"min": str(index), "max": str(index), "width": "22", "customWidth": "1"})
+    patched[SHEET_SCORING] = xml_bytes(root, raw)
+    raw = archive.read("xl/workbook.xml")
+    root = ET.fromstring(raw)
+    calc = root.find(f"{Q}calcPr")
+    if calc is None:
+        calc = ET.SubElement(root, f"{Q}calcPr")
+    calc.attrib.update({"calcMode": "auto", "fullCalcOnLoad": "1", "forceFullCalc": "1"})
+    patched["xl/workbook.xml"] = xml_bytes(root, raw)
+    if "xl/calcChain.xml" in archive.namelist():
+        raw = archive.read("xl/calcChain.xml")
+        root = ET.fromstring(raw)
+        for cell in list(root):
+            if cell.get("r") in new_formulas and cell.get("i") == "5":
+                root.remove(cell)
+        for ref in new_formulas:
+            ET.SubElement(root, f"{Q}c", {"r": ref, "i": "5"})
+        patched["xl/calcChain.xml"] = xml_bytes(root, raw)
+    return patched
 
 
 def main() -> None:

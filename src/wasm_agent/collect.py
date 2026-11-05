@@ -31,7 +31,7 @@ def merge(destination: Collection, source: Collection) -> None:
     for field in (
         "agents", "deployments", "evaluations", "costs", "security", "secure_scores",
         "policy_assignments", "budgets", "entra_blueprints", "entra_agent_identities",
-        "agent_ca_policies", "risky_agents", "logs", "proposal_observations", "issues", "resources",
+        "logs", "proposal_observations", "issues", "resources",
         "completed_subscriptions",
     ):
         getattr(destination, field).extend(getattr(source, field))
@@ -110,13 +110,12 @@ def collect(settings: Settings, credential: Credential, now: datetime | None = N
         ]
         for future in as_completed(futures):
             merge(result, future.result())
-    if settings.entra:
-        result.facts["entra_requested"] = True
-        graph = ReaderHTTP(credential, store=store)
-        try:
-            merge(result, EntraCollector(graph, instant, criteria).discover())
-        finally:
-            graph.close()
+    result.facts["entra_requested"] = True
+    graph = ReaderHTTP(credential, store=store)
+    try:
+        merge(result, EntraCollector(graph, instant, criteria).discover())
+    finally:
+        graph.close()
     if settings.manual_agents:
         merge(result, ManualCollector(settings.manual_agents, instant).discover([]))
     for agent in result.agents:

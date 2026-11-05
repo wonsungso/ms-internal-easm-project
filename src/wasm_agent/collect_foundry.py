@@ -191,7 +191,7 @@ class FoundryCollector:
                             created_at=timestamp(version.get("created_at")),
                             detection_confidence="tag",
                             evidence_refs=[self.http.last_ref] if self.http.last_ref else [],
-                            se_codes=["DS-SY-06", "BI-SY-08", "BI-SY-09", "OE-SY-16", "OT-SY-18", "OT-SY-19"],
+                            se_codes=["DS-SY-06", "BI-SY-08", "BI-SY-09", "OE-SY-15", "OT-SY-18", "OT-SY-19"],
                         ).mark_unknowns()
                         record.unavailable(
                             "deployed_at", "not_found",

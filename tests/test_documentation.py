@@ -71,12 +71,31 @@ def test_summary_table_links_resolve_to_checklist_sections_with_images() -> None
 
     anchors = {anchor(h) for h in re.findall(r"^## (.+)$", detail, re.M)}
     links = re.findall(r"^\| \[([A-Z]{2}-SY-[P\d]+)\]\(docs/checklist\.md#([^)]+)\)", readme, re.M)
-    assert len(links) == 33
+    assert len(links) == 32
     assert {target for _, target in links} == anchors
     implemented = re.findall(r"^- \*\*구현:\*\* (?!❌)", detail, re.M)
-    assert len(implemented) == 24
-    assert len(re.findall(r"^!\[[^\]]+\]\(portal/imgs/[^)]+\.png\)$", detail, re.M)) == 24
+    assert len(implemented) == 23
+    assert len(re.findall(r"^!\[[^\]]+\]\(portal/imgs/[^)]+\.png\)$", detail, re.M)) == 23
     assert "<img" not in readme and not re.search(r"^\|.*!\[", readme, re.M)
+
+
+def test_summary_marks_added_items_only_in_the_rightmost_column() -> None:
+    from wasm_agent.proposals import TITLES
+
+    readme = (Path(__file__).parents[1] / "README.md").read_text(encoding="utf-8")
+    assert "| 수집 | 신규 추가 |" in readme
+    rows = re.findall(r"^\| \[([A-Z]{2}-SY-\d+)\].+$", readme, re.M)
+    assert len(rows) == 32
+    marked = set()
+    for line in readme.splitlines():
+        match = re.match(r"^\| \[([A-Z]{2}-SY-\d+)\]", line)
+        if match:
+            last = line.split("|")[-2].strip()
+            assert last in ("", "✓")
+            if last:
+                marked.add(match[1])
+    assert marked == TITLES.keys()
+    assert "추가 제안 13개" not in readme and "점수 산정에는 포함하지 않음" not in readme
 
 
 def test_chatbot_guide_uses_real_masked_highlighted_screenshots() -> None:
@@ -92,7 +111,8 @@ def test_chatbot_guide_uses_real_masked_highlighted_screenshots() -> None:
         assert data[:8] == b"\x89PNG\r\n\x1a\n"
         assert image["highlight_count"] > 0
     root = (docs.parent / "README.md").read_text(encoding="utf-8")
-    assert "Step" not in root and "오프라인 검증" not in root
+    assert re.search(r"^## (?:Step )?1\.", root, re.M)
+    assert "오프라인 검증" not in root
     assert "docs/guide.md" not in root
     assert "고객사 담당자" in root and "MS WASM 관리자" in root
 
