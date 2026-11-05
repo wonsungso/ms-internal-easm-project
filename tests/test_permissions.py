@@ -119,6 +119,28 @@ def test_http_null_reason_is_not_fabricated(code: int, status: str, reason: str)
     assert "license_missing" not in result.detail
 
 
+def test_graph_unlicensed_403_is_license_missing_not_permission_denied() -> None:
+    session = Mock()
+    payload = {"error": {"code": "Forbidden", "message": "Your tenant is not licensed for this feature."}}
+    session.request.return_value = response(403, payload)
+    result = verify.probe(
+        verify.ReaderHTTP(credential(), session), SID, "OE-SY-15", "tenant", "GET",
+        "https://graph.microsoft.com/beta/identityProtection/riskyAgents", audience=verify.MSGRAPH_SCOPE,
+    )
+    assert (result.status, result.reason) == ("FEATURE_UNAVAILABLE", "license_missing")
+
+
+def test_foundry_feature_header_is_sent_only_when_requested() -> None:
+    session = Mock()
+    session.request.return_value = response(200)
+    http = verify.ReaderHTTP(credential(), session)
+    url = "https://x.services.ai.azure.com/api/projects/p/redTeams/runs?api-version=v1"
+    http.request("GET", url, verify.AI_SCOPE, extra_headers={"Foundry-Features": "RedTeams=V1Preview"})
+    http.request("GET", url, verify.AI_SCOPE)
+    first, second = (call.kwargs["headers"] for call in session.request.call_args_list)
+    assert first["Foundry-Features"] == "RedTeams=V1Preview"
+    assert "Foundry-Features" not in second
+
 def test_network_failure_is_not_feature_unavailable() -> None:
     session = Mock()
     session.request.side_effect = requests.ConnectionError("do not log this body")

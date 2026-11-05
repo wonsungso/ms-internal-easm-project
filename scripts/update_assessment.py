@@ -18,6 +18,8 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.worksheet.worksheet import Worksheet
 
+from wasm_agent.proposals import DOMAINS
+
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_SHEET = "4. 질문별 평가 기준"
 SY_SHEET = "SY 질문 전체"
@@ -414,23 +416,26 @@ def build_assessment(
     ])
     proposal.append([])
     proposal.append([
-        "제안 코드", "승인/구현 상태", "제안 질문", "기존 코드 보완 대상", "차이/보완 이유",
-        "필요 증적", "Reader 조회 가능 범위/한계", "공식 출처 URL", "공식 출처 절",
+        "제안 코드", "진단 영역", "영역 근거", "승인/구현 상태", "제안 질문", "기존 코드 보완 대상",
+        "차이/보완 이유", "필요 증적", "Reader 조회 가능 범위/한계", "공식 출처 URL", "공식 출처 절",
         "확인일", "보조 공식 출처 URL", "보조 출처 절/제품 범위", "판정 기준",
     ])
     for number, (question, related, rationale, evidence, limits, section, extra, detail) in enumerate(
         PROPOSALS, 1
     ):
+        code = f"AZ-SY-P{number:02}"
+        primary, secondary, reason = DOMAINS[code]
         proposal.append([
-            f"AZ-SY-P{number:02}", STATE, question, related, rationale, evidence, limits,
+            code, primary, reason + (f" (보조: {secondary})" if secondary else ""),
+            STATE, question, related, rationale, evidence, limits,
             CAF, section, date.fromisoformat(CHECKED), extra, detail,
             "미정 - 승인 전, L1-L5/수치 임계값 없음, Level 자동 판정 없음",
         ])
-    style_sheet(proposal, original, [19, 38, 70, 32, 60, 65, 75, 58, 50, 15, 58, 50, 48],
+    style_sheet(proposal, original, [19, 16, 60, 38, 70, 32, 60, 65, 75, 58, 50, 15, 58, 50, 48],
                 "AssessmentProposals")
     for row in range(5, proposal.max_row + 1):
-        proposal.cell(row, 10).number_format = "yyyy-mm-dd"
-        for col in (8, 11):
+        proposal.cell(row, 12).number_format = "yyyy-mm-dd"
+        for col in (10, 13):
             cell = proposal.cell(row, col)
             if cell.value:
                 cell.hyperlink = cell.value

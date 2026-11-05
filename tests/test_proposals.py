@@ -15,7 +15,7 @@ from wasm_agent.models import (
     Settings,
     load_conventions,
 )
-from wasm_agent.proposals import TITLES, evaluate_proposals
+from wasm_agent.proposals import DOMAINS, TITLES, evaluate_proposals
 
 NOW = datetime(2026, 11, 4, tzinfo=UTC)
 SID = "11111111-1111-4111-8111-111111111111"
@@ -38,6 +38,15 @@ def by_code(data: Collection) -> dict:
 def test_every_proposal_is_reported_without_levels() -> None:
     findings = evaluate_proposals(Collection(collected_at=NOW), TAGS)
     assert [item.code for item in findings] == list(TITLES)
+
+
+def test_every_proposal_maps_to_one_lifecycle_domain() -> None:
+    names = {"1. Demand", "2. Design", "3. Build", "4. Deploy", "5. Operate", "6. Optimize"}
+    assert DOMAINS.keys() == TITLES.keys()
+    assert all(primary in names and (not secondary or secondary in names) and primary != secondary
+               for primary, secondary, _ in DOMAINS.values())
+    findings = evaluate_proposals(Collection(collected_at=NOW), TAGS)
+    assert {item.code: item.area for item in findings} == {code: v[0] for code, v in DOMAINS.items()}
     assert all("Level은 판정하지 않음" in item.limit for item in findings)
     assert {item.status for item in findings} <= {"수집됨", "일부 수집", "수집 불가"}
 

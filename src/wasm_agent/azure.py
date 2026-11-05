@@ -72,6 +72,14 @@ def trusted_url(url: str, audience: str) -> None:
         raise ValueError("인증 토큰을 허용되지 않은 대상에 전송할 수 없습니다.")
 
 
+def unlicensed(response: requests.Response) -> bool:
+    try:
+        message = str(((response.json() or {}).get("error") or {}).get("message") or "")
+    except (ValueError, AttributeError):
+        return False
+    return "not licensed" in message.lower()
+
+
 class ReaderHTTP:
     def __init__(
         self, credential: Credential, session: requests.Session | None = None,
@@ -98,7 +106,7 @@ class ReaderHTTP:
 
     def request(
         self, method: str, url: str, audience: str = ARM_SCOPE,
-        body: dict[str, Any] | None = None,
+        body: dict[str, Any] | None = None, extra_headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         trusted_url(url, audience)
         path = urlparse(url).path.lower()
@@ -117,7 +125,7 @@ class ReaderHTTP:
             try:
                 response = self.session.request(
                     method, url, json=body,
-                    headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+                    headers={"Authorization": f"Bearer {token}", "Accept": "application/json", **(extra_headers or {})},
                     timeout=(10, 60), allow_redirects=False,
                 )
             except (requests.Timeout, requests.ConnectionError) as exc:
@@ -146,7 +154,10 @@ class ReaderHTTP:
                 continue
             if code in (401, 403):
                 self.capture_error(url, response)
+                licensed = code == 403 and urlparse(url).hostname == "graph.microsoft.com" and unlicensed(response)
                 response.close()
+                if licensed:
+                    raise AccessError("license_missing", "HTTP 403; 서비스가 테넌트 라이선스 없음으로 응답함")
                 hint = (
                     "Graph 애플리케이션 권한, 관리자 동의, API별 라이선스 요건 확인"
                     if urlparse(url).hostname == "graph.microsoft.com" else "네트워크 ACL/역할을 함께 확인"

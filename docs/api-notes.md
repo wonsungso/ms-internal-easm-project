@@ -447,7 +447,7 @@
   - 소유자·후원자: `GET /v1.0/servicePrincipals/{id}/microsoft.graph.agentIdentity/owners|sponsors?$select=id,accountEnabled`. 사람 이름·UPN은 저장하지 않고 수와 비활성 여부만 보관합니다.
   - 애플리케이션 권한: `GET /v1.0/servicePrincipals/{id}/appRoleAssignments`(`Application.Read.All`)와 리소스 SP의 `appRoles`로 권한 이름 해석. 위임(OAuth) 권한 동의는 `Directory.Read.All`이 필요해 권한 범위를 넓히지 않기 위해 수집하지 않습니다.
   - 조건부 접근: `GET /beta/identity/conditionalAccess/policies`의 `conditions.agents`(`Policy.Read.All`). 위험 Agent: `GET /beta/identityProtection/riskyAgents`(`IdentityRiskyAgent.Read.All`, 공식 문서상 beta). beta 스키마는 바뀔 수 있습니다.
-  - 실측(2026-11-04, 관리자 읽기 전용 GET): Agent ID 9개, Blueprint 9개, `agentIdentityBlueprintId`가 Blueprint `appId`/`id`와 일치. Blueprint `tags`에 `agentName`, `projectName`, `accountName`, `subscriptionId`가 있어 Foundry Agent와 매칭(DP-SY-12). `riskyAgents`는 관리자 토큰에 필요한 범위가 없어 403이었고 이 경로의 성공 응답과 `conditions.agents`가 채워진 정책은 실환경에서 확인하지 못했습니다(공식 문서와 단위 테스트 기준).
+  - 실측(2026-11-04, 관리자 읽기 전용 GET): Agent ID 9개, Blueprint 9개, `agentIdentityBlueprintId`가 Blueprint `appId`/`id`와 일치. Blueprint `tags`에 `agentName`, `projectName`, `accountName`, `subscriptionId`가 있어 Foundry Agent와 매칭(DP-SY-12). `riskyAgents`는 2026-11-05 재확인에서 서비스가 `Your tenant is not licensed for this feature.`(403)로 응답했습니다(저장된 증거). 수집기는 이 본문을 `license_missing`으로 분류하고, `conditions.agents`가 채워진 정책은 실환경에서 확인하지 못했습니다(공식 문서와 단위 테스트 기준). 포털 Agent ID 목록의 10번째는 Foundry 프로젝트 관리 ID(`servicePrincipalType=ManagedIdentity`, Graph가 "not an Agent Identity"로 응답)라 `agentIdentity` 목록(9개)과 1개 차이가 납니다.
   - 미구현: Purview 감사(Graph `auditLogQuery`는 질의 생성 POST이며 Agent 활동 레코드 유형과 보존 정책을 확정할 근거가 없음), DSPM for AI(읽기 공식 API 미확인), Power Platform(공식 Power Platform API에서 환경 목록만 확인, Maker 수·데이터 정책·관리형 환경 값은 미확인이며 비공식 BAP admin API는 사용하지 않음).
 - Metric 이름/dimension의 Agent 식별력, 마지막 사용일과 90일 미사용 증명 가능성 검증 필요.
 - LangChain 앱 설정은 list 액션으로 비밀을 반환할 수 있어 기본 수집에서 호출하지 않으며 승인 태그/메타데이터 또는 수동 입력 우선.
@@ -492,6 +492,25 @@
 
 - 원칙: 승인 전 제안이라 L1~L5·임계값을 만들지 않고 **Azure에서 읽을 수 있는 구성 사실**만 `추가 제안 현황` 시트와 raw-data JSON의 `collection.proposals`에 기록합니다. 상태는 `수집됨/일부 수집/수집 불가`이며 실패는 사유와 함께 남기고 0으로 바꾸지 않습니다. 기존 20개 항목의 판정과 점수는 바꾸지 않습니다.
 - 모든 호출은 GET 또는 기존 허용 POST(Resource Graph)이며 Reader로 가능합니다.
+- **진단 영역 매핑:** 영역 정의와 질문은 평가 모델 Excel `2. 질문 및 확인사항`(Demand 요구관리 / Design 업무·기술 설계 / Build 개발·검증 / Deploy 배포·운영 전환 / Operate 운영·변경관리 / Optimize 현황·비용·성과·감사)을 기준으로 합니다. 코드는 그대로 두고 영역은 `src/wasm_agent/proposals.py`의 `DOMAINS`(단일 출처)로 관리하며 보고서, 평가 모델 Excel, README가 같은 값을 씁니다. 1. Demand에 해당하는 제안은 없습니다(Azure 구성 사실로는 요구 접수·적합성 판단을 수집할 수 없음).
+
+| 영역 | 제안 | 주 영역 근거(원문 질문) | 보조 영역 |
+| --- | --- | --- | --- |
+| 2. Design | P03 | 실행 환경·플랫폼과 보안 요건을 정하는 기술 설계 리뷰 | 3. Build(환경 분리) |
+| 2. Design | P07 | Agent 자율성 수준(조회 전용/사람 승인 후 실행/자율 실행)을 설계 단계에서 결정 | 3. Build |
+| 2. Design | P08 | 외부 연계(커넥터·API·MCP)의 허용 기준과 사전 승인 목록 | 5. Operate |
+| 3. Build | P04 | 보안 위협(유해 입출력·데이터 유출)을 배포 전에 점검 | 2. Design |
+| 3. Build | P05 | 프롬프트 인젝션·데이터 유출·과도한 권한 사용을 배포 전에 점검 | 4. Deploy(릴리스 게이트) |
+| 3. Build | P13 | 프롬프트·설정·소스의 버전 관리(ALM) | 5. Operate(변경 승인·원복) |
+| 4. Deploy | P01 | 배포된 Agent의 기본 정보(목적·소유자·배포 범위)와 Owner·Sponsor 지정 | 6. Optimize(전사 현황) |
+| 4. Deploy | P12 | 승인되지 않은 구성의 적용을 제한하는 설정 | 6. Optimize(준수 감사) |
+| 5. Operate | P02 | Agent 권한의 정기 검토·회수와 권한 현황 | 4. Deploy |
+| 5. Operate | P06 | 비정상 행동의 자동 탐지 수단 | 6. Optimize |
+| 5. Operate | P09 | 장애 접수와 보안 사고 시 즉시 중지·격리하는 긴급 절차 | - |
+| 5. Operate | P11 | 로그·운영 기록의 보존·삭제 관리(OE-SY-16 보완) | 2. Design(데이터 지역) |
+| 6. Optimize | P10 | Agent별·조직별 비용 산정과 자동 측정 | - |
+
+- 판단이 갈린 항목: P13은 변경 승인·원복 관점이면 Operate/Deploy이지만 수집 값(버전 고정·런타임)이 산출물 버전 관리에 가까워 Build로 두었고, P11은 지역(설계 결정)보다 보존·삭제 관리(운영)에 가까워 Operate로 두었습니다. 고객 합의로 바꾸려면 `DOMAINS`만 수정하면 됩니다.
 
 | 코드 | 수집 방법 | 근거/버전 | 중복 구분 |
 | --- | --- | --- | --- |
@@ -499,7 +518,7 @@
 | P02 | Resource Graph `identity`(시스템·사용자 할당 principal)와 `GET /subscriptions/{id}/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01`로 Agent 호스트·AI 계정의 ARM 역할 수와 광범위 역할(Owner, Contributor, User Access Administrator, RBAC Administrator) 수, 계정 `disableLocalAuth` | [Role Assignments List](https://learn.microsoft.com/rest/api/authorization/role-assignments/list-for-subscription) | DP-SY-12/OE-SY-14의 Entra·Graph 권한과 구분, ARM만 |
 | P03 | Resource Graph로 AI 계정 `publicNetworkAccess`, `networkAcls.defaultAction`, 프라이빗 엔드포인트 수, 호스트 `httpsOnly`·VNet 통합, `GET sites/{n}/config/web?api-version=2024-04-01`의 `ipSecurityRestrictions` 수 | [Web Apps Get Configuration](https://learn.microsoft.com/rest/api/appservice/web-apps/get-configuration) | 신규 |
 | P04 | `GET {account}/raiPolicies?api-version=2024-10-01`의 사용자 지정 정책 수와 모델 배포 `raiPolicyName` 대조 | [Rai Policies List](https://learn.microsoft.com/rest/api/aiservices/accountmanagement/rai-policies/list) | DS-SY-06의 허용 모델과 구분 |
-| P05 | Foundry 프로젝트 `GET /redTeams/runs?api-version=v1` (azure-ai-projects 2.4.0 `beta.red_teams.list`와 동일 경로, 사전 문서상 beta) | SDK 소스 `build_beta_red_teams_list_request` | BI-SY-08과 구분. 응답 형식은 `value`/`data` 모두 허용, 실패는 사유 기록 |
+| P05 | Foundry 프로젝트 `GET /redTeams/runs?api-version=v1` (azure-ai-projects 2.4.0 `beta.red_teams.list`와 동일 경로, 사전 문서상 beta) | SDK 소스 `build_beta_red_teams_list_request` | BI-SY-08과 구분. 응답 형식은 `value`/`data` 모두 허용. `Foundry-Features: RedTeams=V1Preview` 헤더가 없으면 400이며, 헤더를 넣은 Owner 토큰은 200(빈 목록). 읽기 전용 역할 SP는 401이고 서비스 메시지가 `evaluations/write`(`GET .../redTeams/runs`) 요구를 명시하므로 쓰기 권한은 요청하지 않고 `permission_denied`로 기록 |
 | P06, P09 | Resource Graph `microsoft.insights/metricalerts·scheduledqueryrules·activitylogalerts·components·actiongroups`. 경보의 대상 범위가 AI 리소스를 포함하는지, 작업 그룹 연결 여부, 수신자 유형별 개수(주소·이름 미수집), App Insights 보존일 | Resource Graph 테이블 `Resources` | OE-SY-16(진단 설정)과 구분 |
 | P07, P08 | Foundry Agent 정의의 도구 유형, MCP `require_approval` 값, 도구 `server_url`의 호스트(경로·쿼리·인증값 제외) | 기존 Agent 목록 응답 | 신규 |
 | P10 | `Microsoft.Consumption/budgets` 알림의 `thresholdType=Forecasted` 수 | 기존 예산 수집(2023-05-01) | OT-SY-19의 예산 경보 유무와 구분, 예측 경보만 추가 |

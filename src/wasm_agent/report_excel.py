@@ -36,6 +36,7 @@ from wasm_agent.models import (
     SecureScore,
     SecurityRecommendation,
 )
+from wasm_agent.proposals import DOMAINS
 
 LABELS = {
     "permission_denied": "조회 권한 부족",
@@ -54,6 +55,10 @@ LABELS = {
     "other": "기타 플랫폼",
     "tag": "태그를 근거로 탐지",
     "name_heuristic": "이름을 근거로 추정 - Agent 여부 추가 확인 필요",
+}
+SE_AREAS = {
+    "DM": "1. Demand", "DS": "2. Design", "BI": "3. Build",
+    "DP": "4. Deploy", "OE": "5. Operate", "OT": "6. Optimize",
 }
 SE_NAMES = {
     "DS-SY-06": "허용 모델 사용 관리",
@@ -222,11 +227,12 @@ def write_workbook(
           for reason, count in sorted(counts.items())),
     ])
     checklist = _table(book, "진단 체크리스트", [
-        "SE코드", "항목", "확인상태", "지표", "판정", "원인", "근거", "다음조치",
+        "SE코드", "진단 영역", "항목", "확인상태", "지표", "판정", "원인", "근거", "다음조치",
         "수동검토상태", "검토메모",
     ], [
         {
             "SE코드": finding.se_code,
+            "진단 영역": SE_AREAS.get(finding.se_code[:2], ""),
             "항목": SE_NAMES.get(finding.se_code, finding.se_code),
             "확인상태": readable(finding.scope),
             "지표": metric(finding),
@@ -246,10 +252,11 @@ def write_workbook(
     validation.showErrorMessage = True
     validation.errorStyle = "stop"
     checklist.add_data_validation(validation)
-    validation.add(f"I2:I{max(2, len(findings) + 1)}")
-    _table(book, "추가 제안 현황", ["코드", "제안", "수집 상태", "원인", "수집 요약", "지표", "한계", "evidence_refs"], [
+    validation.add(f"J2:J{max(2, len(findings) + 1)}")
+    _table(book, "추가 제안 현황", ["코드", "진단 영역", "제안", "수집 상태", "원인", "수집 요약", "지표", "한계", "evidence_refs"], [
         {
-            "코드": item.code, "제안": item.title, "수집 상태": item.status,
+            "코드": item.code, "진단 영역": item.area or DOMAINS.get(item.code, ("",))[0],
+            "제안": item.title, "수집 상태": item.status,
             "원인": readable(item.reason) if item.reason else "해당 없음",
             "수집 요약": readable(item.observation), "지표": item.metrics, "한계": item.limit,
             "evidence_refs": item.evidence_refs,

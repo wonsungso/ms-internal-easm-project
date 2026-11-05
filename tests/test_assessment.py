@@ -26,6 +26,7 @@ from scripts.update_assessment import (
     xml_bytes,
 )
 from wasm_agent.models import CRITERIA_FILE
+from wasm_agent.proposals import DOMAINS
 
 
 @pytest.fixture
@@ -124,14 +125,18 @@ def assert_deliverable(path: Path) -> None:
     codes = {sy.cell(r, 1).value for r in range(5, 25)}
     for row in proposal.iter_rows(min_row=5):
         assert row[0].value.startswith("AZ-SY-P")
-        assert row[1].value == STATE
-        assert set(row[3].value.split(", ")) <= codes
-        assert all(row[col].value for col in (2, 4, 5, 6, 8, 12))
-        assert row[9].value.date().isoformat() == CHECKED
-        for col in (7, 10):
+        assert row[1].value == DOMAINS[row[0].value][0]
+        assert row[3].value == STATE
+        assert set(row[5].value.split(", ")) <= codes
+        assert all(row[col].value for col in (2, 4, 6, 7, 8, 10, 14))
+        assert row[11].value.date().isoformat() == CHECKED
+        for col in (9, 12):
             if row[col].value:
                 assert row[col].value.startswith("https://learn.microsoft.com/en-us/")
                 assert row[col].hyperlink.target == row[col].value
+    assert {row[1].value for row in proposal.iter_rows(min_row=5)} <= {
+        "1. Demand", "2. Design", "3. Build", "4. Deploy", "5. Operate", "6. Optimize",
+    }
     for sheet in (sy, proposal):
         assert len(sheet.tables) == 1
         assert sheet.freeze_panes == "B5"

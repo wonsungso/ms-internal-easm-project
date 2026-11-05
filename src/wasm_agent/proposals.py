@@ -20,6 +20,22 @@ TITLES = {
     "AZ-SY-P12": "Azure 정책 준수 상태",
     "AZ-SY-P13": "릴리스 버전 고정·런타임",
 }
+# (주 영역, 보조 영역, 근거): 영역 정의와 질문은 평가 모델 Excel '2. 질문 및 확인사항' 기준
+DOMAINS = {
+    "AZ-SY-P01": ("4. Deploy", "6. Optimize", "배포된 Agent의 기본 정보(목적·소유자·배포 범위)와 Owner·Sponsor 지정(Deploy 질문). 전사 현황 점검은 Optimize 보조"),
+    "AZ-SY-P02": ("5. Operate", "4. Deploy", "Agent 권한의 정기 검토·회수와 권한 현황 관리(Operate 질문)"),
+    "AZ-SY-P03": ("2. Design", "3. Build", "실행 환경·플랫폼과 보안 요건을 정하는 기술 설계 리뷰(Design 질문). 환경 분리는 Build 보조"),
+    "AZ-SY-P04": ("3. Build", "2. Design", "데이터 유출·유해 입출력 등 보안 위협을 배포 전에 점검하는 개발 및 검증(Build 질문)"),
+    "AZ-SY-P05": ("3. Build", "4. Deploy", "프롬프트 인젝션·데이터 유출·도구 오용을 배포 전에 점검(Build 질문). 릴리스 게이트는 Deploy 보조"),
+    "AZ-SY-P06": ("5. Operate", "6. Optimize", "Agent의 비정상 행동을 자동 탐지하는 수단과 장애 감시(Operate 기술)"),
+    "AZ-SY-P07": ("2. Design", "3. Build", "Agent 자율성 수준(조회 전용·사람 승인 후 실행·자율 실행)을 설계 단계에서 결정(Design 질문)"),
+    "AZ-SY-P08": ("2. Design", "5. Operate", "외부 연계(커넥터·API·MCP)의 허용 기준과 사전 승인 목록(Design 기술)"),
+    "AZ-SY-P09": ("5. Operate", "", "장애 접수와 보안 사고 시 즉시 중지·격리하는 긴급 절차(Operate 질문)"),
+    "AZ-SY-P10": ("6. Optimize", "", "Agent별·조직별 비용 산정과 자동 측정 체계(Optimize 질문)"),
+    "AZ-SY-P11": ("5. Operate", "2. Design", "로그·운영 기록의 보존·삭제 관리(OE-SY-16 보완). 데이터 지역 결정은 Design 보조"),
+    "AZ-SY-P12": ("4. Deploy", "6. Optimize", "승인되지 않은 구성의 적용을 제한하는 정책 설정(Deploy 기술). 준수 감사는 Optimize 보조"),
+    "AZ-SY-P13": ("3. Build", "5. Operate", "프롬프트·설정·모델·소스의 버전 관리(Build 기술). 변경 승인과 원복은 Deploy·Operate 보조"),
+}
 LIMITS = {
     "AZ-SY-P01": "태그 존재 여부만 확인. 승인된 자산 대장과의 대사와 업무 목적·변경 이력은 고객 제출 자료가 필요함",
     "AZ-SY-P02": "관리 ID 연결과 ARM 역할 할당만 확인. 실제 인증 사용, Graph·데이터 평면 권한, 정기 검토 승인은 확인 불가",
@@ -277,7 +293,7 @@ def evaluate_proposals(data: Collection, tags: dict[str, Any]) -> list[ProposalF
             summary += "; 일부 실패: " + "; ".join(sorted({item.detail for item in issues}))
         refs = sorted({ref for item in observations(data, code) for ref in item.evidence_refs})
         findings.append(ProposalFinding(
-            code=code, title=title, status=status, metrics=metrics, observation=summary,
+            code=code, title=title, area=DOMAINS[code][0], status=status, metrics=metrics, observation=summary,
             limit=LIMITS[code] + ". 승인 전 제안이라 Level은 판정하지 않음", reason=reason,
             evidence_refs=refs,
         ))

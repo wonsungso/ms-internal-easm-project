@@ -328,8 +328,9 @@ def test_workbook_sheets_tables_borders_and_validation(tmp_path: Path) -> None:
     validations = book["진단 체크리스트"].data_validations.dataValidation
     assert len(validations) == 1
     assert validations[0].formula1 == '"미검토,검토중,확인완료"'
-    assert validations[0].showErrorMessage is True and "I2" in validations[0].sqref
-    assert book["진단 체크리스트"]["I1"].value == "수동검토상태"
+    assert validations[0].showErrorMessage is True and "J2" in validations[0].sqref
+    assert book["진단 체크리스트"]["J1"].value == "수동검토상태"
+    assert book["진단 체크리스트"]["B1"].value == "진단 영역"
     assert record(book["읽는법"], 4)["설명"].value == "fixture"
 
 

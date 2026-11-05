@@ -76,6 +76,7 @@ def probe(http: ReaderHTTP, sid: str, code: str, target: str, method: str, url: 
         status = {
             "permission_denied": "DENIED",
             "feature_unavailable": "FEATURE_UNAVAILABLE",
+            "license_missing": "FEATURE_UNAVAILABLE",
         }.get(exc.reason, "ERROR")
         return Result(sid, code, target, status, exc.reason, str(exc))
 

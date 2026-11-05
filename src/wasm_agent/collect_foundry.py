@@ -227,6 +227,7 @@ class FoundryCollector:
             try:
                 payload = self.http.request(
                     "GET", endpoint.rstrip("/") + "/redTeams/runs?api-version=v1", AI_SCOPE,
+                    extra_headers={"Foundry-Features": "RedTeams=V1Preview"},
                 )
                 runs = payload.get("value", payload.get("data"))
                 if not isinstance(runs, list):

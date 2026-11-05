@@ -221,6 +221,7 @@ class ProposalObservation(EvidenceModel):
 class ProposalFinding(EvidenceModel):
     code: str
     title: str
+    area: str = ""
     status: Literal["수집됨", "일부 수집", "수집 불가"]
     metrics: dict[str, Any] = Field(default_factory=dict)
     observation: str
