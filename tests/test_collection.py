@@ -57,7 +57,7 @@ def test_foundry_versions_do_not_count_as_multiple_agents(
     tmp_path: Path, tools: list | None, counts: dict | None,
 ) -> None:
     fixtures = json.loads((ROOT / "tests" / "fixtures" / "api_responses.json").read_text(encoding="utf-8"))
-    settings = load_settings(ROOT / "config" / "config.yaml")
+    settings = load_settings(ROOT / "custom-config.yaml")
     settings.tenant_id = TENANT
     fixtures["foundry_versions"]["data"][0]["definition"]["tools"] = tools
     sid = fixtures["subscriptions"][0]["subscription_id"]
@@ -94,7 +94,7 @@ def test_foundry_versions_do_not_count_as_multiple_agents(
 def test_three_subscription_pipeline_and_cross_subscription_model_link(tmp_path: Path) -> None:
     fixture = json.loads((ROOT / "tests" / "fixtures" / "api_responses.json").read_text(encoding="utf-8"))
     subs = fixture["subscriptions"]
-    settings = load_settings(ROOT / "config" / "config.yaml")
+    settings = load_settings(ROOT / "custom-config.yaml")
     settings.tenant_id, settings.expected_principal_id = TENANT, PRINCIPAL
     settings.subscriptions = [entry["subscription_id"] for entry in subs]
     settings.evidence_dir = tmp_path / "evidence"
@@ -164,7 +164,7 @@ def test_three_subscription_pipeline_and_cross_subscription_model_link(tmp_path:
 
 
 def test_subscription_failure_preserves_other_subscription_records(tmp_path: Path) -> None:
-    settings = load_settings(ROOT / "config" / "config.yaml")
+    settings = load_settings(ROOT / "custom-config.yaml")
     fixture = Collection.model_validate_json((ROOT / "tests" / "fixtures" / "three_subscriptions.json").read_text())
     settings.tenant_id, settings.expected_principal_id = TENANT, PRINCIPAL
     settings.subscriptions = fixture.subscriptions
@@ -435,7 +435,7 @@ def test_setup_file_subscriptions_are_the_default_scope(
 def test_auto_enumeration_handles_hundreds_and_filters_tenant_and_state(tmp_path: Path) -> None:
     from uuid import UUID
 
-    settings = load_settings(ROOT / "config" / "config.yaml")
+    settings = load_settings(ROOT / "custom-config.yaml")
     settings.tenant_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
     settings.expected_principal_id = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
     settings.evidence_dir = tmp_path / "evidence"

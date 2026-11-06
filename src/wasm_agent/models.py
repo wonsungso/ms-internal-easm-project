@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sysconfig
 import uuid
 from collections.abc import Sequence
 from datetime import datetime
@@ -317,7 +318,7 @@ class ProjectSettings(BaseModel):
     endpoint: str
 
 
-CRITERIA_FILE = Path(__file__).with_name("criteria.yaml")
+CRITERIA_FILE = Path(__file__).resolve().parents[2] / "criteria.yaml"
 DEFAULT_TAGS: dict[str, Any] = {
     "agent_type_key": "agent-type", "langchain_values": ["langchain"],
     "owner_key": "owner", "sponsor_key": "sponsor", "environment_key": "env",
@@ -340,6 +341,7 @@ class Settings(BaseModel):
     expected_principal_id: str | None = None
     subscriptions: list[str] = Field(default_factory=list)
     workers: int = Field(default=3, ge=1, le=16)
+    criteria_file: Path | None = None
     evidence_dir: Path = Path(".wasm-agent/evidence")
     foundry_profile: Literal["agents_v1", "classic_v1"] = "agents_v1"
     projects: list[ProjectSettings] = Field(default_factory=list)
@@ -371,7 +373,10 @@ class Settings(BaseModel):
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
-    value = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
+    try:
+        value = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
+    except yaml.YAMLError as exc:
+        raise ValueError(f"{path.name}: YAML 형식 오류") from exc
     if not isinstance(value, dict):
         raise ValueError(f"{path.name}: YAML object is required")
     return value
@@ -384,8 +389,16 @@ def load_settings(path: Path) -> Settings:
 
 
 def load_criteria(settings: Settings | None = None) -> dict[str, Any]:
-    """내장 판정 기준에 고객 입력(config.yaml)을 덮어쓴다. 값이 없으면 기본값이 유지된다."""
-    criteria = load_yaml(CRITERIA_FILE)
+    """작업 폴더·소스·설치본의 기준을 읽고 선택한 고객 입력을 적용한다."""
+    if settings is not None and settings.criteria_file is not None:
+        path = settings.criteria_file
+    elif Path("criteria.yaml").is_file():
+        path = Path("criteria.yaml")
+    elif CRITERIA_FILE.is_file():
+        path = CRITERIA_FILE
+    else:
+        path = Path(sysconfig.get_path("data")) / "share" / "wasm-agent" / "criteria.yaml"
+    criteria = load_yaml(path)
     if settings is None:
         return criteria
     if settings.model_policy_definition_ids:

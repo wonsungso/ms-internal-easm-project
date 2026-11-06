@@ -405,7 +405,7 @@ def evaluate(
         if code in LIMITS:
             rationale += "; " + LIMITS[code]
         if code == "DS-SY-06" and not allowed.get("models"):
-            rationale += "; 허용 모델 목록(config.yaml allowed_models)이 입력되지 않아 허용 비율을 계산하지 않음"
+            rationale += "; 허용 모델 목록(custom-config.yaml allowed_models)이 입력되지 않아 허용 비율을 계산하지 않음"
         if code == "DP-SY-19":
             rationale += "; 분모는 Azure에서 수집한 Agent이며 Agent Registry 전체가 아님"
         if code == "OE-SY-21" and criteria.get("overprivileged_permissions_sample"):

@@ -30,7 +30,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="읽기 전용 Azure/Foundry 거버넌스 증적")
     subparsers = parser.add_subparsers(dest="command", required=True)
     command = subparsers.add_parser("collect")
-    command.add_argument("--config", type=Path, default=Path("config") / "config.yaml")
+    command.add_argument("--config", type=Path, default=Path("custom-config.yaml"),
+                         help="고객별 선택 설정 파일")
+    command.add_argument("--criteria", type=Path, help="등급 기준 YAML 경로 - 기본값 criteria.yaml")
     command.add_argument("--setup-file", type=Path)
     scope = command.add_mutually_exclusive_group()
     scope.add_argument("--subscriptions", nargs="+")
@@ -68,6 +70,10 @@ def main(argv: list[str] | None = None) -> int:
             write_reports(data, findings, source.parent, mode, new_run=False)
             return 0
         settings = load_settings(args.config)
+        if args.config != Path("custom-config.yaml") and not args.config.is_file():
+            raise FileNotFoundError(f"선택 설정 파일을 찾을 수 없습니다: {args.config}")
+        if args.criteria:
+            settings.criteria_file = args.criteria
         setup_subscriptions: list[str] = []
         if args.setup_file:
             setup = json.loads(args.setup_file.read_text(encoding="utf-8-sig"))
@@ -87,6 +93,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.manual_agents:
             settings.manual_agents = args.manual_agents
         settings = type(settings).model_validate(settings.model_dump())
+        criteria = load_criteria(settings)
         if args.dry_run:
             print(json.dumps({
                 "mode": "fixture" if args.fixture else "live",
@@ -116,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
         data.facts["data_mode"] = "fixture" if args.fixture else "live"
         data.proposals = evaluate_proposals(data, load_conventions(settings))
         findings = evaluate(
-            data, load_criteria(settings), allowed_models(settings),
+            data, criteria, allowed_models(settings),
             load_conventions(settings), settings.policy_facts, settings.interview_levels,
         )
         workbook = write_reports(data, findings, args.output_dir, "fixture" if args.fixture else "live")

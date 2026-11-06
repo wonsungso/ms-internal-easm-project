@@ -214,7 +214,12 @@ wasm-agent collect --setup-file .wasm-agent/setup.json --output-dir output
 
 ## 개발 참고
 
-- [config/config.yaml](config/config.yaml): 허용 모델·내부 기준 등 선택 입력
+- [criteria.yaml](criteria.yaml): Level 1~5 임계값·등급 규칙. 기본 기준을 조정할 때 수정
+- [custom-config.yaml](custom-config.yaml): 허용 모델·내부 보존기간·태그·정책 증적 등 고객별 선택 입력. 없어도 기본 수집 가능
+
+두 파일은 저장소 최상단에서 관리합니다. 별도 기준 파일은 `wasm-agent collect --criteria <기준.yaml> --config <고객설정.yaml>`로 지정합니다. 수집 기본값은 현재 폴더의 두 파일이며, 기준 파일이 없는 설치 환경은 배포 패키지에 포함한 기본 기준을 사용합니다. 명시한 기준 파일이 없거나 YAML이 잘못되면 오류로 종료합니다.
+
+Level 문장과 규칙을 변경한 경우 평가 템플릿도 함께 갱신합니다: `python -m scripts.merge_assessment --source docs/assessment-result-template.xlsx --output <갱신할-템플릿.xlsx>`. 검토 후 갱신 파일을 기존 템플릿 대신 사용하세요. 기존 결과의 `package`는 점수를 다시 계산하지 않습니다.
 - [docs/api-notes.md](docs/api-notes.md): 권한·API·심사 근거와 기술적 한계
 - 검사: `python -m pytest -q`, `python -m ruff check src scripts demo tests`
 

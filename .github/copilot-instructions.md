@@ -6,7 +6,7 @@
 - 환경 식별자는 config/CLI/로컬 실행 결과로 받습니다. 기본 수집 범위는 지정 테넌트의 접근 가능한 모든 구독입니다.
 - 미확인 API/필드를 추측하지 않습니다. 공식 버전·근거·한계는 docs/api-notes.md에 기록합니다.
 - 수집 불가는 null과 permission_denied/feature_unavailable/license_missing/not_found/error로 기록합니다. 조회 실패를 L1이나 0으로 바꾸지 않습니다.
-- 임계값은 패키지에 내장된 src/wasm_agent/criteria.yaml에서 읽고, 고객 정책 값(허용 모델·내부 기준·정성 조건)은 선택 입력인 config/config.yaml로 받습니다. L4/L5는 비율뿐 아니라 해당 정책·자동화 증거를 요구합니다.
+- 임계값은 저장소 최상단 criteria.yaml에서 읽고(설치본 기본값도 패키지에 포함), 고객 정책 값(허용 모델·내부 기준·정성 조건)은 선택 입력인 custom-config.yaml로 받습니다. 별도 기준은 --criteria로 지정합니다. L4/L5는 비율뿐 아니라 해당 정책·자동화 증거를 요구합니다.
 - API 증적은 evidence/<timestamp>/에 저장하기 전에 비밀·토큰·연결문자열·개인 식별 정보를 마스킹합니다.
 - 구독별 병렬 실행, 페이지 처리, 429/일시 오류 재시도 및 부분 실패 기록을 유지합니다.
 - M365/Entra/Purview/Power Platform/Agent 365 진단은 구현하지 않습니다. 관리자 셋업은 진단 범위와 구분합니다.

@@ -1,3 +1,6 @@
+# 등급 기준: levels는 표시 문장, rules의 when은 실제 판정 조건입니다. 두 값을 함께 수정하세요.
+# 고객별 허용 모델·내부 기준·정책 증적은 같은 폴더의 custom-config.yaml에서 관리합니다.
+# 기준 문장 변경 후에는 scripts/merge_assessment.py로 평가 템플릿도 갱신하세요.
 source: "원문 기반 기술 검토 2026-11-05, docs/api-notes.md 심사기준 검토"
 interview_gap: 1.5
 inactivity_days: 90

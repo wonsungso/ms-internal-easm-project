@@ -143,7 +143,7 @@ def all_cells(book):
 def test_fixture_cli_is_offline_and_writes_only_workbook_and_raw_data(tmp_path: Path) -> None:
     with NO_AZURE:
         assert main([
-            "collect", "--config", str(ROOT / "config" / "config.yaml"),
+            "collect", "--config", str(ROOT / "custom-config.yaml"),
             "--fixture", str(ROOT / "tests" / "fixtures" / "three_subscriptions.json"),
             "--output-dir", str(tmp_path),
         ]) == 0
