@@ -70,11 +70,13 @@ def test_screenshot_notes_match_the_documented_example() -> None:
     root = Path(__file__).parents[1]
     readme = (root / "README.md").read_text(encoding="utf-8")
     assert "`wasmagent-diagnostic`" in readme
+    assert "**[" not in readme
     assert "docs/imgs/12-entra-consent.png" in readme
     step3 = readme.split("## Step 3.", 1)[1].split("## Step 4.", 1)[0]
     for image in ("10-reader-role.png", "17-foundry-reader.png", "12-entra-consent.png"):
         assert f"(docs/imgs/{image})" in step3
     assert "https://github.com/wonsungso/ms-internal-wasm-project/raw/refs/heads/main/docs/downloads/customer-setup.zip" in step3
+    assert "[**customer-setup.zip**](docs/downloads/customer-setup.zip)" in step3
     assert "python3 -m zipfile -e customer-setup.zip customer-setup" in step3
     assert "bash setup.sh login" in step3 and "bash setup.sh apply" in step3
     assert "bash scripts/setup.sh login" not in step3

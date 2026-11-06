@@ -17,7 +17,8 @@
 
 ## Step 1. <span style='background-color: #fff5b1'>[MS WASM 관리자]</span> Codespaces와 인증서 준비
 
-저장소 **Code → Codespaces → Create codespace**에서 열고 아래를 실행합니다. 개인키 암호는 안전하게 보관합니다.
+- **환경 준비:** 저장소 **Code → Codespaces → Create codespace**에서 엽니다.
+- **인증서 생성:** 아래 명령을 실행하고 개인키 암호는 안전하게 보관합니다.
 
 ```bash
 umask 077
@@ -31,29 +32,27 @@ cat "$cert_dir/private-key.pem" "$cert_dir/public-cert.pem" > "$cert_dir/diagnos
 chmod 600 "$cert_dir/private-key.pem" "$cert_dir/diagnostic.pem"
 ```
 
-고객에게 **[customer-setup.zip 다운로드](https://github.com/wonsungso/ms-internal-wasm-project/raw/refs/heads/main/docs/downloads/customer-setup.zip)**와 위에서 만든 **public-cert.pem**을 전달합니다.
-
-ZIP에는 **setup.sh·setup_account.py·foundry-reader.json**만 포함됩니다. 고객별 공개 인증서는 별도 전달하며, 개인키·`diagnostic.pem`·개인키 암호·수집기는 전달하지 않습니다. 고객에게 저장소를 제공할 필요는 없습니다.
+- **고객 전달:** 프로젝트에 포함된 [**customer-setup.zip**](docs/downloads/customer-setup.zip) ([바로 다운로드](https://github.com/wonsungso/ms-internal-wasm-project/raw/refs/heads/main/docs/downloads/customer-setup.zip)) 파일과 위에서 만든 **public-cert.pem**을 전달합니다.
 
 ## Step 2. <span style='background-color: #dcffe4'>[고객사 담당자]</span> 진단 앱 등록
 
-1. [Azure Portal](https://portal.azure.com) → **Microsoft Entra ID → 앱 등록 → 새 등록**. 이름은 `wasmagent-diagnostic`, 계정 유형은 **Single tenant**로 등록합니다.
+- **앱 등록:** [Azure Portal](https://portal.azure.com) → **Microsoft Entra ID → 앱 등록 → 새 등록**에서 이름은 `wasmagent-diagnostic`, 계정 유형은 **Single tenant**로 등록합니다.
 
 ![앱 등록 위치](docs/imgs/07-register-sp.png)
 
-2. **개요**에서 Tenant ID와 Client ID를 기록합니다. SP Object ID는 **엔터프라이즈 애플리케이션 → 해당 앱 → 속성**에서 확인합니다.
+- **ID 확인:** **개요**에서 Tenant ID와 Client ID를 기록합니다. SP Object ID는 **엔터프라이즈 애플리케이션 → 해당 앱 → 속성**에서 확인합니다.
 
 ![앱 ID 확인 위치](docs/imgs/08-sp-overview.png)
 
-3. **인증서 및 암호 → 인증서 → 인증서 업로드**에서 받은 `public-cert.pem`을 등록합니다.
+- **인증서 등록:** **인증서 및 암호 → 인증서 → 인증서 업로드**에서 받은 `public-cert.pem`을 등록합니다.
 
 ![공개 인증서 업로드](docs/imgs/09-upload-certificate.png)
 
-MS 담당자에게 **Tenant ID, Client ID, SP Object ID, 승인 구독 ID 목록**을 전달합니다.
+- **MS에 전달:** **Tenant ID, Client ID, SP Object ID, 승인 구독 ID 목록**을 전달합니다.
 
 ## Step 3. <span style='background-color: #dcffe4'>[고객사 담당자]</span> 전체 진단용 권한 부여
 
-아래 읽기 권한을 **기본으로 모두 부여**합니다. Azure 역할과 Entra 권한은 서로 달라 둘 다 필요합니다.
+- **부여 대상:** 아래 읽기 권한을 **기본으로 모두 부여**합니다. Azure 역할과 Entra 권한은 서로 달라 둘 다 필요합니다.
 
 | 종류 | 권한 전체 이름 | 부여 범위 |
 | --- | --- | --- |
@@ -66,21 +65,20 @@ MS 담당자에게 **Tenant ID, Client ID, SP Object ID, 승인 구독 ID 목록
 | Graph 애플리케이션 권한 | `AgentIdentityBlueprint.Read.All` | 테넌트, 관리자 동의 필요 |
 | Graph 애플리케이션 권한 | `Application.Read.All` | 테넌트, 관리자 동의 필요 |
 
-**권한을 부여하는 고객 관리자**에게는 구독 역할 할당·사용자 지정 역할 생성 권한과 Entra 관리자 동의 권한이 필요합니다.
-진단 앱에는 Owner·Contributor를 부여하지 않습니다.
+- **관리자 권한 확인:** 구독 역할 할당·사용자 지정 역할 생성 권한과 Entra 관리자 동의 권한이 필요합니다.
+- **최소 권한 유지:** 진단 앱에는 Owner·Contributor를 부여하지 않습니다.
 
-MS WASM 관리자로부터 전달받은 [**customer-setup.zip 다운로드**](https://github.com/wonsungso/ms-internal-wasm-project/raw/refs/heads/main/docs/downloads/customer-setup.zip) 파일을 압축 해제하고, **Python 3.11 이상과 Azure CLI가 있는 승인된 Bash 환경**에서 아래를 실행합니다.
-
-다운로드 링크는 저장소 접근 권한이 필요합니다. 고객에게 권한이 없으면 MS 담당자가 ZIP과 공개 인증서를 별도 전달합니다.
-
-고객은 파일이 있는 `customer-setup` 폴더에서 **`bash setup.sh`**를 사용합니다. `scripts/setup.sh`는 MS 저장소 내부 경로이므로 고객 VM에서는 사용하지 않습니다.
-
-`apply`는 목록의 모든 승인 구독에 기본 Azure 역할 4개·Foundry 사용자 지정 역할을 할당하고 Graph 권한 3개를 추가·동의합니다.
-고객은 자신의 관리자 계정으로 로그인하며 MS에 관리자 인증 정보를 전달하지 않습니다.
+- **실행 환경 준비:** **Python 3.11 이상과 Azure CLI가 있는 승인된 Bash 환경**을 사용합니다.
+- **파일 압축 해제:** MS WASM 관리자로부터 전달받은 [**customer-setup.zip**](docs/downloads/customer-setup.zip) ([바로 다운로드](https://github.com/wonsungso/ms-internal-wasm-project/raw/refs/heads/main/docs/downloads/customer-setup.zip)) 파일을 아래 명령으로 압축 해제합니다.
 
 ```bash
 python3 -m zipfile -e customer-setup.zip customer-setup
 cd customer-setup
+```
+
+- **설정값 입력:** 아래 ID를 고객 환경의 값으로 바꾸어 `setup.json`을 생성합니다.
+
+```bash
 cat > setup.json <<'EOF'
 {
   "tenant_id": "<고객 테넌트 ID>",
@@ -95,38 +93,47 @@ cat > setup.json <<'EOF'
   "principal_id": "<진단 앱의 서비스 주체(SP) 개체 ID>"
 }
 EOF
+```
+
+- **권한 설정 실행:** 로그인 후 부여할 권한을 확인하고 적용합니다.
+
+```bash
 bash setup.sh login
 bash setup.sh plan     # 부여할 권한 확인, Azure 변경 없음
 bash setup.sh apply    # 기본 읽기 권한 전체 부여 및 결과를 setup.json에 저장
 ```
 
-완료된 **setup.json만 MS 담당자에게 반환**합니다. 고객에게 개인키를 보내거나 수집을 실행하도록 요청하지 않습니다. Azure 역할 관리자와 Entra 동의 관리자가 다르면 동일 파일로 각 승인 절차를 이어서 진행합니다.
+- **적용 범위:** `apply`는 목록의 모든 승인 구독에 기본 Azure 역할 4개·Foundry 사용자 지정 역할을 할당하고 Graph 권한 3개를 추가·동의합니다.
+- **인증 정보 보호:** 고객은 자신의 관리자 계정으로 로그인하며 MS에 관리자 인증 정보를 전달하지 않습니다.
 
-스크립트 실행 후 아래 화면에서 권한을 확인할 수 있습니다. **포털에서 같은 권한을 다시 부여할 필요는 없습니다.**
+- **결과 반환:** 완료된 **setup.json만 MS 담당자에게 반환**합니다. 고객에게 개인키를 보내거나 수집을 실행하도록 요청하지 않습니다.
+- **담당자 분리 시:** Azure 역할 관리자와 Entra 동의 관리자가 다르면 동일 파일로 각 승인 절차를 이어서 진행합니다.
+
+- **권한 확인:** 스크립트 실행 후 아래 화면에서 확인합니다. **포털에서 같은 권한을 다시 부여할 필요는 없습니다.**
 
 <details>
 <summary>Azure 역할 설정 (Portal 기준)</summary>
 
 
-**구독 → 액세스 제어(IAM) → 역할 할당 추가**에서 역할과 진단 앱을 지정합니다.
+- **Azure 역할:** **구독 → 액세스 제어(IAM) → 역할 할당 추가**에서 역할과 진단 앱을 지정합니다.
 
 ![Azure Reader 역할 선택 위치](docs/imgs/10-reader-role.png)
 
 ### Foundry 사용자 지정 역할 설정
 
-스크립트로 역할을 생성한 뒤 같은 IAM 화면에서 **WASMAgent Foundry Evidence Reader v2**를 선택합니다.
+- **Foundry 역할:** 스크립트로 역할을 생성한 뒤 같은 IAM 화면에서 **WASMAgent Foundry Evidence Reader v2**를 선택합니다.
 
 ![Foundry 사용자 지정 읽기 역할 선택](docs/imgs/17-foundry-reader.png)
 
 ### Graph 애플리케이션 권한 설정
 
-**Entra → 앱 등록 → 진단 앱 → API 사용 권한**에서 권한 3개를 확인하고 **관리자 동의**합니다.
+- **Graph 권한:** **Entra → 앱 등록 → 진단 앱 → API 사용 권한**에서 권한 3개를 확인하고 **관리자 동의**합니다.
 
 ![Graph 읽기 권한 3개와 관리자 동의 위치](docs/imgs/12-entra-consent.png)
 
 ### 나머지 역할·DataActions·승인 완료 화면
 
-**구독 → 액세스 제어(IAM) → 역할 할당 추가**에서 아래 역할을 선택합니다. 수동으로 설정한다면 각 역할마다 진단 앱을 멤버로 지정하고 **검토 + 할당**합니다.
+- **수동 역할 할당:** **구독 → 액세스 제어(IAM) → 역할 할당 추가**에서 아래 역할을 선택합니다. 각 역할마다 진단 앱을 멤버로 지정하고 **검토 + 할당**합니다.
 
 ![진단 앱과 구독 범위 확인](docs/imgs/11-reader-review.png)
 
@@ -136,7 +143,7 @@ bash setup.sh apply    # 기본 읽기 권한 전체 부여 및 결과를 setup.
 
 ![Security Reader 선택](docs/imgs/16-security-reader.png)
 
-Foundry 역할은 스크립트가 생성합니다. 같은 목록에서 **WASMAgent Foundry Evidence Reader v2**를 선택하고 **View → JSON** 또는 **Permissions → DataActions**에서 아래 읽기 권한 3개만 있는지 확인합니다.
+- **Foundry 권한 확인:** 스크립트가 생성한 **WASMAgent Foundry Evidence Reader v2**를 선택하고 **View → JSON** 또는 **Permissions → DataActions**에서 아래 읽기 권한 3개만 있는지 확인합니다.
 
 | Foundry DataActions 전체 이름 |
 | --- |
@@ -146,18 +153,19 @@ Foundry 역할은 스크립트가 생성합니다. 같은 목록에서 **WASMAge
 
 ![Foundry JSON에서 읽기 DataActions 전체 이름 3개 확인](docs/imgs/18-foundry-permissions.png)
 
-Entra에서는 **앱 등록 → 진단 앱 → API 사용 권한**에서 Graph 권한 3개와 승인 상태를 확인합니다. 수동 동의는 **Global Administrator 또는 Privileged Role Administrator**가 수행하며, PIM을 사용하면 먼저 해당 역할을 활성화합니다.
+- **Entra 승인 확인:** **앱 등록 → 진단 앱 → API 사용 권한**에서 Graph 권한 3개와 승인 상태를 확인합니다. 수동 동의는 **Global Administrator 또는 Privileged Role Administrator**가 수행하며, PIM을 사용하면 먼저 해당 역할을 활성화합니다.
 
 ![관리자 동의 확인](docs/imgs/19-entra-confirm.png)
 
 ![Graph 읽기 권한 3개 승인 완료 확인](docs/imgs/13-entra-granted.png)
 
-**Entra 점검도 필수입니다.** 권한이 빠지면 해당 항목은 점수를 낮추지 않고 **판정 보류**로 표시합니다. 권한을 보완한 뒤 다시 수집하면 됩니다.
+- **권한 누락 시:** **Entra 점검도 필수입니다.** 권한이 빠지면 해당 항목은 **판정 보류**로 표시하며, 권한을 보완한 뒤 다시 수집합니다.
 </details>
 
 ## Step 4. <span style='background-color: #fff5b1'>[MS WASM 관리자]</span> 점검과 수집
 
-MS 담당자는 고객이 반환한 `setup.json`을 이 저장소의 **.wasm-agent/setup.json**으로 저장하고, Step 1에서 보관한 인증서로 **별도 진단 터미널**에서 실행합니다. `scripts/setup.sh verify`와 수집기는 MS 담당자 환경에서만 실행합니다.
+- **설정 파일 저장:** 고객이 반환한 `setup.json`을 이 저장소의 **.wasm-agent/setup.json**으로 저장합니다.
+- **진단 실행:** Step 1에서 보관한 인증서로 **별도 진단 터미널**에서 실행합니다. `scripts/setup.sh verify`와 수집기는 MS 담당자 환경에서만 실행합니다.
 
 ```bash
 export AZURE_TENANT_ID='<고객 테넌트 ID>'
