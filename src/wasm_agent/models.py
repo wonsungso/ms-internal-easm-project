@@ -318,7 +318,7 @@ class ProjectSettings(BaseModel):
     endpoint: str
 
 
-CRITERIA_FILE = Path(__file__).resolve().parents[2] / "criteria.yaml"
+CRITERIA_FILE = Path(__file__).resolve().parents[2] / "config" / "criteria.yaml"
 DEFAULT_TAGS: dict[str, Any] = {
     "agent_type_key": "agent-type", "langchain_values": ["langchain"],
     "owner_key": "owner", "sponsor_key": "sponsor", "environment_key": "env",
@@ -392,8 +392,8 @@ def load_criteria(settings: Settings | None = None) -> dict[str, Any]:
     """작업 폴더·소스·설치본의 기준을 읽고 선택한 고객 입력을 적용한다."""
     if settings is not None and settings.criteria_file is not None:
         path = settings.criteria_file
-    elif Path("criteria.yaml").is_file():
-        path = Path("criteria.yaml")
+    elif (Path("config") / "criteria.yaml").is_file():
+        path = Path("config") / "criteria.yaml"
     elif CRITERIA_FILE.is_file():
         path = CRITERIA_FILE
     else:

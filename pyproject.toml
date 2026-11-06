@@ -37,7 +37,7 @@ demo = [
 where = ["src"]
 
 [tool.setuptools.data-files]
-"share/wasm-agent" = ["criteria.yaml", "docs/assessment-result-template.xlsx"]
+"share/wasm-agent" = ["config/criteria.yaml", "docs/assessment-result-template.xlsx"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "demo"]

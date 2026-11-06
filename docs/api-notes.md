@@ -270,7 +270,7 @@
   - 프로젝트 산출물: docs/api-notes.md, README.md, src/wasm_agent/
   - 현재 상태/한계: 읽기 계약과 권한 한계를 아래에 보존; 고객별 지원은 실제 접근 확인 필요
 - **3. 분석 기준**
-  - 프로젝트 산출물: criteria.yaml, src/wasm_agent/evaluation.py, tests/
+  - 프로젝트 산출물: config/criteria.yaml, src/wasm_agent/evaluation.py, tests/
   - 현재 상태/한계: 원문 미정의 구간은 임의 보간 금지
 - **4. 보고서**
   - 프로젝트 산출물: report-<타임스탬프>.xlsx, raw-data-<타임스탬프>.json
@@ -306,7 +306,7 @@
   - Resource Graph 인벤토리와 ARM 하위 리소스 목록 보완.
   - Foundry Agent/버전, 모델 배포, 평가 및 LangChain 태그/이름 후보 정규화.
   - 비용/메트릭/로그/보안 증거 중 귀속 가능한 필드만 연결.
-  - 루트 `criteria.yaml`(수정 가능한 기본 임계값, 고객 입력은 선택 `custom-config.yaml`) 수치/정성 조건 평가, XLSX 및 raw-data JSON 생성.
+  - `config/criteria.yaml`(수정 가능한 기본 임계값, 고객 입력은 선택 `config/custom-config.yaml`) 수치/정성 조건 평가, XLSX 및 raw-data JSON 생성.
 - 페이지 처리, 429/일시 오류 재시도와 부분 실패 기록을 유지합니다.
 - Collector Protocol: `discover(subscriptions) -> Collection`, `required_roles` 선언.
 - Evaluator: `Collection + criteria.yaml -> Finding[]`; se_code, metric_value, level, rationale, evidence_refs, N/A 사유/다음 단계/interview_level/gap_flag 반환.
@@ -528,7 +528,7 @@
 
 ### Level 구성 요소의 공식 근거 (2026-11-05)
 
-현재 L1~L5·수치 임계값·판정 규칙은 루트 [criteria.yaml](../criteria.yaml)이 단일 출처입니다. [custom-config.yaml](../custom-config.yaml)은 고객별 선택 입력이며 필수 실행 파일이 아닙니다. `--criteria` 명시 경로, 현재 폴더 criteria.yaml, 소스 루트, 설치 패키지 기본 파일 순서로 기준을 결정하며 명시 파일 오류는 기본값으로 대체하지 않습니다. 고객 내부 기준이 입력되면 해당 필드만 우선 적용합니다. [scripts/proposal_levels.py](../scripts/proposal_levels.py)는 같은 기준을 읽어 템플릿에 전달합니다. 기준 문장 변경 시 템플릿도 병합 도구로 갱신해야 하며 `package`는 기존 점수를 재평가하지 않습니다. 아래 문서는 기능의 근거이며 80%·90%·100%는 Microsoft 인증 기준이 아닌 본 진단의 기본 평가 기준입니다.
+현재 L1~L5·수치 임계값·판정 규칙은 [config/criteria.yaml](../config/criteria.yaml)이 단일 출처입니다. [config/custom-config.yaml](../config/custom-config.yaml)은 고객별 선택 입력이며 필수 실행 파일이 아닙니다. `--criteria` 명시 경로, 현재 작업 폴더의 config/criteria.yaml, 소스 저장소의 config/criteria.yaml, 설치 패키지 기본 파일 순서로 기준을 결정하며 명시 파일 오류는 기본값으로 대체하지 않습니다. 고객 내부 기준이 입력되면 해당 필드만 우선 적용합니다. [scripts/proposal_levels.py](../scripts/proposal_levels.py)는 같은 기준을 읽어 템플릿에 전달합니다. 기준 문장 변경 시 템플릿도 병합 도구로 갱신해야 하며 `package`는 기존 점수를 재평가하지 않습니다. 아래 문서는 기능의 근거이며 80%·90%·100%는 Microsoft 인증 기준이 아닌 본 진단의 기본 평가 기준입니다.
 
 | 코드 | 근거 요약 | MS Learn |
 | --- | --- | --- |
@@ -600,7 +600,7 @@
 
 - 건수 키의 `value`는 `{total: 10, compliant: 9}` 형식. 전체 분모와 모든 L3 통제를 충족한 대상 수를 입력합니다. 정수만 허용하며 `0 <= compliant <= total`, total 0은 N/A입니다.
 - 접두사에 `_standardized`, `_enforced`, `_improved`를 붙여 각각 L3 승인 표준·시험, L4 통제·자동화, L5 개선 이력을 `value: true`와 증적으로 확인합니다. 세부 요구는 템플릿의 각 Level 문구를 모두 충족해야 합니다.
-- 예시는 [custom-config.yaml](../custom-config.yaml). 충족률은 건수로 계산하며 직접 실측 지표 덮어쓰기는 거부합니다. BI-SY-15의 필수 메타데이터 비율은 완전한 Agent 목록에서 자동 산출하며 상충하는 검토 건수는 오류입니다.
+- 예시는 [custom-config.yaml](../config/custom-config.yaml). 충족률은 건수로 계산하며 직접 실측 지표 덮어쓰기는 거부합니다. BI-SY-15의 필수 메타데이터 비율은 완전한 Agent 목록에서 자동 산출하며 상충하는 검토 건수는 오류입니다.
 - DS-SY-06의 `model_policy_assigned`는 할당·enforcementMode 참고값일 뿐 Deny 효과·매개변수·예외를 입증하지 않습니다. L4의 `model_policy_enforced`는 별도 검증 증적이 필요합니다.
 - 템플릿 갱신: `python -m scripts.merge_assessment --source <검토할-xlsx> --output <다른-경로.xlsx>`. 병합된 템플릿을 입력하면 사용자 서식을 보존합니다. 원본 파일 자체 덮어쓰기는 거부합니다.
 

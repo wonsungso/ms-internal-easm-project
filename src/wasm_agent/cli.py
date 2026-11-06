@@ -30,9 +30,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="읽기 전용 Azure/Foundry 거버넌스 증적")
     subparsers = parser.add_subparsers(dest="command", required=True)
     command = subparsers.add_parser("collect")
-    command.add_argument("--config", type=Path, default=Path("custom-config.yaml"),
+    command.add_argument("--config", type=Path, default=Path("config") / "custom-config.yaml",
                          help="고객별 선택 설정 파일")
-    command.add_argument("--criteria", type=Path, help="등급 기준 YAML 경로 - 기본값 criteria.yaml")
+    command.add_argument("--criteria", type=Path, help="등급 기준 YAML 경로 - 기본값 config/criteria.yaml")
     command.add_argument("--setup-file", type=Path)
     scope = command.add_mutually_exclusive_group()
     scope.add_argument("--subscriptions", nargs="+")
@@ -70,7 +70,7 @@ def main(argv: list[str] | None = None) -> int:
             write_reports(data, findings, source.parent, mode, new_run=False)
             return 0
         settings = load_settings(args.config)
-        if args.config != Path("custom-config.yaml") and not args.config.is_file():
+        if args.config != Path("config") / "custom-config.yaml" and not args.config.is_file():
             raise FileNotFoundError(f"선택 설정 파일을 찾을 수 없습니다: {args.config}")
         if args.criteria:
             settings.criteria_file = args.criteria
