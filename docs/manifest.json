@@ -497,6 +497,57 @@
           768,
           139
         ]
+      },
+      {
+        "file": "imgs/20-customer-setup-success.png",
+        "captured_on": "2026-11-06",
+        "source": "고객이 제공한 VM 터미널 실제 성공 화면 - 새 실행·합성 아님",
+        "capture_element": "customer_terminal",
+        "action": "승인 구독 3개 Azure 역할 15건·Graph 권한 3건 확인과 setup.json 저장",
+        "size_px": [
+          1473,
+          523
+        ],
+        "highlight_count": 0,
+        "highlight_not_applicable": "터미널 결과이며 클릭 위치가 없음",
+        "account_identifiers_masked": true,
+        "hostname_masked": true,
+        "subscription_and_principal_masked": true,
+        "client_id_masked": true,
+        "home_path_masked": true,
+        "mask_method": "불투명 회색 픽셀 마스킹 - 역할·권한명·성공 상태는 변경하지 않음",
+        "mask_boxes_px": {
+          "host_and_prompt": [
+            0,
+            0,
+            416,
+            19
+          ],
+          "service_principal_ids": [
+            23,
+            81,
+            389,
+            439
+          ],
+          "subscription_ids": [
+            562,
+            81,
+            928,
+            379
+          ],
+          "client_id": [
+            143,
+            441,
+            509,
+            460
+          ],
+          "home_path": [
+            264,
+            501,
+            317,
+            522
+          ]
+        }
       }
     ]
   },

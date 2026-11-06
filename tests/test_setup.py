@@ -507,6 +507,42 @@ def test_verify_always_checks_entra_and_rejects_skip(config_file: Path, tmp_path
         assert exc.value.code == 2
 
 
+def test_graph_consent_failure_explains_pim_and_retains_original_error() -> None:
+    cli = Mock()
+    role = "Application.Read.All"
+    graph_id, role_id = "graph-service-principal", "role-id"
+    cli.run.side_effect = [
+        {"id": graph_id, "appRoles": [{"id": role_id, "value": role, "allowedMemberTypes": ["Application"]}]},
+        {"appId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"},
+        [{"resourceAppId": setup.GRAPH_APP_ID, "resourceAccess": [{"id": role_id, "type": "Role"}]}],
+        {"value": []},
+        RuntimeError("Graph denied: Authorization_RequestDenied"),
+    ]
+    with pytest.raises(RuntimeError, match="관리자 동의가 완료되지") as error:
+        setup.ensure_graph_roles(cli, PRINCIPAL, (role,))
+    message = str(error.value)
+    assert "Privileged Role Administrator" in message and "Global Reader" in message
+    assert "bash setup.sh login --login-resource graph" in message
+    assert "기존 Azure 역할 할당은 유지" in message and "Authorization_RequestDenied" in message
+    assert cli.run.call_args.args[:3] == ("rest", "--method", "POST")
+    assert cli.run.call_count == 5
+
+
+@pytest.mark.parametrize("error_code", ["Authorization_RequestDenied", "Request_BadRequest"])
+def test_cli_failure_exposes_only_fixed_safe_error_code_not_response_body(error_code: str) -> None:
+    cli = object.__new__(setup.AzureCLI)
+    cli.prefix = ["az"]
+    response = subprocess.CompletedProcess(
+        [], 1, stdout="secret-stdout", stderr=f'ERROR: {{"error":{{"code":"{error_code}",'
+        '"message":"secret-token someone@example.invalid"}}}',
+    )
+    with patch.object(setup.subprocess, "run", return_value=response), pytest.raises(RuntimeError) as error:
+        cli.run("rest", "--method", "POST", "--body", '{"secret":"never-print"}')
+    message = str(error.value)
+    assert f"code={error_code}" in message
+    assert all(value not in message for value in ("secret-token", "someone@example.invalid", "never-print", "secret-stdout"))
+
+
 def bash_executable() -> str:
     if os.name == "nt":
         path = Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Git" / "bin" / "bash.exe"

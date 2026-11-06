@@ -7,13 +7,13 @@
 
 ## 진행 순서
 
-| 순서 | 담당 | 할 일 |
-| --- | --- | --- |
-| 1 | <span style='background-color: #fff5b1'>**MS WASM 관리자**</span> | Codespaces와 인증서 준비 |
-| 2 | <span style='background-color: #dcffe4'>**고객사 담당자**</span> | 진단 앱 등록, 공개 인증서 업로드 |
-| 3 | <span style='background-color: #dcffe4'>**고객사 담당자**</span> | 전체 진단용 읽기 권한 부여 |
-| 4 | <span style='background-color: #fff5b1'>**MS WASM 관리자**</span> | 점검·수집 후 결과 다운로드 |
-| 5 | <span style='background-color: #e5dcf7'>**고객/MS 공동**</span> | 결과 검토와 권한 회수 |
+| 순서 | 담당 | 실행 위치 | 할 일 |
+| --- | --- | --- | --- |
+| 1 | <span style='background-color: #fff5b1'>**MS WASM 관리자**</span> | Codespaces 터미널 | 인증서 준비, 고객용 ZIP·공개 인증서 전달 |
+| 2 | <span style='background-color: #dcffe4'>**고객사 담당자**</span> | 고객사 VM의 웹 브라우저 - Azure Portal | 진단 앱 등록, 공개 인증서 업로드 |
+| 3 | <span style='background-color: #dcffe4'>**고객사 담당자**</span> | 고객사 VM의 Bash 터미널 | 고객용 ZIP으로 읽기 권한 설정, setup.json 반환 |
+| 4 | <span style='background-color: #fff5b1'>**MS WASM 관리자**</span> | Codespaces 터미널 | 반환받은 setup.json과 개인키로 검증·수집, 결과 다운로드 |
+| 5 | <span style='background-color: #e5dcf7'>**고객/MS 공동**</span> | Codespaces / 고객사 VM | 결과 공동 검토, 고객은 Portal에서 권한 회수, MS는 개인키·데이터 정리 |
 
 ## Step 1. <span style='background-color: #fff5b1'>[MS WASM 관리자]</span> Codespaces와 인증서 준비
 
@@ -30,6 +30,8 @@ openssl req -x509 -newkey rsa:3072 -sha256 -days 90 \
   -keyout "$cert_dir/private-key.pem" -out "$cert_dir/public-cert.pem"
 cat "$cert_dir/private-key.pem" "$cert_dir/public-cert.pem" > "$cert_dir/diagnostic.pem"
 chmod 600 "$cert_dir/private-key.pem" "$cert_dir/diagnostic.pem"
+mkdir -p .wasm-agent
+printf '%s\n' "$cert_dir/diagnostic.pem" > .wasm-agent/certificate-path
 ```
 
 - **고객 전달:** 프로젝트에 포함된 [**customer-setup.zip**](docs/downloads/customer-setup.zip) ([바로 다운로드](https://github.com/wonsungso/ms-internal-wasm-project/raw/refs/heads/main/docs/downloads/customer-setup.zip)) 파일과 위에서 만든 **public-cert.pem**을 전달합니다.
@@ -102,7 +104,18 @@ bash setup.sh plan     # 부여할 권한 확인, Azure 변경 없음
 bash setup.sh apply    # 기본 읽기 권한 전체 부여 및 결과를 setup.json에 저장
 ```
 
+- **정상 완료 확인:** 승인 구독 3개 기준으로 Azure 역할 15건·Graph 권한 3건이 `확인됨`이고, 마지막에 `setup.json` 저장 메시지가 나오면 Step 3가 완료된 것입니다.
+
+![고객 VM 권한 설정 성공 결과 예시](docs/imgs/20-customer-setup-success.png)
+
 - **적용 범위:** `apply`는 목록의 모든 승인 구독에 기본 Azure 역할 4개·Foundry 사용자 지정 역할을 할당하고 Graph 권한 3개를 추가·동의합니다.
+- **Graph 동의 단계에서 중단될 때:** 구독 역할 할당 권한과 Entra 동의 권한은 별개입니다. PIM에서 **Privileged Role Administrator 또는 Global Administrator**를 활성화한 관리자가 아래를 재실행합니다. Global Reader만으로는 동의할 수 없으며, 기존 Azure 역할은 중복 생성하지 않습니다.
+
+```bash
+bash setup.sh login --login-resource graph
+bash setup.sh apply
+```
+
 - **인증 정보 보호:** 고객은 자신의 관리자 계정으로 로그인하며 MS에 관리자 인증 정보를 전달하지 않습니다.
 
 - **결과 반환:** 완료된 **setup.json만 MS 담당자에게 반환**합니다. 고객에게 개인키를 보내거나 수집을 실행하도록 요청하지 않습니다.
@@ -163,18 +176,21 @@ bash setup.sh apply    # 기본 읽기 권한 전체 부여 및 결과를 setup.
 
 ## Step 4. <span style='background-color: #fff5b1'>[MS WASM 관리자]</span> 점검과 수집
 
-- **설정 파일 저장:** 고객이 반환한 `setup.json`을 이 저장소의 **.wasm-agent/setup.json**으로 저장합니다.
-- **진단 실행:** Step 1에서 보관한 인증서로 **별도 진단 터미널**에서 실행합니다. `scripts/setup.sh verify`와 수집기는 MS 담당자 환경에서만 실행합니다.
+- **준비:** 고객이 반환한 `setup.json`을 저장소의 **.wasm-agent/setup.json**으로 저장합니다.
+- **실행:** **Step 1에서 사용한 동일 Codespaces 터미널**에서 아래를 실행합니다. Step 1의 개인키 암호를 재입력합니다.
 
 ```bash
+cd /workspaces/ms-internal-wasm-project
+
 export AZURE_TENANT_ID='<고객 테넌트 ID>'
 export AZURE_CLIENT_ID='<진단 앱의 애플리케이션(클라이언트) ID>'
-export AZURE_CLIENT_CERTIFICATE_PATH="$cert_dir/diagnostic.pem"
+export AZURE_CLIENT_CERTIFICATE_PATH
 read -r -s -p 'Certificate password: ' AZURE_CLIENT_CERTIFICATE_PASSWORD; printf '\n'
 export AZURE_CLIENT_CERTIFICATE_PASSWORD
 unset AZURE_CLIENT_SECRET AZURE_FEDERATED_TOKEN_FILE
 
-bash scripts/setup.sh verify --certificate-path "$AZURE_CLIENT_CERTIFICATE_PATH"
+AZURE_CLIENT_CERTIFICATE_PATH="$(python3 scripts/certificate_path.py)" &&
+bash scripts/setup.sh verify --certificate-path "$AZURE_CLIENT_CERTIFICATE_PATH" &&
 wasm-agent collect --setup-file .wasm-agent/setup.json --output-dir output
 ```
 

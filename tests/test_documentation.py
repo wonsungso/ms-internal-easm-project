@@ -16,7 +16,7 @@ def test_screenshot_guide_references_all_captured_images() -> None:
         for value in re.findall(r"!\[[^\]]*\]\(([^)]+\.png)\)", guide.read_text(encoding="utf-8"))
     }
     expected = {(docs / image["file"]).resolve() for image in manifest["images"]}
-    assert len(expected) == 13
+    assert len(expected) == 14
     assert expected <= references
     for path in references:
         assert path.is_file(), path
@@ -54,7 +54,13 @@ def test_captured_images_are_real_pngs_with_highlight_metadata() -> None:
         assert width >= 300 and height >= (
             120 if image.get("capture_element") == "confirmation_dialog" else 300
         )
-        assert image["highlight_count"] > 0
+        if image.get("capture_element") == "customer_terminal":
+            assert image["highlight_count"] == 0 and image["highlight_not_applicable"]
+            assert all(image[key] for key in ("hostname_masked", "subscription_and_principal_masked",
+                                              "client_id_masked", "home_path_masked"))
+            assert len(image["mask_boxes_px"]) == 5
+        else:
+            assert image["highlight_count"] > 0
     assert manifest["images"][1]["client_id_masked"] is True
     assert manifest["images"][2]["certificate_registered"] is True
     assert manifest["images"][4]["subscription_and_principal_masked"] is True
@@ -80,6 +86,32 @@ def test_screenshot_notes_match_the_documented_example() -> None:
     assert "python3 -m zipfile -e customer-setup.zip customer-setup" in step3
     assert "bash setup.sh login" in step3 and "bash setup.sh apply" in step3
     assert "bash scripts/setup.sh login" not in step3
+
+
+def test_setup_success_example_masks_identifiers_and_covers_all_grants() -> None:
+    readme = (Path(__file__).parents[1] / "README.md").read_text(encoding="utf-8")
+    example = readme.split("## Step 3.", 1)[1].split("## Step 4.", 1)[0]
+    assert not re.search(r"\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b", example, re.I)
+    assert "(docs/imgs/20-customer-setup-success.png)" in example
+    assert "```text" not in example
+    manifest = json.loads(
+        (Path(__file__).parents[1] / "docs" / "manifest.json").read_text(encoding="utf-8"),
+    )
+    screenshot = next(image for image in manifest["authentication"]["images"]
+                      if image["file"] == "imgs/20-customer-setup-success.png")
+    assert "고객이 제공한" in screenshot["source"]
+    assert screenshot["account_identifiers_masked"] is True
+
+
+def test_ms_collection_step_uses_existing_certificate_without_shell_variable_dependency() -> None:
+    readme = (Path(__file__).parents[1] / "README.md").read_text(encoding="utf-8")
+    step4 = readme.split("## Step 4.", 1)[1].split("## Step 5.", 1)[0]
+    assert "cd /workspaces/ms-internal-wasm-project" in step4
+    assert "Step 1에서 사용한 동일 Codespaces 터미널" in step4
+    assert 'AZURE_CLIENT_CERTIFICATE_PATH="$(python3 scripts/certificate_path.py)" &&' in step4
+    assert "read -r -p '위 인증서의 전체 경로: '" not in step4
+    assert "$cert_dir" not in step4
+    assert 'bash scripts/setup.sh verify --certificate-path "$AZURE_CLIENT_CERTIFICATE_PATH" &&' in step4
 
 
 def test_summary_table_links_resolve_to_checklist_sections_with_images() -> None:

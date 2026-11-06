@@ -79,8 +79,18 @@ class AzureCLI:
         if result.returncode:
             # CLI diagnostics can contain request bodies; do not copy them into logs.
             operation = " ".join(args[:3])
+            codes = (
+                "Authorization_RequestDenied", "Authentication_RequestFromUnsupportedUserRole",
+                "InvalidAuthenticationToken", "Request_BadRequest", "Request_ResourceNotFound",
+                "Authorization_IdentityNotFound",
+            )
+            code = next((
+                code for code in codes
+                if re.search(r"(?<!\w)" + re.escape(code) + r"(?!\w)", result.stderr or "")
+            ), None)
+            code_detail = f", code={code}" if code else ""
             raise RuntimeError(
-                f"Azure CLI 작업 실패: {operation} (exit={result.returncode}). "
+                f"Azure CLI 작업 실패: {operation} (exit={result.returncode}{code_detail}). "
                 "관리자가 로그인·디렉터리 접근·역할 할당 권한을 확인하세요. 응답 본문은 출력하지 않았습니다."
             )
         return json.loads(result.stdout) if result.stdout.strip() else None
@@ -330,10 +340,25 @@ def ensure_graph_roles(cli: AzureCLI, principal: str, roles: tuple[str, ...] = E
             item.get("resourceId") == graph["id"] and item.get("appRoleId") == available[role] for item in existing
         ):
             continue
-        cli.run(
-            "rest", "--method", "POST", "--url", url, "--headers", "Content-Type=application/json",
-            "--body", json.dumps({"principalId": principal, "resourceId": graph["id"], "appRoleId": available[role]}),
-        )
+        try:
+            cli.run(
+                "rest", "--method", "POST", "--url", url, "--headers", "Content-Type=application/json",
+                "--body", json.dumps({
+                    "principalId": principal, "resourceId": graph["id"], "appRoleId": available[role],
+                }),
+            )
+        except RuntimeError as exc:
+            raise RuntimeError(
+                f"Graph 애플리케이션 권한 {role}의 관리자 동의가 완료되지 않았습니다. "
+                "Azure 구독 역할과 Entra 동의 권한은 별개이며 기존 Azure 역할 할당은 유지됩니다. "
+                "Microsoft Graph 애플리케이션 권한 동의에는 활성 Privileged Role Administrator 또는 "
+                "Global Administrator 등 해당 동의 권한이 필요합니다. "
+                "Global Reader·Application Administrator만으로는 이 Graph 권한 동의가 불가합니다. "
+                "PIM 사용 시 역할을 활성화한 뒤 bash setup.sh login --login-resource graph로 "
+                "다시 로그인하고 bash setup.sh apply를 재실행하세요. "
+                "권한이 충분하면 표시된 오류 코드와 디렉터리 정책·동의 제한을 확인하세요. "
+                "원본 오류: " + str(exc)
+            ) from exc
     final = (cli.run("rest", "--method", "GET", "--url", url) or {}).get("value", [])
     granted = {item.get("appRoleId") for item in final if item.get("resourceId") == graph["id"]}
     if any(available[role] not in granted for role in roles):
