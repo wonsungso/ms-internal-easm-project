@@ -31,14 +31,9 @@ cat "$cert_dir/private-key.pem" "$cert_dir/public-cert.pem" > "$cert_dir/diagnos
 chmod 600 "$cert_dir/private-key.pem" "$cert_dir/diagnostic.pem"
 ```
 
-고객 전달용 폴더에 **공개 인증서와 권한 설정 파일만** 준비합니다.
+고객에게 **[customer-setup.zip 다운로드](https://github.com/wonsungso/ms-internal-wasm-project/raw/refs/heads/main/docs/downloads/customer-setup.zip)**와 위에서 만든 **public-cert.pem**을 전달합니다.
 
-```bash
-mkdir -p .wasm-agent/customer-setup
-cp "$cert_dir/public-cert.pem" scripts/setup.sh scripts/setup_account.py scripts/foundry-reader.json .wasm-agent/customer-setup/
-```
-
-고객에게 이 폴더의 **4개 파일만 전달**합니다. 고객에게 저장소·수집기를 제공할 필요는 없습니다. 개인키·`diagnostic.pem`·개인키 암호는 MS 담당자가 보관하며 전달하거나 저장소에 올리지 않습니다.
+ZIP에는 **setup.sh·setup_account.py·foundry-reader.json**만 포함됩니다. 고객별 공개 인증서는 별도 전달하며, 개인키·`diagnostic.pem`·개인키 암호·수집기는 전달하지 않습니다. 고객에게 저장소를 제공할 필요는 없습니다.
 
 ## Step 2. <span style='background-color: #dcffe4'>[고객사 담당자]</span> 진단 앱 등록
 
@@ -74,9 +69,9 @@ MS 담당자에게 **Tenant ID, Client ID, SP Object ID, 승인 구독 ID 목록
 **권한을 부여하는 고객 관리자**에게는 구독 역할 할당·사용자 지정 역할 생성 권한과 Entra 관리자 동의 권한이 필요합니다.
 진단 앱에는 Owner·Contributor를 부여하지 않습니다.
 
-MS WASM 관리자로부터 전달받은 [**setup.sh 다운로드**](https://github.com/wonsungso/ms-internal-wasm-project/raw/refs/heads/main/scripts/setup.sh) · [**setup_account.py 다운로드**](https://github.com/wonsungso/ms-internal-wasm-project/raw/refs/heads/main/scripts/setup_account.py) · [**foundry-reader.json 다운로드**](https://github.com/wonsungso/ms-internal-wasm-project/raw/refs/heads/main/scripts/foundry-reader.json) 파일을 같은 폴더에 두고, **Python 3.11 이상과 Azure CLI가 있는 승인된 Bash 환경**에서 아래를 실행합니다.
+MS WASM 관리자로부터 전달받은 [**customer-setup.zip 다운로드**](https://github.com/wonsungso/ms-internal-wasm-project/raw/refs/heads/main/docs/downloads/customer-setup.zip) 파일을 압축 해제하고, **Python 3.11 이상과 Azure CLI가 있는 승인된 Bash 환경**에서 아래를 실행합니다.
 
-다운로드 링크는 저장소 접근 권한이 필요합니다. 고객에게 권한이 없으면 MS 담당자가 세 파일을 다운로드하여 공개 인증서와 함께 전달합니다.
+다운로드 링크는 저장소 접근 권한이 필요합니다. 고객에게 권한이 없으면 MS 담당자가 ZIP과 공개 인증서를 별도 전달합니다.
 
 고객은 파일이 있는 `customer-setup` 폴더에서 **`bash setup.sh`**를 사용합니다. `scripts/setup.sh`는 MS 저장소 내부 경로이므로 고객 VM에서는 사용하지 않습니다.
 
@@ -84,6 +79,8 @@ MS WASM 관리자로부터 전달받은 [**setup.sh 다운로드**](https://gith
 고객은 자신의 관리자 계정으로 로그인하며 MS에 관리자 인증 정보를 전달하지 않습니다.
 
 ```bash
+python3 -m zipfile -e customer-setup.zip customer-setup
+cd customer-setup
 cat > setup.json <<'EOF'
 {
   "tenant_id": "<고객 테넌트 ID>",
@@ -231,6 +228,7 @@ wasm-agent collect --setup-file .wasm-agent/setup.json --output-dir output
 
 - [config/criteria.yaml](config/criteria.yaml): Level 1~5 임계값·등급 규칙. 기본 기준을 조정할 때 수정
 - [config/custom-config.yaml](config/custom-config.yaml): 허용 모델·내부 보존기간·태그·정책 증적 등 고객별 선택 입력. 없어도 기본 수집 가능
+- [고객 권한 설정 ZIP](docs/downloads/customer-setup.zip): 고객에게 전달할 실행 파일 3개. 스크립트 변경 후 `python -m scripts.package_customer_setup`으로 갱신
 
 두 파일은 저장소의 `config/` 폴더에서 관리합니다. 별도 기준 파일은 `wasm-agent collect --criteria <기준.yaml> --config <고객설정.yaml>`로 지정합니다. 수집 기본값은 `config/criteria.yaml`과 `config/custom-config.yaml`이며, 기준 파일이 없는 설치 환경은 배포 패키지에 포함한 기본 기준을 사용합니다. 명시한 기준 파일이 없거나 YAML이 잘못되면 오류로 종료합니다.
 

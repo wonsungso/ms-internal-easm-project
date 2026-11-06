@@ -74,8 +74,8 @@ def test_screenshot_notes_match_the_documented_example() -> None:
     step3 = readme.split("## Step 3.", 1)[1].split("## Step 4.", 1)[0]
     for image in ("10-reader-role.png", "17-foundry-reader.png", "12-entra-consent.png"):
         assert f"(docs/imgs/{image})" in step3
-    for filename in ("setup.sh", "setup_account.py", "foundry-reader.json"):
-        assert f"https://github.com/wonsungso/ms-internal-wasm-project/raw/refs/heads/main/scripts/{filename}" in step3
+    assert "https://github.com/wonsungso/ms-internal-wasm-project/raw/refs/heads/main/docs/downloads/customer-setup.zip" in step3
+    assert "python3 -m zipfile -e customer-setup.zip customer-setup" in step3
     assert "bash setup.sh login" in step3 and "bash setup.sh apply" in step3
     assert "bash scripts/setup.sh login" not in step3
 
