@@ -74,6 +74,11 @@ def test_screenshot_notes_match_the_documented_example() -> None:
     step3 = readme.split("## Step 3.", 1)[1].split("## Step 4.", 1)[0]
     for image in ("10-reader-role.png", "17-foundry-reader.png", "12-entra-consent.png"):
         assert f"(docs/imgs/{image})" in step3
+    for filename in ("setup_account.py", "foundry-reader.json"):
+        assert f"https://github.com/wonsungso/ms-internal-wasm-project/raw/refs/heads/main/scripts/{filename}" in step3
+    assert "python3 setup_account.py --config-file setup.json --login" in step3
+    assert "python3 setup_account.py --config-file setup.json --result-file setup.json --apply" in step3
+    assert "bash scripts/setup.sh" not in step3
 
 
 def test_summary_table_links_resolve_to_checklist_sections_with_images() -> None:

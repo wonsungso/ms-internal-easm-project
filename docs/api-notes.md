@@ -10,6 +10,7 @@
 - 수집·판정 가능 항목 22개, 범위 밖 9개. 범위 밖은 수동 심사 대상으로만 템플릿에 포함하며 수집·자동 판정하지 않습니다.
 - Entra Agent ID 4개 항목(DS-SY-05, DP-SY-19, OE-SY-20~21)도 필수입니다. 생략 옵션과 설정은 없으며 권한 부족은 항목을 누락시키지 않고 N/A로 기록합니다.
 - 관리자 `setup.sh apply`는 승인 구독에 Reader·Cost Management Reader·Log Analytics Reader·Security Reader와 Foundry 사용자 지정 읽기 역할을 기본 부여하고, Graph 읽기 3개 권한의 관리자 동의를 함께 처리합니다. Graph 동의 권한은 Azure 구독 권한과 별개입니다.
+- 저장소·수집기는 MS 담당자용입니다. 고객에게는 `setup_account.py`, 같은 폴더의 `foundry-reader.json`, 공개 인증서만 전달합니다. 고객은 Python 3.11 이상·Azure CLI 환경에서 독립 스크립트의 `--login/--dry-run/--apply`를 사용하고 결과 `setup.json`을 반환합니다. 이 경로는 Python 표준 라이브러리만 사용하며 저장소·수집기 패키지를 요구하지 않습니다. `--verify`는 저장소의 별도 진단 모듈과 개인키가 필요하므로 MS 담당자만 실행합니다.
 - Graph 읽기 권한은 앱의 `requiredResourceAccess`에도 추가한 뒤 동의합니다. 그래야 포털의 **Configured permissions**와 실제 `appRoleAssignments`가 일치합니다. 기존 다른 API 권한은 보존하고 필요한 `Role`만 추가·동의합니다. [Azure CLI API 권한 추가](https://learn.microsoft.com/en-us/cli/azure/ad/app/permission?view=azure-cli-latest#az-ad-app-permission-add).
 - Foundry 역할은 기본적으로 승인 구독에 할당하여 기존·이후 프로젝트에 상속합니다. `--foundry-project-scopes`로 승인된 프로젝트만 지정할 수도 있습니다. 허용 DataActions는 agents/read·evaluations/read·assets/read 3개뿐입니다. [사용자 지정 역할과 범위](https://learn.microsoft.com/en-us/azure/role-based-access-control/custom-roles).
 - 모든 권한이 있어도 제품 기능·라이선스·관측 데이터가 없을 수 있습니다. 승인 구독 밖 로그·청구 범위 접근은 자동 확대하지 않습니다. 제거된 조건부 접근·위험 Agent 진단은 호출·채점·보고서에서 제외하며 기존 Graph 추가 권한은 관리자가 회수할 수 있습니다.

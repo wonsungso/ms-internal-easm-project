@@ -496,3 +496,30 @@ def test_bash_plan_runs_end_to_end_without_azure(config_file: Path, tmp_path: Pa
     assert payload["account_name"] == "diagnostic"
     assert payload["subscription_roles"] == [*setup.DEFAULT_ROLES, "Monitoring Reader"]
     assert not output.exists()
+
+
+def test_customer_handoff_plan_runs_without_repository_or_installed_collector(
+    config_file: Path, tmp_path: Path,
+) -> None:
+    customer = tmp_path / "customer"
+    customer.mkdir()
+    scripts = Path(__file__).parents[1] / "scripts"
+    for name in ("setup_account.py", "foundry-reader.json"):
+        shutil.copyfile(scripts / name, customer / name)
+    shutil.copyfile(config_file, customer / "setup.json")
+    environment = {
+        **os.environ, "PYTHONPATH": "", "PATH": "", "PYTHONIOENCODING": "utf-8",
+        "PYTHONDONTWRITEBYTECODE": "1",
+    }
+    result = subprocess.run([
+        sys.executable, "-I", "-X", "utf8", str(customer / "setup_account.py"),
+        "--config-file", "setup.json", "--dry-run",
+    ], cwd=customer, env=environment, capture_output=True, text=True, encoding="utf-8", check=False)
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout.split("\n", 1)[1])
+    assert payload["subscription_roles"] == list(setup.DEFAULT_ROLES)
+    assert payload["foundry_custom_role"]["DataActions"] == setup.role_spec([SID])["DataActions"]
+    assert payload["graph_application_roles"] == list(setup.ENTRA_GRAPH_ROLES)
+    assert {file.name for file in customer.iterdir()} == {
+        "setup_account.py", "foundry-reader.json", "setup.json",
+    }
