@@ -16,7 +16,7 @@ def test_screenshot_guide_references_all_captured_images() -> None:
         for value in re.findall(r"!\[[^\]]*\]\(([^)]+\.png)\)", guide.read_text(encoding="utf-8"))
     }
     expected = {(docs / image["file"]).resolve() for image in manifest["images"]}
-    assert len(expected) == 14
+    assert len(expected) == 15
     assert expected <= references
     for path in references:
         assert path.is_file(), path
@@ -54,11 +54,18 @@ def test_captured_images_are_real_pngs_with_highlight_metadata() -> None:
         assert width >= 300 and height >= (
             120 if image.get("capture_element") == "confirmation_dialog" else 300
         )
-        if image.get("capture_element") == "customer_terminal":
+        if image.get("capture_element") in ("customer_terminal", "codespaces_terminal"):
             assert image["highlight_count"] == 0 and image["highlight_not_applicable"]
-            assert all(image[key] for key in ("hostname_masked", "subscription_and_principal_masked",
-                                              "client_id_masked", "home_path_masked"))
+            fields = (
+                ("hostname_masked", "subscription_and_principal_masked", "client_id_masked", "home_path_masked")
+                if image["capture_element"] == "customer_terminal" else
+                ("username_masked", "tenant_id_masked", "subscription_ids_masked", "client_id_masked")
+            )
+            assert all(image[key] for key in fields)
             assert len(image["mask_boxes_px"]) == 5
+            if image["capture_element"] == "codespaces_terminal":
+                assert width == 800
+                assert image["size_px"] == [width, height]
         else:
             assert image["highlight_count"] > 0
     assert manifest["images"][1]["client_id_masked"] is True
@@ -112,6 +119,7 @@ def test_ms_collection_step_uses_existing_certificate_without_shell_variable_dep
     assert "read -r -p '위 인증서의 전체 경로: '" not in step4
     assert "$cert_dir" not in step4
     assert 'bash scripts/setup.sh verify --certificate-path "$AZURE_CLIENT_CERTIFICATE_PATH" &&' in step4
+    assert "(docs/imgs/21-codespaces-collection-success.png)" in step4
 
 
 def test_summary_table_links_resolve_to_checklist_sections_with_images() -> None:

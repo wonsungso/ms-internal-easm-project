@@ -194,6 +194,8 @@ bash scripts/setup.sh verify --certificate-path "$AZURE_CLIENT_CERTIFICATE_PATH"
 wasm-agent collect --setup-file .wasm-agent/setup.json --output-dir output
 ```
 
+![Codespaces 점검·수집 완료 예시 - 계정명·식별자 마스킹](docs/imgs/21-codespaces-collection-success.png)
+
 - 결과는 실행별 `output/<실행시각-UTC>/`에 저장됩니다.
 - `NOT_CHECKED`는 대상 없음·프로젝트 미지정으로 미점검이며 수집은 계속 진행됩니다.
 - 권한·인증 점검이 실패하면 고객 관리자에게 보완을 요청합니다.

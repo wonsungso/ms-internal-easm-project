@@ -548,6 +548,68 @@
             522
           ]
         }
+      },
+      {
+        "file": "imgs/21-codespaces-collection-success.png",
+        "captured_on": "2026-11-06",
+        "source": "사용자가 제공한 실제 Codespaces 점검·수집 완료 화면 - 새 실행·합성 아님",
+        "capture_element": "codespaces_terminal",
+        "action": "사전 점검 성공25·미점검5·실패0 및 구독3·Agent10·수집 이슈0·Excel/JSON 생성 확인",
+        "size_px": [
+          800,
+          635
+        ],
+        "postprocessing": {
+          "method": "불투명 마스킹 후 LANCZOS 비율 유지 축소, 축소 좌표에 마스킹 재적용",
+          "source_size_px": [
+            967,
+            768
+          ],
+          "result_size_px": [
+            800,
+            635
+          ]
+        },
+        "highlight_count": 0,
+        "highlight_not_applicable": "터미널 출력이며 클릭 위치가 없음",
+        "account_identifiers_masked": true,
+        "username_masked": true,
+        "tenant_id_masked": true,
+        "subscription_ids_masked": true,
+        "client_id_masked": true,
+        "mask_method": "불투명 회색 픽셀 마스킹 - 실제 명령·점검 상태·수집 결과·출력 경로는 변경하지 않음",
+        "mask_boxes_px": {
+          "account_top": [
+            44,
+            0,
+            105,
+            16
+          ],
+          "tenant_environment_value": [
+            133,
+            28,
+            341,
+            42
+          ],
+          "client_environment_value": [
+            133,
+            42,
+            341,
+            56
+          ],
+          "subscription_and_tenant_results": [
+            1,
+            177,
+            205,
+            579
+          ],
+          "account_bottom": [
+            44,
+            618,
+            105,
+            634
+          ]
+        }
       }
     ]
   },
