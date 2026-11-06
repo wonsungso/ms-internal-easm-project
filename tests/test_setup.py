@@ -523,3 +523,60 @@ def test_customer_handoff_plan_runs_without_repository_or_installed_collector(
     assert {file.name for file in customer.iterdir()} == {
         "setup_account.py", "foundry-reader.json", "setup.json",
     }
+
+
+def test_customer_bash_plan_uses_colocated_setup_without_repository(
+    config_file: Path, tmp_path: Path,
+) -> None:
+    customer = tmp_path / "customer"
+    customer.mkdir()
+    scripts = Path(__file__).parents[1] / "scripts"
+    for name in ("setup.sh", "setup_account.py", "foundry-reader.json"):
+        shutil.copyfile(scripts / name, customer / name)
+    shutil.copyfile(config_file, customer / "setup.json")
+    original = (customer / "setup.json").read_bytes()
+    environment = {
+        **os.environ, "WASM_AGENT_PYTHON": sys.executable, "PYTHONIOENCODING": "utf-8",
+        "PYTHONDONTWRITEBYTECODE": "1",
+    }
+    result = subprocess.run(
+        [bash_executable(), str(customer / "setup.sh"), "plan"],
+        cwd=tmp_path, env=environment, capture_output=True, text=True, encoding="utf-8", check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout.split("\n", 1)[1])
+    assert payload["subscription_roles"] == list(setup.DEFAULT_ROLES)
+    assert payload["graph_application_roles"] == list(setup.ENTRA_GRAPH_ROLES)
+    assert (customer / "setup.json").read_bytes() == original
+    assert not (tmp_path / ".wasm-agent").exists()
+
+
+@pytest.mark.parametrize("command", ["login", "apply"])
+def test_customer_bash_modes_forward_colocated_input_and_output(command: str, tmp_path: Path) -> None:
+    customer = tmp_path / "customer"
+    customer.mkdir()
+    shutil.copyfile(Path(__file__).parents[1] / "scripts" / "setup.sh", customer / "setup.sh")
+    (customer / "setup_account.py").write_text(
+        "import json,sys\nprint(json.dumps(sys.argv[1:]))\n", encoding="utf-8",
+    )
+    environment = {**os.environ, "WASM_AGENT_PYTHON": sys.executable}
+    result = subprocess.run(
+        [bash_executable(), str(customer / "setup.sh"), command],
+        cwd=tmp_path, env=environment, capture_output=True, text=True, encoding="utf-8", check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    args = json.loads(result.stdout)
+    for flag in ("--config-file", "--result-file"):
+        assert Path(args[args.index(flag) + 1]).resolve() == (customer / "setup.json").resolve()
+    assert args[-1] == "--" + command
+
+
+def test_customer_bash_verify_requires_ms_repository(tmp_path: Path) -> None:
+    script = tmp_path / "setup.sh"
+    shutil.copyfile(Path(__file__).parents[1] / "scripts" / "setup.sh", script)
+    result = subprocess.run(
+        [bash_executable(), str(script), "verify"],
+        cwd=tmp_path, capture_output=True, text=True, encoding="utf-8", check=False,
+    )
+    assert result.returncode == 1
+    assert "verify must run in the MS repository" in result.stderr

@@ -35,10 +35,10 @@ chmod 600 "$cert_dir/private-key.pem" "$cert_dir/diagnostic.pem"
 
 ```bash
 mkdir -p .wasm-agent/customer-setup
-cp "$cert_dir/public-cert.pem" scripts/setup_account.py scripts/foundry-reader.json .wasm-agent/customer-setup/
+cp "$cert_dir/public-cert.pem" scripts/setup.sh scripts/setup_account.py scripts/foundry-reader.json .wasm-agent/customer-setup/
 ```
 
-고객에게 이 폴더의 **3개 파일만 전달**합니다. 고객에게 저장소·수집기를 제공할 필요는 없습니다. 개인키·`diagnostic.pem`·개인키 암호는 MS 담당자가 보관하며 전달하거나 저장소에 올리지 않습니다.
+고객에게 이 폴더의 **4개 파일만 전달**합니다. 고객에게 저장소·수집기를 제공할 필요는 없습니다. 개인키·`diagnostic.pem`·개인키 암호는 MS 담당자가 보관하며 전달하거나 저장소에 올리지 않습니다.
 
 ## Step 2. <span style='background-color: #dcffe4'>[고객사 담당자]</span> 진단 앱 등록
 
@@ -74,9 +74,11 @@ MS 담당자에게 **Tenant ID, Client ID, SP Object ID, 승인 구독 ID 목록
 **권한을 부여하는 고객 관리자**에게는 구독 역할 할당·사용자 지정 역할 생성 권한과 Entra 관리자 동의 권한이 필요합니다.
 진단 앱에는 Owner·Contributor를 부여하지 않습니다.
 
-MS WASM 관리자로부터 전달받은 **[setup_account.py 다운로드](https://github.com/wonsungso/ms-internal-wasm-project/raw/refs/heads/main/scripts/setup_account.py) · [foundry-reader.json 다운로드](https://github.com/wonsungso/ms-internal-wasm-project/raw/refs/heads/main/scripts/foundry-reader.json)**을 같은 폴더에 두고, **Python 3.11 이상과 Azure CLI가 있는 승인된 Bash 환경**에서 아래를 실행합니다.
+MS WASM 관리자로부터 전달받은 [**setup.sh 다운로드**](https://github.com/wonsungso/ms-internal-wasm-project/raw/refs/heads/main/scripts/setup.sh) · [**setup_account.py 다운로드**](https://github.com/wonsungso/ms-internal-wasm-project/raw/refs/heads/main/scripts/setup_account.py) · [**foundry-reader.json 다운로드**](https://github.com/wonsungso/ms-internal-wasm-project/raw/refs/heads/main/scripts/foundry-reader.json) 파일을 같은 폴더에 두고, **Python 3.11 이상과 Azure CLI가 있는 승인된 Bash 환경**에서 아래를 실행합니다.
 
-다운로드 링크는 저장소 접근 권한이 필요합니다. 고객에게 권한이 없으면 MS 담당자가 두 파일을 다운로드하여 별도로 전달합니다.
+다운로드 링크는 저장소 접근 권한이 필요합니다. 고객에게 권한이 없으면 MS 담당자가 세 파일을 다운로드하여 공개 인증서와 함께 전달합니다.
+
+고객은 파일이 있는 `customer-setup` 폴더에서 **`bash setup.sh`**를 사용합니다. `scripts/setup.sh`는 MS 저장소 내부 경로이므로 고객 VM에서는 사용하지 않습니다.
 
 `apply`는 목록의 모든 승인 구독에 기본 Azure 역할 4개·Foundry 사용자 지정 역할을 할당하고 Graph 권한 3개를 추가·동의합니다.
 고객은 자신의 관리자 계정으로 로그인하며 MS에 관리자 인증 정보를 전달하지 않습니다.
@@ -84,7 +86,7 @@ MS WASM 관리자로부터 전달받은 **[setup_account.py 다운로드](https:
 ```bash
 cat > setup.json <<'EOF'
 {
-  "tenant_id": "<Tenant ID>",
+  "tenant_id": "<고객 테넌트 ID>",
   "subscription_ids": [
     "<승인 구독 1 ID>",
     "<승인 구독 2 ID>",
@@ -92,13 +94,13 @@ cat > setup.json <<'EOF'
   ],
   "account_type": "service-principal",
   "account_name": "wasmagent-diagnostic",
-  "client_id": "<Client ID>",
-  "principal_id": "<SP Object ID>"
+  "client_id": "<진단 앱의 애플리케이션(클라이언트) ID>",
+  "principal_id": "<진단 앱의 서비스 주체(SP) 개체 ID>"
 }
 EOF
-python3 setup_account.py --config-file setup.json --login
-python3 setup_account.py --config-file setup.json --dry-run  # 부여할 권한 확인, Azure 변경 없음
-python3 setup_account.py --config-file setup.json --result-file setup.json --apply
+bash setup.sh login
+bash setup.sh plan     # 부여할 권한 확인, Azure 변경 없음
+bash setup.sh apply    # 기본 읽기 권한 전체 부여 및 결과를 setup.json에 저장
 ```
 
 완료된 **setup.json만 MS 담당자에게 반환**합니다. 고객에게 개인키를 보내거나 수집을 실행하도록 요청하지 않습니다. Azure 역할 관리자와 Entra 동의 관리자가 다르면 동일 파일로 각 승인 절차를 이어서 진행합니다.
@@ -161,8 +163,8 @@ Entra에서는 **앱 등록 → 진단 앱 → API 사용 권한**에서 Graph �
 MS 담당자는 고객이 반환한 `setup.json`을 이 저장소의 **.wasm-agent/setup.json**으로 저장하고, Step 1에서 보관한 인증서로 **별도 진단 터미널**에서 실행합니다. `scripts/setup.sh verify`와 수집기는 MS 담당자 환경에서만 실행합니다.
 
 ```bash
-export AZURE_TENANT_ID='<Tenant ID>'
-export AZURE_CLIENT_ID='<Client ID>'
+export AZURE_TENANT_ID='<고객 테넌트 ID>'
+export AZURE_CLIENT_ID='<진단 앱의 애플리케이션(클라이언트) ID>'
 export AZURE_CLIENT_CERTIFICATE_PATH="$cert_dir/diagnostic.pem"
 read -r -s -p 'Certificate password: ' AZURE_CLIENT_CERTIFICATE_PASSWORD; printf '\n'
 export AZURE_CLIENT_CERTIFICATE_PASSWORD
