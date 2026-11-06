@@ -7,7 +7,7 @@ from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 ROOT = Path(__file__).resolve().parents[1]
-FILES = ("setup.sh", "setup_account.py", "foundry-reader.json")
+FILES = ("setup.sh", "setup_account.py", "foundry-reader.json", "cleanup_account.py")
 ARCHIVE = ROOT / "docs" / "downloads" / "customer-setup.zip"
 
 

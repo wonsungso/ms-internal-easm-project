@@ -610,6 +610,48 @@
             634
           ]
         }
+      },
+      {
+        "file": "imgs/22-diagnostic-app-delete.png",
+        "captured_on": "2026-11-06",
+        "source": "사용자가 제공한 실제 진단 앱 등록 개요 화면",
+        "capture_element": "portal_blade",
+        "action": "Step 5 진단 앱 Delete 클릭 위치 안내",
+        "size_px": [
+          728,
+          493
+        ],
+        "highlight_count": 1,
+        "highlight_boxes_px": [
+          [
+            386,
+            128,
+            459,
+            159
+          ]
+        ],
+        "highlight_method": "원본 Delete 버튼 위치에 불투명 빨간 네모",
+        "account_identifiers_masked": true,
+        "tenant_name_masked": true,
+        "client_id_masked": true,
+        "application_object_id_masked": true,
+        "tenant_id_masked": true,
+        "mask_boxes_px": {
+          "tenant_breadcrumb": [
+            74,
+            39,
+            130,
+            62
+          ],
+          "application_object_and_tenant_ids": [
+            461,
+            246,
+            717,
+            323
+          ]
+        },
+        "deletion_executed": false,
+        "verification_limit": "삭제 버튼 안내 화면이며 삭제 실행·완료를 입증하지 않음"
       }
     ]
   },

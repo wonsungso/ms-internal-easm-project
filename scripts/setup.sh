@@ -20,16 +20,18 @@ case "$command" in
   plan) mode="--dry-run" ;;
   apply) mode="--apply" ;;
   verify) mode="--verify" ;;
+  cleanup-plan|cleanup-apply) mode="" ;;
   help|-h|--help)
     printf '%s\n' \
-      'Customer: bash setup.sh <login|plan|apply> [options]' \
+      'Customer: bash setup.sh <login|plan|apply|cleanup-plan|cleanup-apply> [options]' \
       'MS repository: bash scripts/setup.sh <login|plan|apply|verify> [options]' \
       "Default config: $config_file (no secrets)." \
       'Defaults: Reader, Cost Management Reader, Log Analytics Reader, Security Reader,' \
       '  Foundry read-only DataActions, and the three required Graph application roles.' \
       'Options: --config-file FILE, --certificate-path FILE, --projects-file FILE.' \
       'login: human administrator device-code login; SP authentication is separate.' \
-      'plan: no Azure calls. apply: explicit role changes. verify: read-only SP checks.'
+      'plan: no Azure calls. apply: explicit role changes. verify: read-only SP checks.' \
+      'cleanup-plan: read-only deletion preview. cleanup-apply: delete only the recorded diagnostic identity.'
     exit 0
     ;;
   *)
@@ -51,6 +53,16 @@ for argument in "$@"; do
       ;;
   esac
 done
+
+if [[ "$command" == cleanup-plan || "$command" == cleanup-apply ]]; then
+  cleanup_options=()
+  if [[ "$command" == cleanup-apply ]]; then
+    cleanup_options+=(--apply)
+  fi
+  exec "$python_command" "$script_dir/cleanup_account.py" \
+    --config-file "$config_file" --result-file "$(dirname -- "$config_file")/cleanup-result.json" \
+    "${cleanup_options[@]}" "$@"
+fi
 
 exec "$python_command" "$script_dir/setup_account.py" \
   --config-file "$config_file" \

@@ -63,3 +63,11 @@ def test_downloaded_archive_plan_runs_without_repository(tmp_path: Path) -> None
     assert len(payload["foundry_custom_role"]["DataActions"]) == 3
     assert len(payload["graph_application_roles"]) == 3
     assert not (tmp_path / ".wasm-agent").exists()
+    help_result = subprocess.run(
+        [executable, "setup.sh", "cleanup-plan", "--help"], cwd=customer,
+        env={**os.environ, "WASM_AGENT_PYTHON": sys.executable, "PYTHONIOENCODING": "utf-8",
+             "PYTHONDONTWRITEBYTECODE": "1"},
+        capture_output=True, text=True, encoding="utf-8", check=False,
+    )
+    assert help_result.returncode == 0, help_result.stderr
+    assert "--apply" in help_result.stdout and "--config-file" in help_result.stdout

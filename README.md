@@ -194,7 +194,7 @@ bash scripts/setup.sh verify --certificate-path "$AZURE_CLIENT_CERTIFICATE_PATH"
 wasm-agent collect --setup-file .wasm-agent/setup.json --output-dir output
 ```
 
-![Codespaces 점검·수집 완료 예시 - 계정명·식별자 마스킹](docs/imgs/21-codespaces-collection-success.png)
+![Codespaces 점검·수집 완료 예시](docs/imgs/21-codespaces-collection-success.png)
 
 - 결과는 실행별 `output/<실행시각-UTC>/`에 저장됩니다.
 - `NOT_CHECKED`는 대상 없음·프로젝트 미지정으로 미점검이며 수집은 계속 진행됩니다.
@@ -211,6 +211,24 @@ wasm-agent collect --setup-file .wasm-agent/setup.json --output-dir output
 - **7. 수집결과 근거**와 **8. 수집 Raw 데이터**에서 상세 설정과 원본 값을 확인합니다.
 - **9. 수집이슈 Raw 데이터**와 **10. 필드누락사유**에서 조회 실패·자료 부족의 원인을 확인합니다.
 - 종료 후 고객은 진단 앱의 권한·인증서를 회수하고, MS는 개인키와 수집 데이터를 승인된 보관 기간에 맞춰 폐기합니다.
+
+### 종료 후 정리
+
+- **고객사 VM에서 실행:** Step 3에서 저장한 `setup.json` 을 기반으로 생성한 리소스를 정리합니다. 먼저 삭제 대상을 확인한 뒤 실행합니다.
+
+```bash
+bash setup.sh cleanup-plan   # 삭제 대상 조회만
+bash setup.sh cleanup-apply  # 진단 앱·SP·해당 역할 할당 삭제, 미사용 진단 역할만 삭제
+```
+
+| 담당 | 정리할 항목 | 수행 방법 |
+| --- | --- | --- |
+| 고객 | 진단 SP의 Azure 역할 할당 | 정리 스크립트가 승인 구독 IAM의 해당 SP 할당을 먼저 회수하고 잔여 여부 확인 |
+| 고객 | 진단 앱·SP·등록 인증서·Graph 동의 | Entra → 앱 등록 → `wasmagent-diagnostic` → **Delete** 후 확인. 홈 테넌트 SP도 함께 삭제되며 엔터프라이즈 애플리케이션에서 잔여 여부 확인 |
+| 고객 | Foundry 사용자 지정 역할 정의 | 재사용 계획이 없고 다른 활성·적격 할당도 없을 때만 `WASMAgent Foundry Evidence Reader v2` 삭제 |
+| 고객 | 고객 VM의 전달 파일·관리자 세션 | 보관할 setup.json을 MS에 전달한 뒤 ZIP·압축 해제 파일·공개 인증서를 정리. 진단용 CLI 세션 로그아웃·임시 PIM 활성화 종료 |
+| MS | 개인키·인증서·암호·경로 기록 | Step 1 인증서 폴더와 .wasm-agent/certificate-path 정리, 인증 관련 환경변수 해제. 저장한 암호·임시 인증 설정도 정리 |
+| 고객/MS | 보고서·증적·다운로드·공유 사본 | 승인된 보관 기간과 감사 요건에 따라 output·evidence·setup.json·공유 사본 폐기. 전용 Codespaces도 보관 필요가 없으면 삭제 |
 
 ## 점검 항목 (System Evidence 31개)
 
@@ -254,7 +272,7 @@ wasm-agent collect --setup-file .wasm-agent/setup.json --output-dir output
 
 - [config/criteria.yaml](config/criteria.yaml): Level 1~5 임계값·등급 규칙. 기본 기준을 조정할 때 수정
 - [config/custom-config.yaml](config/custom-config.yaml): 허용 모델·내부 보존기간·태그·정책 증적 등 고객별 선택 입력. 없어도 기본 수집 가능
-- [고객 권한 설정 ZIP](docs/downloads/customer-setup.zip): 고객에게 전달할 실행 파일 3개. 스크립트 변경 후 `python -m scripts.package_customer_setup`으로 갱신
+- [고객 권한 설정 ZIP](docs/downloads/customer-setup.zip): 권한 설정·정리용 파일 4개. 스크립트 변경 후 `python -m scripts.package_customer_setup`으로 갱신
 
 두 파일은 저장소의 `config/` 폴더에서 관리합니다. 별도 기준 파일은 `wasm-agent collect --criteria <기준.yaml> --config <고객설정.yaml>`로 지정합니다. 수집 기본값은 `config/criteria.yaml`과 `config/custom-config.yaml`이며, 기준 파일이 없는 설치 환경은 배포 패키지에 포함한 기본 기준을 사용합니다. 명시한 기준 파일이 없거나 YAML이 잘못되면 오류로 종료합니다.
 

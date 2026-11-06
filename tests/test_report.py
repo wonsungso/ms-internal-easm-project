@@ -650,11 +650,16 @@ def test_user_strings_never_become_formulas_or_external_links(tmp_path: Path, te
     book = load_workbook(path)
     agent = raw_record(book, "Agent Raw 데이터")
     assert agent["agent_name"].value == text and agent["agent_name"].data_type == "s"
-    assert record(book[RESULT_SHEET])["근거"].value.endswith("판정 근거: " + text)
+    assert record(book[RESULT_SHEET])["근거"].value.endswith("판정 근거: " + text + "\n수집결과")
     assert json.loads(raw_record(book, "Agent Raw 데이터")["evidence_refs"].value) == [text]
     amount = raw_record(book, "비용 Raw 데이터")["amount"]
     assert amount.value == -12.5 and amount.data_type == "n"
-    assert all(cell.data_type != "f" and cell.hyperlink is None for cell in all_cells(book))
+    for cell in all_cells(book):
+        assert cell.data_type != "f"
+        if cell.hyperlink is not None:
+            assert cell.parent.title == RESULT_SHEET and cell.column == 10
+            assert cell.hyperlink.target is None
+            assert cell.hyperlink.location.startswith("'7. 수집결과 근거'!A")
     with ZipFile(path) as archive:
         names = archive.namelist()
         assert not any("externalLink" in name or "vbaProject" in name for name in names)

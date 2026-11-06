@@ -14,6 +14,7 @@ from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.worksheet.hyperlink import Hyperlink
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.worksheet.worksheet import Worksheet
 from pydantic import BaseModel
@@ -461,11 +462,8 @@ def write_workbook(
 ) -> None:
     """Extend the assessment template with a masked collected-evidence snapshot."""
     book, template = load_report_template()
-    _result_sheet(book, data, findings)
-    proposals_sheet = _table(book, DETAILS_TITLE, [
-        "SE 코드", "진단 영역", "점검 항목", "조회 상태", "조회 제한 사유",
-        "수집 구성 요약", "구성 값·건수", "검증 한계", "증적 ID",
-    ], [
+    result_rows = _result_sheet(book, data, findings)
+    details = [
         {
             "SE 코드": item.code, "진단 영역": item.area or DOMAINS.get(item.code, ("",))[0],
             "점검 항목": item.title, "조회 상태": item.status,
@@ -473,7 +471,49 @@ def write_workbook(
             "수집 구성 요약": readable(item.observation), "구성 값·건수": item.metrics, "검증 한계": item.limit,
             "증적 ID": item.evidence_refs,
         } for item in data.proposals
-    ], start_row=3)
+    ]
+    codes = {item["SE 코드"] for item in details}
+    if len(codes) != len(details):
+        raise ValueError("수집결과 근거의 SE 코드가 중복되었습니다.")
+    for finding in findings:
+        if finding.se_code in codes:
+            continue
+        status, summary = collection_summary(data, finding)
+        details.append({
+            "SE 코드": finding.se_code, "진단 영역": SE_AREAS.get(finding.se_code[:2], ""),
+            "점검 항목": SE_NAMES.get(finding.se_code, finding.se_code), "조회 상태": status,
+            "조회 제한 사유": readable(finding.reason) if finding.reason else "해당 없음",
+            "수집 구성 요약": readable(summary),
+            "구성 값·건수": {
+                "metric_value": finding.metric_value, "assessment_basis": finding.assessment_basis,
+                "configuration_value": finding.configuration_value,
+            },
+            "검증 한계": readable(finding.scope) + ". 등급별 승인·기간·집행 검증은 6번 판정 근거 확인",
+            "증적 ID": finding.evidence_refs,
+        })
+    details.sort(key=lambda item: result_rows.get(item["SE 코드"], float("inf")))
+    proposals_sheet = _table(book, DETAILS_TITLE, [
+        "SE 코드", "진단 영역", "점검 항목", "조회 상태", "조회 제한 사유",
+        "수집 구성 요약", "구성 값·건수", "검증 한계", "증적 ID",
+    ], details, start_row=3)
+    for row, item in enumerate(details, 4):
+        code = item["SE 코드"]
+        if code not in result_rows:
+            continue
+        cell = book[RESULT_SHEET].cell(result_rows[code], 10)
+        text = str(cell.value) + "\n수집결과"
+        if len(text) > 32767:
+            raise ValueError(f"Excel 셀 길이 오류: {RESULT_SHEET}!{cell.coordinate} - {len(text)}자, 최대 32767자")
+        content = cell.value if isinstance(cell.value, CellRichText) else CellRichText(str(cell.value))
+        # Excel rejects a separate whitespace-only run before this link label.
+        content.append(TextBlock(InlineFont(
+            rFont=cell.font.name, sz=cell.font.sz, color="FF0563C1", u="single",
+        ), "\n수집결과"))
+        cell.value = content
+        cell.hyperlink = Hyperlink(
+            ref=cell.coordinate, location=f"'{proposals_sheet.title}'!A{row}",
+            display="수집결과", tooltip=f"{code} 수집결과 근거로 이동",
+        )
     _cell(proposals_sheet, 1, 1, "수집된 설정·값·건수와 검증 한계. 다음조치는 6. 수집 결과의 K열 확인")
     proposals_sheet.merge_cells("A1:I1")
     proposals_sheet.row_dimensions[1].height = 30

@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.parse import unquote
 
 
-def test_screenshot_guide_references_all_captured_images() -> None:
+def test_screenshot_guide_references_registered_existing_images() -> None:
     docs = Path(__file__).parents[1] / "docs"
     guide = docs.parent / "README.md"
     manifest = json.loads((docs / "manifest.json").read_text(encoding="utf-8"))["authentication"]
@@ -16,8 +16,8 @@ def test_screenshot_guide_references_all_captured_images() -> None:
         for value in re.findall(r"!\[[^\]]*\]\(([^)]+\.png)\)", guide.read_text(encoding="utf-8"))
     }
     expected = {(docs / image["file"]).resolve() for image in manifest["images"]}
-    assert len(expected) == 15
-    assert expected <= references
+    assert len(expected) == 16
+    assert references <= expected
     for path in references:
         assert path.is_file(), path
 
@@ -120,6 +120,22 @@ def test_ms_collection_step_uses_existing_certificate_without_shell_variable_dep
     assert "$cert_dir" not in step4
     assert 'bash scripts/setup.sh verify --certificate-path "$AZURE_CLIENT_CERTIFICATE_PATH" &&' in step4
     assert "(docs/imgs/21-codespaces-collection-success.png)" in step4
+
+
+def test_cleanup_commands_and_masked_reference_screenshot_are_preserved() -> None:
+    root = Path(__file__).parents[1]
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    step5 = readme.split("## Step 5.", 1)[1].split("## 점검 항목", 1)[0]
+    for text in ("IAM", "먼저 회수", "다른 활성·적격 할당", "certificate-path", "임시 PIM", "보관 기간"):
+        assert text in step5
+    assert "bash setup.sh cleanup-plan" in step5 and "bash setup.sh cleanup-apply" in step5
+    manifest = json.loads((root / "docs" / "manifest.json").read_text(encoding="utf-8"))
+    image = next(image for image in manifest["authentication"]["images"]
+                 if image["file"] == "imgs/22-diagnostic-app-delete.png")
+    assert image["deletion_executed"] is False
+    assert image["highlight_count"] == 1
+    assert all(image[key] for key in ("tenant_name_masked", "client_id_masked",
+                                      "application_object_id_masked", "tenant_id_masked"))
 
 
 def test_summary_table_links_resolve_to_checklist_sections_with_images() -> None:

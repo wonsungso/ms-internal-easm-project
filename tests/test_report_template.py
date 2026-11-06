@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -11,7 +12,8 @@ from openpyxl import load_workbook
 from openpyxl.cell.rich_text import CellRichText, TextBlock
 
 from wasm_agent import report_template
-from wasm_agent.models import Collection, Finding
+from wasm_agent.models import DEFAULT_TAGS, Collection, Finding, load_criteria
+from wasm_agent.proposals import evaluate_proposals
 from wasm_agent.report_excel import write_workbook
 from wasm_agent.report_template import CRITERIA_SHEET, RESULT_SHEET, assessment_template_path
 
@@ -87,6 +89,44 @@ def test_unknown_result_code_fails_explicitly_without_writing(tmp_path: Path) ->
             Finding(se_code="UNKNOWN", scope="partial", level="L2", rationale="fixture"),
         ], path)
     assert not path.exists()
+
+
+def test_all_findings_link_to_the_matching_detail_row_and_preserve_existing_metrics(tmp_path: Path) -> None:
+    fixture = Path(__file__).parent / "fixtures" / "three_subscriptions.json"
+    data = Collection.model_validate_json(fixture.read_text(encoding="utf-8"))
+    data.proposals = evaluate_proposals(data, DEFAULT_TAGS)
+    findings = [
+        Finding(se_code=code, scope=config["scope"], level="L2", rationale="보존할 판정 근거")
+        for code, config in load_criteria()["items"].items()
+    ]
+    path = tmp_path / "linked.xlsx"
+    write_workbook(data, findings, path)
+    book = load_workbook(path, rich_text=True)
+    results, details = book[RESULT_SHEET], book["7. 수집결과 근거"]
+    detail_rows = {details.cell(row, 1).value: row for row in range(4, details.max_row + 1)}
+    assert len(detail_rows) == len(findings) == 22
+    expected_metrics = {item.code: item.metrics for item in data.proposals}
+    for code, row in detail_rows.items():
+        if code in expected_metrics:
+            assert json.loads(details.cell(row, 7).value) == expected_metrics[code]
+    linked = 0
+    for row in range(5, results.max_row + 1):
+        code = results.cell(row, 2).value
+        evidence = results.cell(row, 10)
+        if code not in detail_rows:
+            assert evidence.hyperlink is None
+            continue
+        assert isinstance(evidence.value, CellRichText)
+        assert str(evidence.value).endswith("\n수집결과")
+        assert "보존할 판정 근거" in str(evidence.value)
+        label = evidence.value[-1]
+        assert isinstance(label, TextBlock)
+        assert label.text == "\n수집결과" and label.font.u == "single"
+        assert not any(isinstance(part, str) and part == "\n" for part in evidence.value)
+        assert evidence.hyperlink.target is None and evidence.hyperlink.id is None
+        assert evidence.hyperlink.location == f"'7. 수집결과 근거'!A{detail_rows[code]}"
+        linked += 1
+    assert linked == 22
 
 
 @pytest.mark.parametrize("level", ["L1", "L2", "L3", "L4", "L5", "N/A"])
