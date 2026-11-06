@@ -227,7 +227,7 @@ def test_no_project_does_not_claim_foundry_access() -> None:
     ), patch.object(verify.ReaderHTTP, "request", return_value={"value": []}):
         results = verify.check_subscription(credential(), SID, [])
     evaluation = next(r for r in results if r.se_code == "BI-SY-11")
-    assert evaluation.status == "FEATURE_UNAVAILABLE"
+    assert evaluation.status == "NOT_CHECKED"
     assert evaluation.reason == "not_found"
 
 
@@ -266,3 +266,48 @@ def test_rbac_report_contains_permission_denial_and_additional_role() -> None:
     assert "DENIED" in report
     assert "permission_denied" in report
     assert "사용자 지정" in report
+
+
+@pytest.mark.parametrize("status,reason,expected", [
+    ("NOT_CHECKED", "not_found", 0),
+    ("DENIED", "permission_denied", 2),
+    ("ERROR", "error", 2),
+    ("FEATURE_UNAVAILABLE", "feature_unavailable", 2),
+    ("FEATURE_UNAVAILABLE", "license_missing", 2),
+])
+def test_preflight_distinguishes_unchecked_targets_from_actual_failures(
+    tmp_path, status: str, reason: str, expected: int,
+) -> None:
+    rows = [
+        verify.Result(SID, "DS-SY-06", "fixture", "OK", None, "API access verified"),
+        verify.Result(SID, "BI-SY-11", "fixture", status, reason, "fixture detail"),
+    ]
+    with patch("azure.identity.DefaultAzureCredential") as source, patch.object(
+        verify, "verify_identity",
+    ), patch.object(verify, "check_subscription", return_value=rows), patch.object(
+        verify, "check_entra", return_value=[],
+    ):
+        source.return_value.__enter__.return_value = credential()
+        code = verify.main([
+            "--tenant-id", TENANT, "--expected-principal-id", PRINCIPAL, "--subscriptions", SID,
+            "--rbac-path", str(tmp_path / "permissions.md"), "--output", str(tmp_path / "permissions.json"),
+        ])
+    assert code == expected
+    persisted = json.loads((tmp_path / "permissions.json").read_text(encoding="utf-8"))
+    assert persisted["results"][1]["status"] == status
+    assert persisted["results"][1]["reason"] == reason
+    if code == 0:
+        from pathlib import Path
+
+        from wasm_agent.cli import main as collect_main
+        from wasm_agent.report import latest_raw, load_result
+
+        output = tmp_path / "output"
+        fixture = Path(__file__).parent / "fixtures" / "three_subscriptions.json"
+        with patch("wasm_agent.cli.DefaultAzureCredential", side_effect=AssertionError("No Azure calls")):
+            assert collect_main(["collect", "--fixture", str(fixture), "--output-dir", str(output)]) == 0
+        raw = latest_raw(output)
+        assert raw is not None
+        result = load_result(raw.parent)
+        assert (raw.parent / result["manifest"]["files"][0]["path"]).is_file()
+        assert len(result["findings"]) == 22

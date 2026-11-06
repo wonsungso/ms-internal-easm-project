@@ -195,6 +195,7 @@ wasm-agent collect --setup-file .wasm-agent/setup.json --output-dir output
 ```
 
 - 결과는 실행별 `output/<실행시각-UTC>/`에 저장됩니다.
+- `NOT_CHECKED`는 대상 없음·프로젝트 미지정으로 미점검이며 수집은 계속 진행됩니다.
 - 권한·인증 점검이 실패하면 고객 관리자에게 보완을 요청합니다.
 
 ## Step 5. <span style='background-color: #e5dcf7'>[고객/MS 공동]</span> 결과 확인과 종료

@@ -49,6 +49,7 @@ RBAC_REFERENCE = """# 읽기 권한 및 접근 확인
   - Foundry User의 키 조회·쓰기 작업을 진단 역할로 사용하지 않습니다.
 - 결과 해석
   - OK는 해당 API 접근 성공이며 데이터 완전성·장기 관측·성숙도 보장이 아닙니다.
+  - NOT_CHECKED는 대상 없음·프로젝트 미지정으로 미점검이며, 수집 실행을 막지 않습니다.
   - 오류·권한 부족·빈 자료는 각각 원인과 함께 기록합니다.
   - 관리자는 상속·그룹·PIM 권한도 별도로 확인해야 합니다.
 """
@@ -155,7 +156,7 @@ def check_subscription(
         for code in SE_CODES:
             if not any(result.se_code == code for result in results):
                 detail = "대상 AI 리소스 없음" if code != "BI-SY-11" else "프로젝트 endpoint 입력 없음; 자동 추측하지 않음"
-                results.append(Result(sid, code, scope, "FEATURE_UNAVAILABLE", "not_found", detail))
+                results.append(Result(sid, code, scope, "NOT_CHECKED", "not_found", detail))
         return results
     except AccessError as exc:
         status = "DENIED" if exc.reason == "permission_denied" else "ERROR"
@@ -260,7 +261,12 @@ def main(argv: list[str] | None = None) -> int:
         args.rbac_path.write_text(render_rbac(results), encoding="utf-8")
         for result in results:
             print(f"{result.subscription_id} {result.se_code} {result.status} {result.reason or '-'}")
-        return 2 if any(r.status != "OK" for r in results) else 0
+        failures = sum(result.status not in ("OK", "NOT_CHECKED") for result in results)
+        print(
+            f"사전 점검: 성공={sum(result.status == 'OK' for result in results)}, "
+            f"미점검={sum(result.status == 'NOT_CHECKED' for result in results)}, 실패={failures}"
+        )
+        return 2 if failures else 0
     except (AccessError, ClientAuthenticationError, ValueError, KeyError, TypeError, OSError) as exc:
         message = str(exc) if isinstance(exc, (AccessError, ValueError)) else type(exc).__name__
         print(f"사전 점검 중단: {message}. 토큰·응답 본문은 출력하지 않았습니다.", file=sys.stderr)
