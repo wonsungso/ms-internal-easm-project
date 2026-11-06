@@ -40,7 +40,7 @@ chmod 600 "$cert_dir/private-key.pem" "$cert_dir/diagnostic.pem"
 
 ![앱 등록 위치](docs/imgs/07-register-sp.png)
 
-- **ID 확인:** **개요**에서 Tenant ID와 Client ID를 기록합니다. SP Object ID는 **엔터프라이즈 애플리케이션 → 해당 앱 → 속성**에서 확인합니다.
+- **ID 확인:** **개요**에서 Tenant ID와 Client ID를 기록합니다. SP 개체 ID는 Step 3 스크립트가 Client ID로 자동 조회하므로 직접 입력하지 않습니다.
 
 ![앱 ID 확인 위치](docs/imgs/08-sp-overview.png)
 
@@ -48,7 +48,7 @@ chmod 600 "$cert_dir/private-key.pem" "$cert_dir/diagnostic.pem"
 
 ![공개 인증서 업로드](docs/imgs/09-upload-certificate.png)
 
-- **MS에 전달:** **Tenant ID, Client ID, SP Object ID, 승인 구독 ID 목록**을 전달합니다.
+- **MS에 전달:** **Tenant ID, Client ID, 승인 구독 ID 목록**을 전달합니다. 검증된 SP 개체 ID는 Step 3 완료 후 반환하는 `setup.json`에 자동 저장됩니다.
 
 ## Step 3. <span style='background-color: #dcffe4'>[고객사 담당자]</span> 전체 진단용 권한 부여
 
@@ -89,8 +89,7 @@ cat > setup.json <<'EOF'
   ],
   "account_type": "service-principal",
   "account_name": "wasmagent-diagnostic",
-  "client_id": "<진단 앱의 애플리케이션(클라이언트) ID>",
-  "principal_id": "<진단 앱의 서비스 주체(SP) 개체 ID>"
+  "client_id": "<진단 앱의 애플리케이션(클라이언트) ID>"
 }
 EOF
 ```

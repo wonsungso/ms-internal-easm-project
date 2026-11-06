@@ -71,6 +71,51 @@ def test_assignment_is_idempotent() -> None:
     assert all(call.args[:3] != ("role", "assignment", "create") for call in cli.run.call_args_list)
 
 
+def test_missing_client_id_sp_fails_without_name_fallback_or_creation(config_file: Path) -> None:
+    args = setup.parser().parse_args(["--config-file", str(config_file), "--apply"])
+    setup.load_config(args)
+    cli = Mock()
+    cli.run.side_effect = RuntimeError("Azure CLI 작업 실패: ad sp show (exit=3)")
+    with pytest.raises(RuntimeError, match="Client ID에 해당하는 진단 SP"):
+        setup.resolve_principal(cli, args)
+    cli.run.assert_called_once_with("ad", "sp", "show", "--id", args.client_id)
+
+
+@pytest.mark.parametrize("old_principal", [
+    None, "cccccccc-cccc-4ccc-8ccc-cccccccccccc", "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+])
+def test_client_id_resolves_missing_or_incorrect_principal_id(
+    config_file: Path, old_principal: str | None,
+) -> None:
+    args = setup.parser().parse_args(["--config-file", str(config_file), "--apply"])
+    setup.load_config(args)
+    args.principal_id = old_principal
+    cli = Mock()
+    cli.run.return_value = {"id": PRINCIPAL, "appId": args.client_id, "displayName": args.account_name}
+    assert setup.resolve_principal(cli, args)["id"] == PRINCIPAL
+    assert args.principal_id == PRINCIPAL
+    cli.run.assert_called_once_with("ad", "sp", "show", "--id", args.client_id)
+
+
+@pytest.mark.parametrize("field,value", [
+    ("appId", "dddddddd-dddd-4ddd-8ddd-dddddddddddd"),
+    ("displayName", "another-app"),
+    ("id", "not-a-guid"),
+])
+def test_client_resolution_rejects_mismatched_response_before_any_write(
+    config_file: Path, field: str, value: str,
+) -> None:
+    args = setup.parser().parse_args(["--config-file", str(config_file), "--apply"])
+    setup.load_config(args)
+    cli = Mock()
+    cli.run.return_value = {
+        "id": PRINCIPAL, "appId": args.client_id, "displayName": args.account_name, field: value,
+    }
+    with pytest.raises((ValueError, setup.argparse.ArgumentTypeError)):
+        setup.resolve_principal(cli, args)
+    assert cli.run.call_count == 1
+
+
 def test_scoped_assignment_list_uses_valid_cli_arguments() -> None:
     scope = f"/subscriptions/{SID}"
     cli = Mock()
@@ -208,9 +253,13 @@ def test_login_is_device_code_and_does_not_change_parent_environment(config_file
     assert os.environ.get("AZURE_CORE_LOGIN_EXPERIENCE_V2") == original
 
 
+@pytest.mark.parametrize("supplied_principal", [None, PRINCIPAL, "dddddddd-dddd-4ddd-8ddd-dddddddddddd"])
 def test_apply_reuses_identity_and_persists_only_allowlisted_metadata(
-    config_file: Path, tmp_path: Path,
+    config_file: Path, tmp_path: Path, supplied_principal: str | None,
 ) -> None:
+    config = json.loads(config_file.read_text(encoding="utf-8"))
+    config["principal_id"] = supplied_principal
+    config_file.write_text(json.dumps(config), encoding="utf-8")
     output = tmp_path / "result.json"
     client_id = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
     cli = Mock()

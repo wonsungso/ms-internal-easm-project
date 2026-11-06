@@ -198,8 +198,48 @@ def resolve_principal(cli: AzureCLI, args: argparse.Namespace) -> dict[str, Any]
         if identity.get("userPrincipalName", "").lower() != args.account_name.lower():
             raise ValueError("지정한 사용자 object ID와 UPN이 일치하지 않습니다.")
         return identity
+    if args.client_id:
+        try:
+            identity = cli.run("ad", "sp", "show", "--id", args.client_id)
+        except RuntimeError as exc:
+            raise RuntimeError(
+                "Client ID에 해당하는 진단 SP를 조회하지 못했습니다. "
+                "Client ID·로그인 테넌트·디렉터리 읽기 권한·앱 삭제/전파 여부를 확인하세요. "
+                "다른 SP로 대체하거나 새로 생성하지 않았습니다. " + str(exc)
+            ) from exc
+        if (
+            not isinstance(identity, dict) or not isinstance(identity.get("appId"), str)
+            or identity["appId"].lower() != args.client_id.lower()
+        ):
+            raise ValueError("조회한 SP의 Client ID가 입력과 다릅니다. 쓰기 작업을 중단합니다.")
+        if identity.get("displayName") != args.account_name:
+            raise ValueError("Client ID로 조회한 SP의 이름이 account_name과 다릅니다. 쓰기 작업을 중단합니다.")
+        if not isinstance(identity.get("id"), str):
+            raise ValueError("조회한 SP 응답에 개체 ID가 없습니다. 쓰기 작업을 중단합니다.")
+        principal = guid(identity["id"])
+        if args.principal_id and args.principal_id.lower() != principal:
+            print("입력된 principal_id를 Client ID로 검증한 실제 SP 개체 ID로 자동 보정했습니다.")
+        elif not args.principal_id:
+            print("Client ID로 실제 SP 개체 ID를 자동 조회했습니다.")
+        args.principal_id = principal
+        return identity
     if args.principal_id:
-        identity = cli.run("ad", "sp", "show", "--id", args.principal_id)
+        try:
+            identity = cli.run("ad", "sp", "show", "--id", args.principal_id)
+        except RuntimeError as exc:
+            raise RuntimeError(
+                "설정의 principal_id로 진단 SP를 조회하지 못했습니다. "
+                "principal_id에는 앱 등록의 개체 ID가 아니라 엔터프라이즈 애플리케이션의 개체 ID를 입력하세요. "
+                "동일 테넌트에서 az ad sp show --id <client_id> --query id --output tsv로 확인하세요. "
+                "조회가 계속 실패하면 디렉터리 읽기 권한·테넌트·삭제/전파 여부를 확인하세요. "
+                "자동으로 다른 SP를 선택하거나 새로 생성하지 않았습니다. "
+                + str(exc)
+            ) from exc
+        if identity.get("id", "").lower() != args.principal_id.lower():
+            raise ValueError(
+                "principal_id에는 서비스 주체(SP) 개체 ID를 입력해야 합니다. "
+                "Client ID를 대신 입력하지 마세요. az ad sp show --id <client_id> --query id --output tsv로 확인하세요."
+            )
         if identity.get("displayName") != args.account_name:
             raise ValueError("지정한 SP object ID와 계정 이름이 일치하지 않습니다.")
         return identity
@@ -456,6 +496,7 @@ def main(argv: list[str] | None = None) -> int:
                 "account_type": args.account_type,
                 "account_name": args.account_name,
                 "create_principal": args.create_principal,
+                "identity_validation": "not_run - plan은 client_id·principal_id의 실제 존재를 조회하지 않음",
                 "subscription_roles": selected_roles(args),
                 "subscriptions": args.subscriptions,
                 "foundry_project_scopes": args.foundry_project_scopes or [

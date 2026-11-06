@@ -49,7 +49,6 @@ def test_downloaded_archive_plan_runs_without_repository(tmp_path: Path) -> None
         ],
         "account_type": "service-principal", "account_name": "wasmagent-diagnostic",
         "client_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-        "principal_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
     }), encoding="utf-8")
     result = subprocess.run(
         [executable, "setup.sh", "plan"], cwd=customer,
