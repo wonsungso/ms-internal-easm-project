@@ -40,7 +40,10 @@ def build_linux_package(root: Path) -> Path:
     archive = root / ".wasm-agent" / "demo" / "langchain-sample.zip"
     archive.parent.mkdir(parents=True, exist_ok=True)
     requirements_text = "\n".join(dependencies) + "\n"
-    sources = {name: root / "demo" / name for name in ("app.py", "catalog.json", "chat.html")}
+    sources = {
+        name: root / "demo" / name
+        for name in ("app.py", "governance.py", "catalog.json", "chat.html")
+    }
     for path in sources.values():
         if not path.is_file():
             raise FileNotFoundError(f"챗봇 패키지 입력이 없습니다: {path.name}")

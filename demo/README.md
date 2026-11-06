@@ -68,6 +68,60 @@ python -m demo.diagnostics codespace --codespace '<Codespace 이름>' --apply
 - 평가는 실제 합성 응답 3문항의 정확 일치 검사입니다. 실행 완료·전체 통과·배포 전 평가는 서로 다릅니다. 종합 안전성이나 업무 품질 인증이 아닙니다.
 - 생성 직후에는 30일 비용이나 90일 관측 기간을 확보할 수 없습니다. API 미지원·권한 부족·로그 유입 지연을 0이나 L1로 대체하지 않습니다.
 
+## 실행형 거버넌스 데모
+
+| 제어 | 실제 실행 경로 | 한계 |
+| --- | --- | --- |
+| 외부 endpoint 기본 거부 | 모델 client 생성 전 서버 설정의 `AZURE_OPENAI_ENDPOINT` 또는 `AZURE_AI_PROJECT_ENDPOINT`와 HTTPS 주소를 정확히 대조 | Azure 네트워크 정책이나 원격 Foundry/MCP 도구의 집행 증거는 아님 |
+| 합성 작업 승인/거부 | 로그인 사용자가 아래 API로 작업과 결정을 생성하고 LangChain `synthetic_record` 도구가 승인된 ID를 1회 실행 | Azure 쓰기 없음, 메모리 합성 레코드만 사용, 300초 만료, 최대 256개 |
+| 버전/자체 검사 | `/health`의 `governance`에 정책/런타임 버전, 코드 해시, 양성/음성 검사 결과 공개 | URL/사용자/대화/작업 ID 없음, 합성 승인 fixture는 실제 사람의 승인이 아님 |
+
+- `langchain-tools` 호스트의 로그인된 동일 사이트 요청만 작업 API를 사용할 수 있습니다. 모델에는 승인 도구를 제공하지 않습니다. Foundry 도구 Agent의 기존 409 응답은 유지합니다.
+- 브라우저 개발자 도구에서 실제 사용자가 요청합니다. 첫 명령 뒤 승인 또는 거부를 직접 선택하고, 승인했다면 채팅에 `synthetic_record`로 해당 ID를 실행하도록 요청합니다. 실제 고객 데이터는 입력하지 않습니다.
+
+```javascript
+const headers = {"Content-Type": "application/json", "X-WASMAgent-Chat": "1"};
+const action = await fetch("/api/governance/actions", {
+  method: "POST", headers, body: JSON.stringify({value: "synthetic-ready"})
+}).then(r => r.json());
+// 실제 사용자가 승인하려는 작업 ID인지 확인한 뒤 true 또는 false를 선택합니다.
+await fetch(`/api/governance/actions/${action.action_id}/decision`, {
+  method: "POST", headers, body: JSON.stringify({approved: true})
+});
+console.log(action.action_id);
+```
+
+### 로컬 테스트와 배포 후 검증
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest demo\test_governance.py -q --basetemp=.wasm-agent\pytest-governance
+.\.venv\Scripts\python.exe -m ruff check demo\governance.py demo\test_governance.py demo\app.py
+```
+
+1. 배포 패키지에 `governance.py`를 `app.py`와 같은 위치에 포함합니다. 이 파일 추가만으로 배포가 완료되지는 않습니다.
+2. 승인된 기존 배포 절차로 배포하고 새 배포 ID의 성공을 확인합니다.
+3. 실제 HTTPS `/health`를 읽고 `governance.passed`, 10개 검사, `configured_endpoint_count` 및 버전/코드 해시를 확인합니다. 로컬 `runtime_code_digest()`와 일치해야 합니다.
+4. 로그인 후 합성 작업의 승인 전 거부, 명시적 거부, 명시적 승인 후 1회 성공, 재실행 거부를 확인합니다. 원격 Foundry/MCP 승인은 별도 검증 대상입니다.
+
+- 기존 승인 배포 호출은 프로젝트 루트의 `python -m demo.agents --apply`입니다. `expand()`는 기존 소유 리소스의 로그인 설정, Agent 버전/endpoint, 패키지 배포와 실제 호출을 수행하므로 관리자 승인 없이 실행하지 않습니다. 동일 버전의 성공 영수증이 있으면 Foundry 호출/평가를 재사용할 수 있습니다.
+- 실제 호출 진입점은 `demo.agents.sample_response(client, input=..., max_output_tokens=..., store=False)`와 `demo.app.invoke_agent(entry, messages)`입니다. 후자는 배포 호스트의 `/api/chat`에서 MI로 실행됩니다. 합성 프롬프트만 사용하고 Agent ID/버전, 성공 응답, 해당 호출 시각, 호스트/서비스 경로를 별도 대조해야 합니다.
+- 평가 진입점은 `demo.agents.evaluate_agent(project, entry, version, path)`입니다. 저장 영수증의 `agent_id`, `agent_version`, `run_id`, `status`, 실제 완료 시각/통과 항목을 확인합니다. 기존 `expand()`는 endpoint 연결 후 평가를 실행하므로 이 순서만으로 배포 전 평가를 입증하지 않습니다.
+- `.wasm-agent/demo/chatbot-expansion/<lab_id>/state.json`의 `published_at`은 관리자 실행 영수증입니다. 버전 생성 시각, 이 값 또는 계정 전체 토큰 수를 Agent의 실제 배포 시각/사용 이력으로 바꾸지 않습니다.
+
+### 저장 수집 결과와 정책 사실
+
+- `demo.governance.generate_policy_facts(collection_path, baseline, evidence_directory, verified_runtimes)`는 실제 저장된 `Collection` JSON만 읽습니다. 수집기는 이 모듈을 import하지 않습니다.
+- `read_collection_file(path)`는 `(Collection, embedded_evidence)`를 반환합니다. 실제 `schema_version: 1` raw 래퍼와 명시적인 단독 Collection을 지원합니다. 잘못된 래퍼/버전/누락 증적 구조는 오류이며 단독 Collection으로 재해석하지 않습니다.
+- `DemoBaseline`은 `demo_evidence=True`, `customer_policy_approved=False`, `digest(catalog)` 및 카탈로그 10개 각각의 실제 `platform/resource_id/agent_id` 매핑을 요구합니다. 자동 추측하지 않습니다.
+- 전체 수집 완료, 10개 대조, 실제 `owner/sponsor/env/cost-center` 및 카탈로그 환경 일치가 확인될 때만 `asset_standardized`를 생성합니다. 수집된 `asset_tag_ratio`를 덮어쓰지 않습니다.
+- 선택 `VerifiedRuntime` 영수증은 실제 HTTPS 관측과 성공한 배포 확인 후에만 생성합니다. `verification="https_observed_and_deployment_verified"`, 실제 리소스/배포 ID, 성공 상태, 관측 시각, 배포 코드 해시, `/health`의 보고서가 필요합니다. baseline의 `expected_policy_sha256`도 실제 허용 주소 설정과 대조합니다. 로컬 보고서를 배포 증거로 바꾸지 않습니다.
+- 도구/endpoint 사실은 모든 대상의 실행 경로와 검증된 배포가 확인되어야 합니다. 현재 카탈로그에는 로컬 gate 밖의 Foundry 도구가 있어 로컬 검사만으로 전체 평가를 생성하지 않습니다. 버전 생성만 확인된 경우 출시 사실도 생략합니다.
+- 반환 `PolicyProof.policy_facts`는 기존 `value/evidence_refs` 계약이며 `.model_dump(mode="json")`으로 내보낼 수 있습니다. 증적 폴더에는 식별자/태그/URL 대신 입력 해시, 대조 결과, 개수만 저장합니다. `omitted`와 `deployment_required`에 미확보 사유/추가 단계가 남습니다.
+- Azure Policy/예산 집행, SLO, RAI 효과, SOC 전달, 지역 보장, 보존기간이나 L4/L5 개선 증거는 만들지 않습니다. 이 baseline은 고객 정책 승인이 아닙니다.
+- 예산은 예외적으로 전체 구독의 저장 API 증적을 검증하면 `budget_assessment`와 `budget_standardized`만 생성합니다. 수집 완료, 자산/비용센터 대조, 구독 전체 무필터 범위(`filter: {}`), 수집 시점의 유효 기간, 양수 금액, 월별 Cost 예산, 활성 실제/예측 경보와 설정된 수신자가 모두 필요합니다. 통지 전달이나 초과 지출 차단은 입증하지 않습니다.
+- `DemoBaseline.required_budget_amount`는 선택 양수 금액입니다. 지정하면 실제 예산액과 정확히 일치해야 합니다. `demo/config.yaml`의 `budget_usd`를 사용하려면 해당 값을 명시적으로 전달합니다. 다르거나 알 수 없으면 예산 사실을 생략하며 0이나 L1로 바꾸지 않습니다. 미지정 시 금액 기준 승인을 주장하지 않고 양수 금액 존재만 검사합니다.
+- 예산은 단순화된 `Budget`만으로 판정하지 않습니다. raw 래퍼의 `evidence:<key>` 참조에 대응하는 실제 응답·기간·필터·경보와 수집 값의 일치를 확인합니다. 증적이 없는 단독 Collection은 예산 사실을 만들지 않습니다.
+
 ![실제 로그인 동의 - 식별자 마스킹과 클릭 위치](imgs/01-entra-consent.png)
 
 ![실제 LangChain 챗봇 대화](imgs/02-langchain-chat.png)

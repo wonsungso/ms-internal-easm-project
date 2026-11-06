@@ -111,7 +111,7 @@ def test_http_null_reason_is_not_fabricated(code: int, status: str, reason: str)
     session = Mock()
     session.request.return_value = response(code)
     result = verify.probe(
-        verify.ReaderHTTP(credential(), session), SID, "BI-SY-08",
+        verify.ReaderHTTP(credential(), session), SID, "BI-SY-11",
         "sample", "GET", verify.ARM + "/test",
     )
     assert result.status == status
@@ -124,7 +124,7 @@ def test_graph_unlicensed_403_is_license_missing_not_permission_denied() -> None
     payload = {"error": {"code": "Forbidden", "message": "Your tenant is not licensed for this feature."}}
     session.request.return_value = response(403, payload)
     result = verify.probe(
-        verify.ReaderHTTP(credential(), session), SID, "OE-SY-15", "tenant", "GET",
+        verify.ReaderHTTP(credential(), session), SID, "OE-SY-22", "tenant", "GET",
         "https://graph.microsoft.com/beta/identityProtection/riskyAgents", audience=verify.MSGRAPH_SCOPE,
     )
     assert (result.status, result.reason) == ("FEATURE_UNAVAILABLE", "license_missing")
@@ -146,7 +146,7 @@ def test_network_failure_is_not_feature_unavailable() -> None:
     session.request.side_effect = requests.ConnectionError("do not log this body")
     http = verify.ReaderHTTP(credential(), session)
     with patch.object(verify.time, "sleep"):
-        result = verify.probe(http, SID, "OT-SY-19", "sample", "GET", verify.ARM + "/test")
+        result = verify.probe(http, SID, "OT-SY-29", "sample", "GET", verify.ARM + "/test")
     assert result.status == "ERROR"
     assert result.reason == "error"
     assert "do not log" not in result.detail
@@ -226,7 +226,7 @@ def test_no_project_does_not_claim_foundry_access() -> None:
         side_effect=[[{"actions": ["*/read"]}], []],
     ), patch.object(verify.ReaderHTTP, "request", return_value={"value": []}):
         results = verify.check_subscription(credential(), SID, [])
-    evaluation = next(r for r in results if r.se_code == "BI-SY-08")
+    evaluation = next(r for r in results if r.se_code == "BI-SY-11")
     assert evaluation.status == "FEATURE_UNAVAILABLE"
     assert evaluation.reason == "not_found"
 
@@ -260,7 +260,7 @@ def test_entra_probes_run_while_the_credential_is_still_open(tmp_path) -> None:
 
 def test_rbac_report_contains_permission_denial_and_additional_role() -> None:
     report = verify.render_rbac([
-        verify.Result(SID, "BI-SY-08", "sample", "DENIED", "permission_denied", "fixture"),
+        verify.Result(SID, "BI-SY-11", "sample", "DENIED", "permission_denied", "fixture"),
     ])
     assert "Cost Management Reader" in report
     assert "DENIED" in report

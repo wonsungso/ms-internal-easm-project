@@ -126,11 +126,16 @@ class SignalCollector:
             raise AccessError("not_found", "최근 30일 비용 행이 없음; 청구 반영 지연 또는 사용 없음")
 
     def logs(self, sid: str, result: Collection) -> None:
-        targets = {f"/subscriptions/{sid}"}
-        targets.update(
+        result.facts["audit_log_scope"] = "agent_resource_execution"
+        result.facts.setdefault("log_scope_exclusions", []).append({
+            "resource_id": f"/subscriptions/{sid}", "source_type": "subscription_activity_log",
+            "detail": "구독 공통 플랫폼 Activity Log는 Agent 리소스 실행 로그 평가 범위에 포함하지 않음",
+        })
+        targets = {
             row["id"] for row in self.base.resources
             if row["subscriptionId"] == sid and row["type"].lower() == "microsoft.cognitiveservices/accounts"
-        )
+            and row.get("kind", "").lower() in ("aiservices", "openai")
+        }
         targets.update(agent.resource_id for agent in self.base.agents
                        if agent.subscription_id == sid and agent.platform == "langchain" and agent.resource_id)
         workspaces: dict[str, tuple[str, int | None]] = {}

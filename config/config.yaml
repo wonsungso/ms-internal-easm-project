@@ -9,7 +9,7 @@ allowed_models: []
 # DS-SY-06 L4: 모델 배포를 제한하는 Azure Policy 정의/이니셔티브 ID (없으면 정책 수집 생략)
 model_policy_definition_ids: []
 
-# OE-SY-15 / BI-SY-09 / OE-SY-14: 내부 기준 (없으면 해당 조건은 판정 보류 또는 내장 샘플 패턴)
+# OE-SY-22 / BI-SY-12 / OE-SY-21: 내부 기준 (없으면 해당 조건은 판정 보류 또는 내장 샘플 패턴)
 required_retention_days: null
 internal_security_score_min: null
 overprivileged_permission_patterns: []

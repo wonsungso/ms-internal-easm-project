@@ -1,11 +1,11 @@
-# 점검 항목 상세 (System Evidence 32개)
+# 점검 항목 상세 (System Evidence 31개)
 
-항목별 점검 내용, Azure Portal 기준 확인 경로, 확인 화면입니다. 요약표는 [README](../README.md#점검-항목-system-evidence-32개)에 있습니다.
+항목별 점검 내용, Azure Portal 기준 확인 경로, 확인 화면입니다. 요약표는 [README](../README.md#점검-항목-system-evidence-31개)에 있습니다.
 
 - 구현 표기: ✅ 구현 / ⚠️ 일부 구현 / ⚠️ 읽기 전용 불가(구현했으나 읽기 전용 역할로는 조회 불가) / ❌ 미구현 (M365·Agent 365·Purview·Power Platform 영역)
 - Azure Portal 기준(참고): 같은 값을 사람이 포털에서 확인하는 경로와 캡처이며 수집기 동작에는 영향이 없습니다
 - 캡처의 빨간 네모는 확인 위치이고 식별자는 마스킹했습니다. 표시 값은 데모 환경 기준이며 고객 환경과 다를 수 있습니다
-- 심사 Level과 점수는 [평가 템플릿](assessment-template.xlsx), [검토 기준·증적 입력](api-notes.md#심사기준-검토와-점수-반영-2026-11-05)을 따릅니다. 아래 구성 수집 사실만으로 승인·유효성·자동화를 확정하지 않습니다
+- 심사 Level과 점수는 [평가 템플릿](assessment-result-template.xlsx), [검토 기준·증적 입력](api-notes.md#심사기준-검토와-점수-반영-2026-11-05)을 따릅니다. 15개 항목은 실제 기본 구성·기록을 확인하면 L2 기본등급을 적용합니다. 승인·유효성·자동화는 별도 검증하며 L3 이상 요건을 유지합니다
 
 ## DM-SY-01 Agent 제작 허용 사용자 범위 및 허용 Agent 유형 설정
 
@@ -89,7 +89,7 @@
 
 ![DS-SY-09 확인 화면](portal/imgs/DS-SY-09.png)
 
-## BI-SY-07 환경 분리 및 관리형 환경 적용 여부
+## BI-SY-10 환경 분리 및 관리형 환경 적용 여부
 
 - **진단 영역:** 3. Build
 - **제품/메뉴:** Power Platform Admin Center
@@ -97,7 +97,7 @@
 - **점검 내용:** 개발·운영 환경 분리, 관리형 환경 적용 여부, 파이프라인 이력 확인
 - **Azure Portal 기준(참고):** 해당 없음 - Power Platform 관리 센터 > 환경 > 관리형 환경
 
-## BI-SY-08 품질·안전성 자동 평가 수행 이력
+## BI-SY-11 품질·안전성 자동 평가 수행 이력
 
 - **진단 영역:** 3. Build
 - **제품/메뉴:** Microsoft Foundry
@@ -105,9 +105,9 @@
 - **점검 내용:** Foundry 프로젝트별 평가(Evaluation) 실행 이력을 Agent·버전과 대조해 `env=prod` 태그 Agent 중 평가 이력 보유 비율 산출(L3: 80% 이상). Foundry 프로젝트 읽기 역할 필요. 평가 파이프라인·지속 평가(L4/L5)는 `policy_facts`로만 반영
 - **Azure Portal 기준(참고):** Azure Portal > Microsoft Foundry > (계정) > Go to Foundry portal > Build > Evaluations
 
-![BI-SY-08 확인 화면](portal/imgs/BI-SY-08.png)
+![BI-SY-11 확인 화면](portal/imgs/BI-SY-11.png)
 
-## BI-SY-09 AI 워크로드 보안 태세 점검 결과
+## BI-SY-12 AI 워크로드 보안 태세 점검 결과
 
 - **진단 영역:** 3. Build
 - **제품/메뉴:** Microsoft Defender
@@ -115,9 +115,9 @@
 - **점검 내용:** AI 리소스 연결 Defender 권고와 구독 보안 점수 수집. 보안 점수는 `internal_security_score_min`과 비교. 상태 변경일 경과는 참고값이며 30일 내 조치 SLA 충족 증거가 아님. L4에는 실제 조치 이력(`recommendation_sla_verified`)과 정책 자동화 증적이 필요. 보안 점수는 Security Reader 필요 가능
 - **Azure Portal 기준(참고):** Azure Portal > Microsoft Defender for Cloud > Recommendations(AI 리소스 필터), Security posture(보안 점수)
 
-![BI-SY-09 확인 화면](portal/imgs/BI-SY-09.png)
+![BI-SY-12 확인 화면](portal/imgs/BI-SY-12.png)
 
-## BI-SY-10 Content Safety 정책 연결
+## BI-SY-13 Content Safety 정책 연결
 
 - **진단 영역:** 3. Build
 - **제품/메뉴:** Microsoft Foundry - 콘텐츠 필터
@@ -125,19 +125,9 @@
 - **점검 내용:** 계정별 사용자 지정 콘텐츠 필터 정책 수와 필터 개수, 모델 배포별 정책 연결·사용자 지정 정책 연결 수. 필터의 실제 방어 효과는 확인 불가
 - **Azure Portal 기준(참고):** Azure Portal > Microsoft Foundry > (계정) > Go to Foundry portal > Build > Guardrails(콘텐츠 필터)
 
-![BI-SY-10 확인 화면](portal/imgs/BI-SY-10.png)
+![BI-SY-13 확인 화면](portal/imgs/BI-SY-13.png)
 
-## BI-SY-11 적대적 시험(Red team) 이력
-
-- **진단 영역:** 3. Build
-- **제품/메뉴:** Microsoft Foundry - 평가
-- **구현:** ⚠️ 읽기 전용 불가
-- **점검 내용:** Foundry 프로젝트별 red team 실행 목록(beta, `Foundry-Features: RedTeams=V1Preview` 헤더 필요)의 실행·완료 건수. 서비스가 목록 GET에도 쓰기 데이터 작업 `evaluations/write`를 요구(HTTP 401)하므로 쓰기 권한을 요청하지 않는 읽기 전용 원칙상 권한 거부로 기록. 포털 확인은 현재 이력 없음
-- **Azure Portal 기준(참고):** Azure Portal > Microsoft Foundry > (계정) > Go to Foundry portal > (프로젝트) > Build > Evaluations > Red team
-
-![BI-SY-11 확인 화면: 포털은 No red teams found](portal/imgs/BI-SY-11.png)
-
-## BI-SY-12 릴리스 버전 고정·런타임
+## BI-SY-14 릴리스 버전 고정·런타임
 
 - **진단 영역:** 3. Build
 - **제품/메뉴:** Azure OpenAI 배포, App Service
@@ -145,9 +135,9 @@
 - **점검 내용:** 모델 배포의 버전 업그레이드 옵션(자동 업그레이드 여부), 호스트 런타임, 컨테이너 이미지 다이제스트 고정 수. 소스·빌드 출처와 SDK 승인은 확인 불가
 - **Azure Portal 기준(참고):** Azure Portal > Microsoft Foundry > (계정) > Go to Foundry portal > 모델 + 엔드포인트(버전 업데이트 정책), App Service > (앱) > Settings > Configuration > Stack settings
 
-![BI-SY-12 확인 화면](portal/imgs/BI-SY-12.png)
+![BI-SY-14 확인 화면](portal/imgs/BI-SY-14.png)
 
-## BI-SY-13 Agent 자산 대장·책임 태그
+## BI-SY-15 Agent 자산 대장·책임 태그
 
 - **진단 영역:** 3. Build
 - **제품/메뉴:** Azure 리소스 태그
@@ -155,9 +145,9 @@
 - **점검 내용:** 수집된 모든 Azure Agent의 소유자·후원자·환경·비용센터 태그 보유 개수. 승인된 자산 대장과의 대사, 업무 목적·변경 이력은 고객 자료 필요
 - **Azure Portal 기준(참고):** Azure Portal > Microsoft Foundry 또는 App Service > (리소스) > Tags
 
-![BI-SY-13 확인 화면](portal/imgs/BI-SY-13.png)
+![BI-SY-15 확인 화면](portal/imgs/BI-SY-15.png)
 
-## BI-SY-14 Azure 정책 준수 상태
+## BI-SY-16 Azure 정책 준수 상태
 
 - **진단 영역:** 3. Build
 - **제품/메뉴:** Azure Policy
@@ -165,9 +155,9 @@
 - **점검 내용:** Resource Graph 정책 상태에서 AI 관련 리소스의 준수·비준수 리소스 수. 예외 승인과 편차 검토 기록은 확인 불가
 - **Azure Portal 기준(참고):** Azure Portal > Policy > Compliance
 
-![BI-SY-14 확인 화면](portal/imgs/BI-SY-14.png)
+![BI-SY-16 확인 화면](portal/imgs/BI-SY-16.png)
 
-## DP-SY-10 전체 Agent 목록과 배포 범위·게시 상태·소유자
+## DP-SY-17 전체 Agent 목록과 배포 범위·게시 상태·소유자
 
 - **진단 영역:** 4. Deploy
 - **제품/메뉴:** M365 Admin Center - Agent Registry
@@ -175,7 +165,7 @@
 - **점검 내용:** Registry 전체 Agent 목록과 배포 범위·게시 상태·소유자, 등록부 대사 (Azure 수집 Agent는 보조 정보일 뿐 대신하지 않음)
 - **Azure Portal 기준(참고):** 해당 없음 - Microsoft 365 관리 센터 > 에이전트 > 레지스트리
 
-## DP-SY-11 Agent 공유 허용 범위 및 사용자 설치 허용 설정
+## DP-SY-18 Agent 공유 허용 범위 및 사용자 설치 허용 설정
 
 - **진단 영역:** 4. Deploy
 - **제품/메뉴:** M365 Admin Center - Copilot > Agents 설정
@@ -183,7 +173,7 @@
 - **점검 내용:** Agent 공유 허용 범위와 사용자 직접 설치 허용 여부 설정값
 - **Azure Portal 기준(참고):** 해당 없음 - Microsoft 365 관리 센터 > Copilot > 에이전트 설정
 
-## DP-SY-12 고유 ID(Agent ID)가 부여된 Agent 수 / 전체 Agent 수
+## DP-SY-19 고유 ID(Agent ID)가 부여된 Agent 수 / 전체 Agent 수
 
 - **진단 영역:** 4. Deploy
 - **제품/메뉴:** Microsoft Entra Agent ID
@@ -191,9 +181,9 @@
 - **점검 내용:** Blueprint 태그(agentName·projectName·accountName)로 Azure에서 수집한 Foundry Agent와 매칭해 Agent ID 부여율 산출. 분모는 Azure 수집 Agent이며 Registry 전체는 아님
 - **Azure Portal 기준(참고):** Azure Portal > Microsoft Entra ID > Agent ID > 에이전트 ID 목록. 포털은 Foundry 프로젝트 관리 ID(`.../projects/<프로젝트>`)도 목록에 함께 표시하므로 수집 개수(Agent ID 9)보다 1개 많게(10) 보임
 
-![DP-SY-12 확인 화면](portal/imgs/DP-SY-12.png)
+![DP-SY-19 확인 화면](portal/imgs/DP-SY-19.png)
 
-## OE-SY-13 소유자·후원자 미지정 Agent 및 고아 Agent 수
+## OE-SY-20 소유자·후원자 미지정 Agent 및 고아 Agent 수
 
 - **진단 영역:** 5. Operate
 - **제품/메뉴:** Microsoft Entra Agent ID
@@ -201,9 +191,9 @@
 - **점검 내용:** Agent ID별 소유자·후원자 수(이름·UPN 미저장)와 소유자 전원 비활성(고아) 여부, 미지정 비율 산출
 - **Azure Portal 기준(참고):** Azure Portal > Microsoft Entra ID > Agent ID > (에이전트 ID) > 소유자/스폰서
 
-![OE-SY-13 확인 화면](portal/imgs/OE-SY-13.png)
+![OE-SY-20 확인 화면](portal/imgs/OE-SY-20.png)
 
-## OE-SY-14 Agent별 부여 권한 및 과다 권한 Agent
+## OE-SY-21 Agent별 부여 권한 및 과다 권한 Agent
 
 - **진단 영역:** 5. Operate
 - **제품/메뉴:** Microsoft Entra - Agent ID, ID Governance
@@ -211,19 +201,19 @@
 - **점검 내용:** Agent ID에 부여된 Graph 애플리케이션 권한 이름을 해석해 과다 권한 패턴(`*.ReadWrite.All` 등, 고객 설정 가능)에 해당하는 Agent 비율 산출. 위임 권한·접근 패키지는 수집하지 않음
 - **Azure Portal 기준(참고):** Azure Portal > Microsoft Entra ID > Agent ID > (에이전트 ID) > 권한
 
-![OE-SY-14 확인 화면](portal/imgs/OE-SY-14.png)
+![OE-SY-21 확인 화면](portal/imgs/OE-SY-21.png)
 
-## OE-SY-15 Agent 활동 감사 로그 보관 여부 및 보관 기간
+## OE-SY-22 Agent 활동 감사 로그 보관 여부 및 보관 기간
 
 - **진단 영역:** 5. Operate
 - **제품/메뉴:** Microsoft Purview - Audit
 - **구현:** ✅ 구현
-- **점검 내용:** Agent 관련 리소스의 진단 설정(로그 목적지)과 Log Analytics 보존일을 수집해 `required_retention_days`와 비교. Purview 감사와 동등하지 않은 Azure 대체 증적이며 중앙 workspace가 승인 구독 밖이면 권한 거부로 기록
+- **점검 내용:** Agent 관련 AI 계정·호스트의 실행 로그 목적지와 Log Analytics 보존일을 수집해 `required_retention_days`와 비교. 구독 공통 Activity Log와 Purview 감사는 평가 범위에 포함하지 않음. Agent 로그 자체가 승인 범위 밖 workspace를 사용하면 권한 거부로 기록
 - **Azure Portal 기준(참고):** Azure Portal > Microsoft Foundry > (계정) > Monitoring > Diagnostic settings, Log Analytics workspaces > (workspace) > Tables(보존 기간)
 
-![OE-SY-15 확인 화면](portal/imgs/OE-SY-15.png)
+![OE-SY-22 확인 화면](portal/imgs/OE-SY-22.png)
 
-## OE-SY-17 관리 ID와 ARM 역할 범위
+## OE-SY-23 관리 ID와 ARM 역할 범위
 
 - **진단 영역:** 5. Operate
 - **제품/메뉴:** Azure Resource Graph, Azure RBAC
@@ -231,9 +221,9 @@
 - **점검 내용:** Agent 호스트와 Foundry 계정의 관리 ID(시스템·사용자 할당) 유무, 그 ID에 할당된 ARM 역할 수, Owner·Contributor·User Access Administrator 등 광범위 역할과 구독 범위 할당 수, 계정의 키 인증 비활성 여부. 실제 인증 사용·Graph 권한은 확인 불가
 - **Azure Portal 기준(참고):** Azure Portal > Microsoft Foundry > (계정) > Resource Management > Identity, Access control (IAM) > Role assignments, Keys and Endpoint
 
-![OE-SY-17 확인 화면](portal/imgs/OE-SY-17.png)
+![OE-SY-23 확인 화면](portal/imgs/OE-SY-23.png)
 
-## OE-SY-18 관측·경보 구성
+## OE-SY-24 관측·경보 구성
 
 - **진단 영역:** 5. Operate
 - **제품/메뉴:** Azure Monitor
@@ -241,9 +231,9 @@
 - **점검 내용:** 경보 규칙(활성 여부, AI 리소스 대상 여부), Application Insights 수, 활성 진단 설정 수. 계측·샘플링·SLO 승인은 확인 불가
 - **Azure Portal 기준(참고):** Azure Portal > Monitor > Alerts > Alert rules, Application Insights, Microsoft Foundry > (계정) > Monitoring > Diagnostic settings
 
-![OE-SY-18 확인 화면](portal/imgs/OE-SY-18.png)
+![OE-SY-24 확인 화면](portal/imgs/OE-SY-24.png)
 
-## OE-SY-19 경보 전달 경로
+## OE-SY-25 경보 전달 경로
 
 - **진단 영역:** 5. Operate
 - **제품/메뉴:** Azure Monitor - 작업 그룹
@@ -251,9 +241,9 @@
 - **점검 내용:** 작업 그룹 수, 수신자 유형별 개수(주소·이름 미수집), 작업 그룹에 연결된 경보 수. SOC 수신과 중단·복구 훈련은 확인 불가
 - **Azure Portal 기준(참고):** Azure Portal > Monitor > Alerts > Action groups
 
-![OE-SY-19 확인 화면](portal/imgs/OE-SY-19.png)
+![OE-SY-25 확인 화면](portal/imgs/OE-SY-25.png)
 
-## OE-SY-20 지역과 보존 설정
+## OE-SY-26 지역과 보존 설정
 
 - **진단 영역:** 5. Operate
 - **제품/메뉴:** Azure 리소스 위치, Log Analytics
@@ -261,9 +251,9 @@
 - **점검 내용:** AI 계정·호스트·workspace의 사용 지역 목록과 로그·Application Insights 보존일. 중앙 workspace가 승인 구독 밖이면 일부 누락. 실제 처리 지역·삭제 검증은 확인 불가
 - **Azure Portal 기준(참고):** Azure Portal > Microsoft Foundry > (계정) > Overview(Location), Log Analytics workspaces > (workspace) > Tables(보존 기간)
 
-![OE-SY-20 확인 화면](portal/imgs/OE-SY-20.png)
+![OE-SY-26 확인 화면](portal/imgs/OE-SY-26.png)
 
-## OT-SY-17 승인되지 않은 Agent(Shadow AI) 탐지 결과
+## OT-SY-27 승인되지 않은 Agent(Shadow AI) 탐지 결과
 
 - **진단 영역:** 6. Optimize
 - **제품/메뉴:** Agent 365 - Shadow AI Detection
@@ -271,7 +261,7 @@
 - **점검 내용:** Shadow AI 탐지 리포트와 미승인 Agent 목록 (Agent 365 라이선스 필요)
 - **Azure Portal 기준(참고):** 해당 없음 - Agent 365 관리 화면 > Shadow AI
 
-## OT-SY-18 Agent별 활성 사용자 수, 최근 사용일, 미사용 Agent 수
+## OT-SY-28 Agent별 활성 사용자 수, 최근 사용일, 미사용 Agent 수
 
 - **진단 영역:** 6. Optimize
 - **제품/메뉴:** M365 Admin Center - Agent 사용 현황 / Agent 365
@@ -279,9 +269,9 @@
 - **점검 내용:** Azure Monitor 호출·토큰 지표와 Log Analytics 사용 기록으로 Agent별 최근 사용일을 구해 90일 이상 미사용 Agent 수 산출. 활성 사용자 수는 수집하지 않음
 - **Azure Portal 기준(참고):** Azure Portal > Microsoft Foundry > (계정) > Monitoring > Metrics, Logs
 
-![OT-SY-18 확인 화면](portal/imgs/OT-SY-18.png)
+![OT-SY-28 확인 화면](portal/imgs/OT-SY-28.png)
 
-## OT-SY-19 사용량 기반 과금 정책 설정 여부 및 Agent별 소비 비용
+## OT-SY-29 사용량 기반 과금 정책 설정 여부 및 Agent별 소비 비용
 
 - **진단 영역:** 6. Optimize
 - **제품/메뉴:** M365 Admin Center - Billing policy / Azure Cost Management
@@ -289,9 +279,9 @@
 - **점검 내용:** Cost Management 최근 30일 AI 비용 중 Agent 귀속 비율, 구독 예산·경보 설정, 모든 Agent의 비용센터 태그 보유(L4 조건) 확인. 공유 리소스 비용은 Agent별 귀속 불가
 - **Azure Portal 기준(참고):** Azure Portal > Cost Management > Cost analysis, Budgets
 
-![OT-SY-19 확인 화면](portal/imgs/OT-SY-19.png)
+![OT-SY-29 확인 화면](portal/imgs/OT-SY-29.png)
 
-## OT-SY-20 Agent가 접근하는 민감 데이터 노출 현황
+## OT-SY-30 Agent가 접근하는 민감 데이터 노출 현황
 
 - **진단 영역:** 6. Optimize
 - **제품/메뉴:** Microsoft Purview - DSPM for AI
@@ -299,7 +289,7 @@
 - **점검 내용:** DSPM for AI 리포트의 민감 데이터 노출 목록 (읽기 공식 API 미확인)
 - **Azure Portal 기준(참고):** 해당 없음 - Microsoft Purview 포털 > DSPM for AI
 
-## OT-SY-21 예산·예측 경보
+## OT-SY-31 예산·예측 경보
 
 - **진단 영역:** 6. Optimize
 - **제품/메뉴:** Azure Cost Management
@@ -307,4 +297,4 @@
 - **점검 내용:** 구독별 예산 수, 경보 설정 수, 예측(Forecasted) 임계값 경보 수. Agent 단위 비용 귀속과 통보 후 조치 이력은 확인 불가
 - **Azure Portal 기준(참고):** Azure Portal > Cost Management > Budgets
 
-![OT-SY-21 확인 화면](portal/imgs/OT-SY-21.png)
+![OT-SY-31 확인 화면](portal/imgs/OT-SY-31.png)

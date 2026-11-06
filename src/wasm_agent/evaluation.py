@@ -5,7 +5,7 @@ from datetime import timedelta
 from typing import Any, Protocol
 
 from wasm_agent.models import AgentEvidence, Collection, Finding
-from wasm_agent.proposals import ISSUE_COLLECTORS, LIMITS
+from wasm_agent.proposals import ISSUE_COLLECTORS, LIMITS, build
 
 
 class Evaluator(Protocol):
@@ -244,12 +244,63 @@ def derive_entra_facts(data: Collection, azure_agents: list[AgentEvidence]) -> d
     return facts
 
 
+def configuration_counts(data: Collection, conventions: dict[str, Any]) -> dict[str, int]:
+    """Count observed basic controls, never substitute for the primary maturity metric."""
+    metrics = {code: build(code, data, conventions)[0] for code in (
+        "DS-SY-07", "DS-SY-08", "DS-SY-09", "BI-SY-13", "BI-SY-14", "BI-SY-16",
+        "OE-SY-23", "OE-SY-24", "OE-SY-25", "OE-SY-26",
+    )}
+    projects = set(data.facts.get("foundry_project_ids", []))
+    complete_projects = set(data.facts.get("evaluation_complete_projects", []))
+    usage_resources = sum(
+        any(
+            type(value) in (int, float)
+            for metric in row.get("metrics") or [] for series in metric.get("timeseries") or []
+            for point in series.get("data") or [] for key, value in point.items() if key != "timeStamp"
+        ) for row in data.facts.get("resource_metrics", [])
+    )
+    network = metrics["DS-SY-07"]
+    versions = metrics["BI-SY-14"]
+    return {
+        "BI-SY-11": sum(
+            run.status is not None and run.status.lower() in ("completed", "succeeded")
+            for run in data.evaluations
+        )
+        if projects and projects <= complete_projects else 0,
+        "BI-SY-12": sum(
+            row.status in ("Healthy", "Unhealthy", "NotApplicable") for row in data.security
+        ) + sum(row.percentage is not None for row in data.secure_scores),
+        "OE-SY-22": sum(row.enabled for row in data.logs),
+        "OT-SY-28": usage_resources,
+        "DS-SY-05": len(data.entra_blueprints) if data.facts.get("entra_blueprints_complete") else 0,
+        "DS-SY-07": network["accounts_default_deny"] + network["accounts_private_endpoint"]
+        + network["hosts_https_only"] + network["hosts_ip_restricted"],
+        "DS-SY-08": metrics["DS-SY-08"]["agents_with_tools"],
+        "DS-SY-09": len(metrics["DS-SY-09"]["hosts"]),
+        "BI-SY-13": metrics["BI-SY-13"]["with_policy"],
+        "BI-SY-14": sum(bool(row.version) for row in data.deployments) + versions["hosts_with_runtime"],
+        "BI-SY-16": sum(metrics["BI-SY-16"]["resources_by_state"].values()),
+        "OE-SY-23": metrics["OE-SY-23"]["with_managed_identity"],
+        "OE-SY-24": sum(
+            row.values.get("enabled") is True and row.values.get("targets_ai") is True
+            for row in data.proposal_observations if row.code == "OE-SY-24"
+        ),
+        "OE-SY-25": sum(
+            row.values.get("enabled") is True and row.values.get("targets_ai") is True
+            and row.values.get("has_action_group") is True
+            for row in data.proposal_observations if row.code == "OE-SY-24"
+        ),
+        "OE-SY-26": len(metrics["OE-SY-26"]["regions"]) + len(metrics["OE-SY-26"]["retention_days"]),
+    }
+
+
 def evaluate(
     data: Collection, criteria: dict[str, Any], allowed: dict[str, Any],
     conventions: dict[str, Any], policy_facts: dict[str, Any] | None = None,
     interviews: dict[str, float] | None = None,
 ) -> list[Finding]:
     facts = derive_facts(data, criteria, allowed, conventions)
+    observed = configuration_counts(data, conventions)
     refs = evidence_refs(data)
     reserved = {entry["metric"] for entry in criteria["items"].values()}
     reserved.update(("outside_ratio", "security_score_meets_internal"))
@@ -291,7 +342,19 @@ def evaluate(
         facts["security_score_meets_internal"] = facts["security_score"] >= criteria["internal_security_score_min"]
     findings = []
     for code, config in criteria["items"].items():
-        tenant_item = config.get("requires") == "entra" and code != "DP-SY-12"
+        related = {
+            "DS-SY-06": ("model_deployments", "policies"),
+            "BI-SY-11": ("foundry_agents", "foundry_evaluations"),
+            "BI-SY-12": ("security", "secure_score"), "OE-SY-22": ("logs", "agent_usage"),
+            "OT-SY-28": ("agent_usage", "metrics"), "OT-SY-29": ("cost", "budgets"),
+            "DS-SY-05": ("entra_blueprints",), "DP-SY-19": ("entra_blueprints", "foundry_agents"),
+            "OE-SY-20": ("entra_agents",), "OE-SY-21": ("entra_agents",),
+        }
+        issues = [
+            item for item in data.issues
+            if item.collector in related.get(code, ISSUE_COLLECTORS.get(code, ()))
+        ]
+        tenant_item = config.get("requires") == "entra" and code != "DP-SY-19"
         value = facts.get(config["metric"])
         matched = next((rule for rule in config["rules"] if matches(facts, rule["when"])), None)
         if value is None and matched and matched["level"] != "L1":
@@ -299,35 +362,35 @@ def evaluate(
         level = matched["level"] if matched else "N/A"
         reason = None
         rationale = "원문 기준에 해당하는 수치·정성 조건을 확인한 판정 초안"
+        basis = "criteria"
+        configuration_value = None
+        basic = criteria.get("configuration_grading", {})
+        description = basic.get("items", {}).get(code)
+        if not matched and description and not issues and observed.get(code, 0) >= basic["minimum_observations"]:
+            level = basic["level"]
+            basis = "configuration"
+            configuration_value = observed[code]
+            rationale = (
+                f"구성 기반 기본등급({level}): {description}. 관측 구성·기록 {configuration_value}건. "
+                "원래 심사 지표의 비율·기간·집행 효과를 추정하지 않으며 L3 이상 요건은 별도 검증"
+            )
         if not tenant_item and not data.facts.get("inventory_complete"):
             value = None
             level, reason = "N/A", "permission_denied" if any(
                 issue.reason == "permission_denied" and issue.collector == "subscription" for issue in data.issues
             ) else "error"
             rationale = "구독 인벤토리 부분 실패로 전체 분모를 확정할 수 없음"
-        elif not matched:
+        elif not matched and basis != "configuration":
             reason = "not_found"
             rationale = (
                 "필요 증적·귀속·관측 기간이 부족하거나 원문에 정의되지 않은 수치 구간/정성 조건임"
             )
-            related = {
-                "DS-SY-06": ("model_deployments", "policies"),
-                "BI-SY-08": ("foundry_agents", "foundry_evaluations"),
-                "BI-SY-09": ("security", "secure_score"), "OE-SY-15": ("logs", "agent_usage"),
-                "OT-SY-18": ("agent_usage",), "OT-SY-19": ("cost", "budgets"),
-                "DS-SY-05": ("entra_blueprints",), "DP-SY-12": ("entra_blueprints", "foundry_agents"),
-                "OE-SY-13": ("entra_agents",), "OE-SY-14": ("entra_agents",),
-            }
-            issues = [
-                item for item in data.issues
-                if item.collector in related.get(code, ISSUE_COLLECTORS.get(code, ()))
-            ]
             if issues:
                 priority = {"permission_denied": 0, "error": 1, "license_missing": 2,
                             "feature_unavailable": 3, "not_found": 4}
                 reason = min(issues, key=lambda item: priority[item.reason]).reason
                 rationale += "; " + "; ".join(sorted({item.detail for item in issues}))
-        if code in ("BI-SY-08", "OT-SY-18", "OT-SY-19", "DP-SY-12", "BI-SY-13") and not data.facts.get(
+        if code in ("BI-SY-11", "OT-SY-28", "OT-SY-29", "DP-SY-19", "BI-SY-15") and not data.facts.get(
             "agent_inventory_complete", data.facts.get("inventory_complete"),
         ):
             value, level = None, "N/A"
@@ -343,11 +406,12 @@ def evaluate(
             rationale += "; " + LIMITS[code]
         if code == "DS-SY-06" and not allowed.get("models"):
             rationale += "; 허용 모델 목록(config.yaml allowed_models)이 입력되지 않아 허용 비율을 계산하지 않음"
-        if code == "DP-SY-12":
+        if code == "DP-SY-19":
             rationale += "; 분모는 Azure에서 수집한 Agent이며 Agent Registry 전체가 아님"
-        if code == "OE-SY-14" and criteria.get("overprivileged_permissions_sample"):
+        if code == "OE-SY-21" and criteria.get("overprivileged_permissions_sample"):
             rationale += "; 샘플 과다 권한 패턴 사용, 고객 기준 승인 필요"
         if level == "N/A":
+            basis, configuration_value = "criteria", None
             next_step = "부족 증적을 확보한 뒤 목표 기준 확인: " + config["levels"]["L3"]
         elif level == "L5":
             next_step = "L5 운영 증적을 지속 확인"
@@ -360,6 +424,7 @@ def evaluate(
         )
         findings.append(Finding(
             se_code=code, scope=config["scope"], metric_value=value,
+            assessment_basis=basis, configuration_value=configuration_value,
             level=level, rationale=rationale, reason=reason, evidence_refs=sorted(set(refs)),
             next_step=next_step, interview_level=interview, gap_flag=gap,
         ))

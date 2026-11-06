@@ -1,50 +1,82 @@
 {
   "authentication": {
-    "captured_on": "2026-11-04",
-    "source": "승인된 검증 테넌트의 실제 Azure Portal 화면과 인증서 SP 수집 실행 (README 순서 그대로 수행)",
+    "captured_on": "2026-11-05",
+    "source": "실제 Azure Portal 권한 화면과 승인된 검증 구독 3개의 인증서 SP E2E. 07~11은 이전 촬영 화면이며 이후 권한 화면은 2026-11-05 갱신",
     "automation": "Playwright integrated browser",
     "highlight_color": "#d40000",
     "account_banner_excluded": true,
     "account_identifiers_masked": true,
-    "display_text_editing": "앱 이름과 인증서 설명은 실제 입력값 그대로임. 식별자와 테넌트 이름은 회색 상자로 가렸고, 12번 화면의 테넌트 이름만 Customer 문구로 바꿔 캡처함.",
+    "display_text_editing": "식별자와 테넌트 이름은 회색 영역으로 가렸고, 실제 역할·권한·승인 문구는 바꾸지 않았음",
     "application_and_sp_created": true,
     "credentials_modified": true,
     "credential_counts_before_cleanup": {
       "certificates": 1,
       "client_secrets": 0
     },
-    "reader_assignment": "첫 승인 구독은 실제 Portal에서 할당, 나머지 구독과 추가 읽기 역할은 scripts/setup.sh apply로 할당 후 재조회",
+    "reader_assignment": "기본 읽기 역할 5종을 승인 구독 3개에 스크립트로 부여하고 직접 할당 15건 재조회",
     "collection": {
       "authentication": "실제 DefaultAzureCredential 인증서 SP",
       "administrator_fallback": false,
-      "collect_exit": 2,
+      "collect_exit": 0,
       "agents_found": 10,
-      "issues_preserved": 6,
-      "proposals": {
-        "collected": 11,
-        "partial": 1,
-        "unavailable": 1,
-        "unavailable_item": "BI-SY-11 (HTTP 401)"
-      },
-      "entra_without_consent": {
-        "issues_preserved": 11,
-        "permission_denied_steps": 4,
-        "entra_items_level": "N/A"
-      },
+      "mandatory_findings": 22,
+      "approved_subscriptions": 3,
+      "issues_preserved": 0,
+      "azure_inventory_complete": true,
+      "agent_inventory_complete": true,
+      "assessment_revision": 5,
       "entra_with_consent": {
         "blueprints": 9,
-        "dp_sy_12": "L3 (0.8)",
-        "risky_agents": "HTTP 403 (permission_denied)"
+        "agent_identities": 9,
+        "findings": 4
+      },
+      "configured_graph_permissions": 3,
+      "verified_azure_role_assignments": 15,
+      "identity_mismatch_exit": 1,
+      "package_exit": 0,
+      "output_directory": "output/20261106T045157588704Z",
+      "demo_evidence": true,
+      "customer_policy_approved": false,
+      "graded_findings": 22,
+      "pending_grade_findings": 0,
+      "attached_evidence": 60,
+      "report_font": "1~6번은 원본 템플릿 글꼴·크기 유지, 7번 이후 Arial 10",
+      "runtime_deployments_verified": 2,
+      "demo_policy_facts": [
+        "asset_standardized",
+        "budget_assessment",
+        "budget_standardized"
+      ],
+      "budget_baseline": "양수 월별 예산과 실제/예측 경보 존재 - USD 100 한도 준수 의미 아님",
+      "configuration_based_findings": 15,
+      "configuration_grade": "L2",
+      "reevaluation_of_existing_live_snapshot": false,
+      "collected_at": "2026-11-05T08:42:33.092499+00:00",
+      "report_layout": "10개 시트; I4 Bold; L 평가 점수1~5 자동 입력; I·K Level X와 J 근거 라벨 Bold",
+      "run_stamp_matches_filenames": true,
+      "continuous_se_codes": "DM01-03 / DS04-09 / BI10-16 / DP17-19 / OE20-26 / OT27-31",
+      "report_regeneration_only": true,
+      "source_run_directory": "output/20261106T044207694433Z",
+      "report_sheet_count": 10,
+      "collection_categories": {
+        "인터뷰 필요": 54,
+        "수집하지 않음": 9,
+        "수집됨": 22
       }
     },
     "cleanup": {
       "temporary_app_deleted": true,
       "temporary_sp_deleted": true,
       "reader_assignments_deleted": true,
+      "all_temporary_role_assignments_deleted": true,
       "private_key_deleted": true,
-      "verified_at": "2026-11-04T07:24:00+00:00"
+      "temporary_certificates_removed": true,
+      "existing_demo_resources_retained": true,
+      "reusable_custom_role_definition_retained": true,
+      "verified_at": "2026-11-05T08:57:22.573244+00:00",
+      "graph_timeout_then_retry_success": true
     },
-    "verification_limit": "OE-SY-15의 riskyAgents(Graph beta)는 동의 후에도 403이라 조회하지 못함(원인 미확인). 로그 workspace가 승인 구독 밖이고 비용 청구 행이 없어 일부 항목은 판정 보류로 남음.",
+    "verification_limit": "현재 출력은 2026-11-05T08:42:33.092499+00:00 실제 수집 데이터의 서식 재생성이며 새 Azure 조회가 아님. 22개 등급과 60개 마스킹 증적을 유지하며 15개는 구성 기반 L2. 고객 정책 승인·L4/L5 집행 검증으로 간주하지 않음. 원래 실제 SP 수집 후 임시 역할·앱·인증서는 정리 확인됨.",
     "images": [
       {
         "file": "imgs/07-register-sp.png",
@@ -57,13 +89,15 @@
             951,
             656
           ]
-        }
+        },
+        "captured_on": "2026-11-04"
       },
       {
         "file": "imgs/08-sp-overview.png",
         "action": "앱 개요의 client·tenant·앱 object ID 확인 위치",
         "highlight_count": 3,
-        "client_id_masked": true
+        "client_id_masked": true,
+        "captured_on": "2026-11-04"
       },
       {
         "file": "imgs/09-upload-certificate.png",
@@ -77,13 +111,15 @@
             951,
             726
           ]
-        }
+        },
+        "captured_on": "2026-11-04"
       },
       {
         "file": "imgs/10-reader-role.png",
         "action": "구독 IAM에서 Reader 선택 및 Next",
         "highlight_count": 2,
-        "subscription_masked": true
+        "subscription_masked": true,
+        "captured_on": "2026-11-04"
       },
       {
         "file": "imgs/11-reader-review.png",
@@ -96,19 +132,371 @@
             951,
             713
           ]
-        }
+        },
+        "captured_on": "2026-11-04"
       },
       {
         "file": "imgs/12-entra-consent.png",
-        "action": "Graph 애플리케이션 읽기 권한 5개 추가 후 동의 전 상태와 Grant admin consent 버튼 위치 (Global Administrator PIM 활성화 상태에서 캡처)",
-        "highlight_count": 2,
-        "consent_granted": false
+        "action": "실제 Configured permissions 3개와 관리자 동의 버튼 위치. 스크립트로 이미 동의된 상태에서 캡처",
+        "highlight_count": 4,
+        "consent_granted": true,
+        "captured_on": "2026-11-05",
+        "configured_permission_count": 3,
+        "account_identifiers_masked": true,
+        "full_permission_names_visible": true,
+        "highlight_method": "Pillow rectangles from verified visible text bounds",
+        "highlight_boxes_px": [
+          [
+            152,
+            93,
+            391,
+            137
+          ],
+          [
+            70,
+            204,
+            195,
+            228
+          ],
+          [
+            70,
+            236,
+            243,
+            260
+          ],
+          [
+            70,
+            267,
+            183,
+            291
+          ]
+        ],
+        "size_px": [
+          999,
+          312
+        ],
+        "source_size_px": [
+          1536,
+          480
+        ],
+        "permission_name_column_width": 330,
+        "rendered_text_verified": true
       },
       {
         "file": "imgs/13-entra-granted.png",
-        "action": "Grant admin consent 실행 후 5개 권한이 모두 Granted. Graph appRoleAssignments 5건으로 재확인",
+        "action": "실제 포털 관리자 동의 Yes 실행 후 성공 알림과 3개 Granted 상태 재확인",
+        "highlight_count": 3,
+        "consent_granted": true,
+        "captured_on": "2026-11-05",
+        "configured_permission_count": 3,
+        "account_identifiers_masked": true,
+        "full_permission_names_visible": true,
+        "highlight_method": "Pillow rectangles from verified visible text bounds",
+        "highlight_boxes_px": [
+          [
+            70,
+            202,
+            920,
+            228
+          ],
+          [
+            70,
+            234,
+            920,
+            260
+          ],
+          [
+            70,
+            266,
+            920,
+            291
+          ]
+        ],
+        "size_px": [
+          999,
+          312
+        ],
+        "source_size_px": [
+          1536,
+          480
+        ],
+        "permission_name_column_width": 330,
+        "rendered_text_verified": true
+      },
+      {
+        "file": "imgs/14-cost-reader.png",
+        "captured_on": "2026-11-05",
+        "action": "Cost Management Reader 검색·선택·Next 위치. 실제 역할 할당은 setup 스크립트로 수행",
+        "highlight_count": 3,
+        "account_banner_excluded": true,
+        "account_identifiers_masked": true,
+        "capture_element": "portal_blade",
+        "size_px": [
+          1958,
+          529
+        ],
+        "full_permission_names_visible": true,
+        "highlight_method": "Pillow rectangles from verified browser text bounds",
+        "highlight_boxes_px": [
+          [
+            24,
+            280,
+            392,
+            312
+          ],
+          [
+            32,
+            354,
+            412,
+            379
+          ],
+          [
+            292,
+            481,
+            380,
+            513
+          ]
+        ],
+        "source_size_px": [
+          1958,
+          1009
+        ],
+        "postprocessing": {
+          "method": "완전한 흰색 중간 빈 행만 무손실 제거 - 실제 내용과 빨간 네모 유지",
+          "removed_rows": [
+            440,
+            920
+          ],
+          "source_size_px": [
+            1958,
+            1009
+          ],
+          "result_size_px": [
+            1958,
+            529
+          ]
+        }
+      },
+      {
+        "file": "imgs/15-log-reader.png",
+        "captured_on": "2026-11-05",
+        "action": "Log Analytics Reader 검색·선택·Next 위치. 실제 역할 할당은 setup 스크립트로 수행",
+        "highlight_count": 3,
+        "account_banner_excluded": true,
+        "account_identifiers_masked": true,
+        "capture_element": "portal_blade",
+        "size_px": [
+          1958,
+          689
+        ],
+        "full_permission_names_visible": true,
+        "highlight_method": "Pillow rectangles from verified browser text bounds",
+        "highlight_boxes_px": [
+          [
+            24,
+            280,
+            392,
+            312
+          ],
+          [
+            32,
+            450,
+            412,
+            475
+          ],
+          [
+            292,
+            641,
+            380,
+            673
+          ]
+        ],
+        "source_size_px": [
+          1958,
+          1009
+        ],
+        "postprocessing": {
+          "method": "완전한 흰색 중간 빈 행만 무손실 제거 - 실제 내용과 빨간 네모 유지",
+          "removed_rows": [
+            600,
+            920
+          ],
+          "source_size_px": [
+            1958,
+            1009
+          ],
+          "result_size_px": [
+            1958,
+            689
+          ]
+        }
+      },
+      {
+        "file": "imgs/16-security-reader.png",
+        "captured_on": "2026-11-05",
+        "action": "Security Reader 검색·선택·Next 위치. 실제 역할 할당은 setup 스크립트로 수행",
+        "highlight_count": 3,
+        "account_banner_excluded": true,
+        "account_identifiers_masked": true,
+        "capture_element": "portal_blade",
+        "size_px": [
+          1958,
+          593
+        ],
+        "full_permission_names_visible": true,
+        "highlight_method": "Pillow rectangles from verified browser text bounds",
+        "highlight_boxes_px": [
+          [
+            24,
+            280,
+            392,
+            312
+          ],
+          [
+            32,
+            386,
+            412,
+            411
+          ],
+          [
+            292,
+            545,
+            380,
+            577
+          ]
+        ],
+        "source_size_px": [
+          1958,
+          1009
+        ],
+        "postprocessing": {
+          "method": "완전한 흰색 중간 빈 행만 무손실 제거 - 실제 내용과 빨간 네모 유지",
+          "removed_rows": [
+            504,
+            920
+          ],
+          "source_size_px": [
+            1958,
+            1009
+          ],
+          "result_size_px": [
+            1958,
+            593
+          ]
+        }
+      },
+      {
+        "file": "imgs/17-foundry-reader.png",
+        "captured_on": "2026-11-05",
+        "action": "실제 사용자 지정 Foundry 읽기 역할 검색·선택 위치",
+        "highlight_count": 3,
+        "account_banner_excluded": true,
+        "account_identifiers_masked": true,
+        "capture_element": "portal_blade",
+        "size_px": [
+          1958,
+          529
+        ],
+        "full_permission_names_visible": true,
+        "highlight_method": "Pillow rectangles from verified browser text bounds",
+        "highlight_boxes_px": [
+          [
+            24,
+            280,
+            392,
+            312
+          ],
+          [
+            32,
+            354,
+            412,
+            379
+          ],
+          [
+            292,
+            481,
+            380,
+            513
+          ]
+        ],
+        "source_size_px": [
+          1958,
+          1009
+        ],
+        "postprocessing": {
+          "method": "완전한 흰색 중간 빈 행만 무손실 제거 - 실제 내용과 빨간 네모 유지",
+          "removed_rows": [
+            440,
+            920
+          ],
+          "source_size_px": [
+            1958,
+            1009
+          ],
+          "result_size_px": [
+            1958,
+            529
+          ]
+        }
+      },
+      {
+        "file": "imgs/18-foundry-permissions.png",
+        "captured_on": "2026-11-05",
+        "action": "사용자 지정 역할 JSON에서 agents/read, evaluations/read, assets/read 전체 경로 확인",
+        "highlight_count": 4,
+        "account_banner_excluded": true,
+        "account_identifiers_masked": true,
+        "capture_element": "portal_blade",
+        "size_px": [
+          1006,
+          540
+        ],
+        "full_permission_names_visible": true,
+        "highlight_method": "Pillow rectangles from verified browser text bounds",
+        "highlight_boxes_px": [
+          [
+            115,
+            80,
+            173,
+            124
+          ],
+          [
+            253,
+            428,
+            709,
+            446
+          ],
+          [
+            253,
+            447,
+            748,
+            465
+          ],
+          [
+            253,
+            466,
+            709,
+            484
+          ]
+        ],
+        "source_size_px": [
+          1509,
+          810
+        ],
+        "rendered_text_verified": true
+      },
+      {
+        "file": "imgs/19-entra-confirm.png",
+        "captured_on": "2026-11-05",
+        "action": "실제 관리자 동의 확인 창과 Yes 위치 캡처 후 Yes 실행",
         "highlight_count": 1,
-        "consent_granted": true
+        "account_banner_excluded": true,
+        "account_identifiers_masked": true,
+        "capture_element": "confirmation_dialog",
+        "size_px": [
+          768,
+          139
+        ]
       }
     ]
   },

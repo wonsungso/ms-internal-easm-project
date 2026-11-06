@@ -10,6 +10,7 @@ from pathlib import Path, PureWindowsPath
 from typing import Any
 from urllib.parse import unquote
 
+from wasm_agent.assessment_codes import ASSESSMENT_REVISION, migrate_revision_4_codes
 from wasm_agent.azure import redact
 from wasm_agent.models import Collection, Finding
 from wasm_agent.report_excel import write_workbook
@@ -41,12 +42,12 @@ def _stamp(data: Collection) -> str:
     return data.collected_at.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
-def report_name(data: Collection) -> str:
-    return f"report-{_stamp(data)}.xlsx"
+def report_name(data: Collection, run_stamp: str | None = None) -> str:
+    return f"report-{run_stamp or _stamp(data)}.xlsx"
 
 
-def raw_name(data: Collection) -> str:
-    return f"raw-data-{_stamp(data)}.json"
+def raw_name(data: Collection, run_stamp: str | None = None) -> str:
+    return f"raw-data-{run_stamp or _stamp(data)}.json"
 
 
 def latest_raw(output: Path) -> Path | None:
@@ -60,12 +61,14 @@ def latest_raw(output: Path) -> Path | None:
         if not path.is_file() or path.is_symlink():
             continue
         run = RUN_PATTERN.fullmatch(path.parent.name)
-        stamp = run["stamp"] if run else path.stem.removeprefix("raw-data-")
+        file_stamp = path.stem.removeprefix("raw-data-")
+        file_run = RUN_PATTERN.fullmatch(file_stamp)
+        stamp = run["stamp"] if run else file_run["stamp"] if file_run else file_stamp
         try:
-            when = datetime.strptime(stamp, "%Y%m%dT%H%M%S%fZ" if run else "%Y%m%dT%H%M%SZ")
+            when = datetime.strptime(stamp, "%Y%m%dT%H%M%S%fZ" if run or file_run else "%Y%m%dT%H%M%SZ")
         except ValueError:
             continue
-        sequence = int(run["sequence"] or 0) if run else 0
+        sequence = int((run or file_run)["sequence"] or 0) if run or file_run else 0
         found.append(((when, sequence, path.name), path))
     return max(found, key=lambda entry: entry[0])[1] if found else None
 
@@ -92,23 +95,56 @@ def load_result(output: Path) -> dict[str, Any]:
     result = json.loads(path.read_text(encoding="utf-8"))
     if result.get("schema_version") != 1:
         raise ValueError("지원되지 않는 결과 스키마입니다.")
-    if any(row.get("se_code") == "OE-SY-16" for row in result.get("findings", [])):
-        result["findings"] = [
-            {**row, "se_code": "OE-SY-15"} if row.get("se_code") == "OE-SY-16" else row
-            for row in result["findings"] if row.get("se_code") != "OE-SY-15"
-        ]
+    revision = result["collection"].get("facts", {}).get("assessment_revision")
+    if revision not in (None, 1, 2, 3, 4, ASSESSMENT_REVISION):
+        raise ValueError(f"지원되지 않는 심사 기준 버전입니다: {revision}")
+    if revision not in (4, ASSESSMENT_REVISION):
         collection = result["collection"]
+        legacy_audit = revision != 3 and any(
+            row.get("se_code") == "OE-SY-16" for row in result.get("findings", [])
+        )
+        numbering = {
+            "BI-SY-12": "BI-SY-11", "BI-SY-13": "BI-SY-12", "BI-SY-14": "BI-SY-13",
+        }
+        if revision != 3:
+            numbering.update({
+                "OE-SY-17": "OE-SY-16", "OE-SY-18": "OE-SY-17",
+                "OE-SY-19": "OE-SY-18", "OE-SY-20": "OE-SY-19",
+            })
+        if legacy_audit:
+            numbering["OE-SY-16"] = "OE-SY-15"
+        result["findings"] = [
+            {**row, "se_code": numbering.get(row["se_code"], row["se_code"])}
+            for row in result.get("findings", [])
+            if row["se_code"] != "BI-SY-11" and not (legacy_audit and row["se_code"] == "OE-SY-15")
+        ]
         for field in ("agent_ca_policies", "risky_agents"):
             collection.pop(field, None)
         collection["issues"] = [
             row for row in collection.get("issues", [])
-            if row.get("collector") not in ("conditional_access", "risky_agents")
+            if row.get("collector") not in ("conditional_access", "risky_agents", "foundry_red_teams")
         ]
         for agent in collection.get("agents", []):
             agent["se_codes"] = [
-                "OE-SY-15" if code == "OE-SY-16" else code
-                for code in agent.get("se_codes", []) if code != "OE-SY-15"
+                numbering.get(code, code) for code in agent.get("se_codes", [])
+                if code != "BI-SY-11" and not (legacy_audit and code == "OE-SY-15")
             ]
+        for field in ("proposals", "proposal_observations"):
+            collection[field] = [row for row in collection.get(field, []) if row["code"] != "BI-SY-11"]
+            for row in collection[field]:
+                row["code"] = numbering.get(row["code"], row["code"])
+        for row in collection.get("issues", []):
+            name = row["collector"].removeprefix("proposal_")
+            if name in numbering and row["collector"].startswith("proposal_"):
+                row["collector"] = "proposal_" + numbering[name]
+        facts = collection.setdefault("facts", {})
+        if "proposal_incomplete" in facts:
+            facts["proposal_incomplete"] = [
+                numbering.get(code, code) for code in facts["proposal_incomplete"] if code != "BI-SY-11"
+            ]
+        facts["assessment_revision"] = 4
+    if revision != ASSESSMENT_REVISION:
+        migrate_revision_4_codes(result)
     return result
 
 
@@ -247,6 +283,7 @@ def normalize_result(
 
     collection = normalized(redact(collection))
     collection["facts"]["data_mode"] = mode
+    collection["facts"]["assessment_revision"] = ASSESSMENT_REVISION
     if "evidence_directory" in collection["facts"]:
         collection["facts"]["evidence_directory"] = "embedded:evidence"
     return {
@@ -270,9 +307,15 @@ def write_reports(
     result = normalize_result(data, findings, output, mode)
     if new_run:
         output = create_run_directory(output)
+        run_stamp = output.name
+    else:
+        existing = latest_raw(output)
+        run_stamp = existing.stem.removeprefix("raw-data-") if existing else (
+            output.name if RUN_PATTERN.fullmatch(output.name) else None
+        )
     normalized = Collection.model_validate(result["collection"])
     rows = [Finding.model_validate(row) for row in result["findings"]]
-    workbook = output / report_name(normalized)
+    workbook = output / report_name(normalized, run_stamp)
     staging = output / f".report.{uuid.uuid4().hex}.pending.xlsx"
     try:
         write_workbook(normalized, rows, staging, mode, result["provenance"]["references"])
@@ -290,10 +333,10 @@ def write_reports(
             })).hexdigest(),
         }
         os.replace(staging, workbook)
-        atomic_write(output / raw_name(normalized), json_bytes(result))
+        atomic_write(output / raw_name(normalized, run_stamp), json_bytes(result))
     finally:
         staging.unlink(missing_ok=True)
         if new_run and not any(output.iterdir()):
             output.rmdir()
-    print(f"결과 파일: {workbook} / {output / raw_name(normalized)}")
+    print(f"결과 파일: {workbook} / {output / raw_name(normalized, run_stamp)}")
     return workbook

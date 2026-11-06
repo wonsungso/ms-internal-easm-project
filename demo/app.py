@@ -14,12 +14,17 @@ from pathlib import Path
 from azure.ai.projects import AIProjectClient
 from azure.core.exceptions import AzureError
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
-from flask import Flask, Response, jsonify, request
+from flask import Flask, Response, has_request_context, jsonify, request
 from langchain.agents import create_agent
 from langchain_core.tools import tool
 from langchain_openai import AzureChatOpenAI
 from openai import OpenAIError, RateLimitError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+if __package__:
+    from demo.governance import GovernanceEngine, GovernancePolicy, run_self_test
+else:
+    from governance import GovernanceEngine, GovernancePolicy, run_self_test
 
 HERE = Path(__file__).parent
 CATALOG = json.loads((HERE / "catalog.json").read_text(encoding="utf-8"))
@@ -31,6 +36,8 @@ state: dict[str, object] = {
 }
 state_lock = threading.Lock()
 inference_lock = threading.Lock()
+governance = GovernanceEngine(GovernancePolicy.from_environment(os.environ))
+governance_report = run_self_test(governance.policy)
 
 
 class Message(BaseModel):
@@ -49,6 +56,18 @@ class ChatInput(BaseModel):
 def governance_scope() -> str:
     """Return the synthetic sample's permitted governance scope."""
     return "합성 데이터 기반 설명만 허용합니다. Azure 리소스 변경, 비밀 조회, 고객 데이터 조회는 하지 않습니다."
+
+
+@tool
+def synthetic_record(action_id: str) -> str:
+    """Execute a predefined synthetic record once, only after the signed-in human approves it."""
+    actor = principal() if has_request_context() else None
+    if not actor:
+        return "denied: authenticated human approval required"
+    try:
+        return "demo evidence: " + governance.execute(actor, action_id)
+    except PermissionError:
+        return "denied: pending, denied, expired, foreign or already executed action"
 
 
 def principal() -> str | None:
@@ -94,10 +113,13 @@ def reserve_call(oid: str) -> bool:
 
 
 def invoke_agent(entry: dict, messages: list[dict[str, str]]) -> tuple[str, int | None, int | None]:
+    endpoint = governance.policy.require_endpoint(os.environ[
+        "AZURE_AI_PROJECT_ENDPOINT" if entry["platform"] == "foundry" else "AZURE_OPENAI_ENDPOINT"
+    ])
     with DefaultAzureCredential() as credential:
         if entry["platform"] == "foundry":
             with AIProjectClient(
-                endpoint=os.environ["AZURE_AI_PROJECT_ENDPOINT"], credential=credential, allow_preview=True,
+                endpoint=endpoint, credential=credential, allow_preview=True,
             ) as project, project.get_openai_client(agent_name=entry["id"]).with_options(
                 timeout=60, max_retries=1,
             ) as client:
@@ -107,7 +129,7 @@ def invoke_agent(entry: dict, messages: list[dict[str, str]]) -> tuple[str, int 
                 usage = response.usage
                 return response.output_text, usage.input_tokens if usage else None, usage.output_tokens if usage else None
         model = AzureChatOpenAI(
-            azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
+            azure_endpoint=endpoint,
             azure_deployment=os.environ["AZURE_OPENAI_DEPLOYMENT"],
             api_version="2024-10-21",
             azure_ad_token_provider=get_bearer_token_provider(
@@ -115,7 +137,7 @@ def invoke_agent(entry: dict, messages: list[dict[str, str]]) -> tuple[str, int 
             ), max_tokens=256, max_retries=1, timeout=60,
         )
         agent = create_agent(
-            model=model, tools=[governance_scope] if entry["tools"] else [],
+            model=model, tools=[governance_scope, synthetic_record] if entry["tools"] else [],
             system_prompt=entry["instructions"],
         )
         response = agent.invoke({"messages": messages}, config={"recursion_limit": 6})
@@ -201,7 +223,7 @@ def chat() -> object:
     except RateLimitError:
         app.logger.warning("Chat inference model rate limit reached")
         return jsonify({"message": "Azure 모델의 현재 요청 한도에 도달했습니다. 1분 뒤 다시 질문하세요."}), 429
-    except (AzureError, OpenAIError, RuntimeError) as exc:
+    except (AzureError, OpenAIError, RuntimeError, PermissionError) as exc:
         app.logger.error("Chat inference failed: %s", type(exc).__name__)
         return jsonify({"message": "모델 호출에 실패했습니다. 관리자에게 모델 접근 권한과 서비스 상태 확인을 요청하세요."}), 502
     except (sqlite3.Error, OSError):
@@ -209,6 +231,49 @@ def chat() -> object:
         return jsonify({"message": "사용량 제한 저장소를 확인할 수 없어 호출을 중지했습니다."}), 503
     finally:
         inference_lock.release()
+
+
+def governance_actor() -> str | None:
+    actor = principal()
+    hostname = os.environ.get("WEBSITE_HOSTNAME")
+    origin = "https://" + hostname if hostname else request.host_url.rstrip("/")
+    if (
+        not actor or request.headers.get("Origin") != origin
+        or request.headers.get("X-WASMAgent-Chat") != "1"
+        or os.environ.get("WASMAGENT_LOCAL_AGENT", "langchain-tools") != "langchain-tools"
+    ):
+        return None
+    return actor
+
+
+@app.post("/api/governance/actions")
+def propose_synthetic_action() -> object:
+    actor = governance_actor()
+    if not actor:
+        return jsonify({"message": "허용된 동일 사이트 사용자만 합성 작업을 요청할 수 있습니다."}), 403
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict) or set(body) != {"value"} or not isinstance(body["value"], str):
+        return jsonify({"message": "미리 정의된 합성 값만 허용합니다."}), 400
+    try:
+        action_id = governance.propose(actor, body["value"])
+    except ValueError:
+        return jsonify({"message": "합성 값 또는 대기 작업 한도를 확인하세요."}), 400
+    return jsonify({"demo_evidence": True, "action_id": action_id, "status": "pending", "expires_in": 300}), 201
+
+
+@app.post("/api/governance/actions/<action_id>/decision")
+def decide_synthetic_action(action_id: str) -> object:
+    actor = governance_actor()
+    if not actor:
+        return jsonify({"message": "허용된 동일 사이트 사용자만 승인/거부할 수 있습니다."}), 403
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict) or set(body) != {"approved"} or type(body["approved"]) is not bool:
+        return jsonify({"message": "사용자가 approved true 또는 false를 명시해야 합니다."}), 400
+    try:
+        governance.decide(actor, action_id, body["approved"])
+    except PermissionError:
+        return jsonify({"message": "사용할 수 없거나 결정이 끝난 합성 작업입니다."}), 403
+    return jsonify({"demo_evidence": True, "status": "approved" if body["approved"] else "denied"})
 
 
 @app.after_request
@@ -253,7 +318,9 @@ def smoke() -> None:
 def health() -> tuple[object, int]:
     with state_lock:
         snapshot = dict(state)
-    return jsonify(snapshot), 503 if snapshot["smoke_status"] == "failed" else 200
+    snapshot["governance"] = governance_report.model_dump(mode="json")
+    failed = snapshot["smoke_status"] == "failed" or not governance_report.passed
+    return jsonify(snapshot), 503 if failed else 200
 
 
 if os.environ.get("WASMAGENT_SMOKE_ON_START") == "true":

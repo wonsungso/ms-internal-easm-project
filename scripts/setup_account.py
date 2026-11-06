@@ -262,6 +262,27 @@ def ensure_graph_roles(cli: AzureCLI, principal: str, roles: tuple[str, ...] = E
     missing = [role for role in roles if role not in available]
     if missing:
         raise ValueError("Microsoft Graph 애플리케이션 권한을 찾지 못했습니다: " + ", ".join(missing))
+    identity = cli.run("ad", "sp", "show", "--id", principal)
+    application_id = str(uuid.UUID(identity["appId"]))
+
+    def configured_roles() -> set[str]:
+        requested = cli.run("ad", "app", "permission", "list", "--id", application_id)
+        if not isinstance(requested, list):
+            raise ValueError("진단 앱의 API 권한 목록 형식이 올바르지 않습니다.")
+        return {
+            entry["id"] for api in requested if api.get("resourceAppId") == GRAPH_APP_ID
+            for entry in api.get("resourceAccess", []) if entry.get("type") == "Role"
+        }
+
+    configured = configured_roles()
+    needed = [available[role] for role in roles if available[role] not in configured]
+    if needed:
+        cli.run(
+            "ad", "app", "permission", "add", "--id", application_id,
+            "--api", GRAPH_APP_ID, "--api-permissions", *[role + "=Role" for role in needed],
+        )
+        if not {available[role] for role in roles} <= configured_roles():
+            raise RuntimeError("Graph 읽기 권한의 앱 등록 반영을 재조회했으나 확인되지 않았습니다.")
     url = f"https://graph.microsoft.com/v1.0/servicePrincipals/{principal}/appRoleAssignments"
     for role in roles:
         existing = (cli.run("rest", "--method", "GET", "--url", url) or {}).get("value", [])

@@ -191,7 +191,7 @@ class FoundryCollector:
                             created_at=timestamp(version.get("created_at")),
                             detection_confidence="tag",
                             evidence_refs=[self.http.last_ref] if self.http.last_ref else [],
-                            se_codes=["DS-SY-06", "BI-SY-08", "BI-SY-09", "OE-SY-15", "OT-SY-18", "OT-SY-19"],
+                            se_codes=["DS-SY-06", "BI-SY-11", "BI-SY-12", "OE-SY-22", "OT-SY-28", "OT-SY-29"],
                         ).mark_unknowns()
                         record.unavailable(
                             "deployed_at", "not_found",
@@ -224,26 +224,6 @@ class FoundryCollector:
                 complete_projects.append(project["id"])
             except AccessError as exc:
                 result.issues.append(issue(self.http, "foundry_evaluations", project["id"], exc, self.required_roles))
-            try:
-                payload = self.http.request(
-                    "GET", endpoint.rstrip("/") + "/redTeams/runs?api-version=v1", AI_SCOPE,
-                    extra_headers={"Foundry-Features": "RedTeams=V1Preview"},
-                )
-                runs = payload.get("value", payload.get("data"))
-                if not isinstance(runs, list):
-                    raise AccessError("error", "red team 목록 형식 불일치")
-                result.proposal_observations.append(ProposalObservation(
-                    code="BI-SY-11", subscription_id=project["subscriptionId"], subject=project["id"],
-                    kind="red_team_runs",
-                    values={
-                        "runs_total": len(runs),
-                        "completed": sum(1 for run in runs if isinstance(run, dict) and run.get("status") == "Completed"),
-                        "paged": bool(payload.get("nextLink") or payload.get("has_more")),
-                    },
-                    evidence_refs=[self.http.last_ref] if self.http.last_ref else [],
-                ))
-            except AccessError as exc:
-                result.issues.append(issue(self.http, "foundry_red_teams", project["id"], exc, self.required_roles))
         result.facts["evaluation_complete_projects"] = complete_projects
         result.facts["foundry_project_ids"] = [project["id"] for project in projects.values()]
         return result

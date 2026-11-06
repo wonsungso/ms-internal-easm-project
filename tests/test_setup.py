@@ -337,15 +337,31 @@ def test_entra_reader_assigns_only_missing_graph_application_roles_and_is_idempo
     values = list(setup.ENTRA_GRAPH_ROLES)
     ids = {value: f"00000000-0000-4000-8000-{index:012d}" for index, value in enumerate(values, 1)}
     assigned: list[dict] = [{"resourceId": graph_id, "appRoleId": ids[values[0]]}]
+    client_id = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+    requested = [
+        {"resourceAppId": "other-api", "resourceAccess": [{"id": "preserve", "type": "Scope"}]},
+        {"resourceAppId": setup.GRAPH_APP_ID, "resourceAccess": [{"id": ids[values[0]], "type": "Role"}]},
+    ]
     calls: list[tuple[str, ...]] = []
 
     class FakeCLI:
         def run(self, *args: str):
             calls.append(args)
             if args[:3] == ("ad", "sp", "show"):
+                if args[-1] != setup.GRAPH_APP_ID:
+                    return {"appId": client_id}
                 return {"id": graph_id, "appRoles": [
                     {"id": ids[value], "value": value, "allowedMemberTypes": ["Application"]} for value in values
                 ] + [{"id": "x", "value": "Delegated.Only", "allowedMemberTypes": ["User"]}]}
+            if args[:4] == ("ad", "app", "permission", "list"):
+                return requested
+            if args[:4] == ("ad", "app", "permission", "add"):
+                assert args[args.index("--api") + 1] == setup.GRAPH_APP_ID
+                requested[1]["resourceAccess"].extend(
+                    {"id": value.removesuffix("=Role"), "type": "Role"}
+                    for value in args[args.index("--api-permissions") + 1:]
+                )
+                return {}
             if args[:3] == ("rest", "--method", "GET"):
                 return {"value": list(assigned)}
             if args[:3] == ("rest", "--method", "POST"):
@@ -362,6 +378,8 @@ def test_entra_reader_assigns_only_missing_graph_application_roles_and_is_idempo
     calls.clear()
     setup.ensure_graph_roles(FakeCLI(), principal)
     assert not [call for call in calls if call[:3] == ("rest", "--method", "POST")]
+    assert not [call for call in calls if call[:4] == ("ad", "app", "permission", "add")]
+    assert requested[0]["resourceAccess"] == [{"id": "preserve", "type": "Scope"}]
 
 
 def test_default_graph_roles_match_collector_and_do_not_include_retired_diagnostics() -> None:

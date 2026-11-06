@@ -109,8 +109,6 @@ def test_three_subscription_pipeline_and_cross_subscription_model_link(tmp_path:
             rows = next(entry["resources"] for entry in subs if entry["subscription_id"] == sid)
             queries = ("securityresources", "policyresources", "microsoft.insights", "identityType")
             payload = {"data": [] if any(key in body["query"].lower() for key in queries) else rows}
-        elif path.endswith("/redTeams/runs"):
-            payload = {"value": []}
         elif path.endswith("/config/web"):
             payload = {"properties": {"ipSecurityRestrictions": [], "linuxFxVersion": "PYTHON|3.11"}}
         elif path.endswith("/raiPolicies"):
@@ -338,7 +336,10 @@ def test_entra_graph_requests_use_only_the_graph_host_and_reject_foreign_paginat
 def test_log_workspace_outside_selected_subscriptions_is_not_queried() -> None:
     sid = "11111111-1111-4111-8111-111111111111"
     foreign = "/subscriptions/99999999-9999-4999-8999-999999999999/resourceGroups/central/providers/Microsoft.OperationalInsights/workspaces/shared"
-    base = Collection(collected_at=NOW, subscriptions=[sid])
+    base = Collection(collected_at=NOW, subscriptions=[sid], resources=[{
+        "id": f"/subscriptions/{sid}/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/agent",
+        "subscriptionId": sid, "type": "Microsoft.CognitiveServices/accounts", "kind": "AIServices",
+    }])
     http = Mock(subscription=sid, last_ref="fixture://diagnostic-setting")
     http.list_arm.return_value = [{"properties": {
         "workspaceId": foreign, "logs": [{"enabled": True}],
@@ -350,6 +351,23 @@ def test_log_workspace_outside_selected_subscriptions_is_not_queried() -> None:
     assert result.logs[0].retention_days is None
     assert result.issues[0].reason == "permission_denied"
     assert "선택 구독 범위 밖" in result.issues[0].detail
+
+
+def test_subscription_activity_log_is_excluded_without_hiding_agent_log_results() -> None:
+    sid = "11111111-1111-4111-8111-111111111111"
+    rid = f"/subscriptions/{sid}/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/agent"
+    base = Collection(collected_at=NOW, subscriptions=[sid], resources=[{
+        "id": rid, "subscriptionId": sid, "type": "Microsoft.CognitiveServices/accounts", "kind": "AIServices",
+    }])
+    http = Mock(subscription=sid, last_ref="fixture://diagnostic-setting")
+    http.list_arm.return_value = []
+    result = Collection(collected_at=NOW)
+    SignalCollector(http, base, NOW, load_criteria(), {}, [sid]).logs(sid, result)
+    assert http.list_arm.call_count == 1
+    assert rid + "/providers/Microsoft.Insights/diagnosticSettings" in http.list_arm.call_args.args[0]
+    assert len(result.logs) == 1 and result.logs[0].enabled is False
+    assert result.logs[0].resource_id == rid and not result.issues
+    assert result.facts["log_scope_exclusions"][0]["source_type"] == "subscription_activity_log"
 
 
 def test_metrics_use_canonical_utc_not_plus_timezone() -> None:

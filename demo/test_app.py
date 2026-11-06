@@ -223,9 +223,13 @@ def test_multiturn_usage_counts_only_new_model_rounds(monkeypatch: pytest.Monkey
     from langchain_core.messages import AIMessage, HumanMessage
 
     from demo.app import invoke_agent
+    from demo.governance import GovernancePolicy
 
     monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://fixture.openai.azure.com")
     monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT", "fixture")
+    monkeypatch.setattr("demo.app.governance.policy", GovernancePolicy.from_environment({
+        "AZURE_OPENAI_ENDPOINT": "https://fixture.openai.azure.com",
+    }))
     history = [
         {"role": "user", "content": "first"}, {"role": "assistant", "content": "old response"},
         {"role": "user", "content": "follow-up"},

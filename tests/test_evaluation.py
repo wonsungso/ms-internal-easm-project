@@ -10,8 +10,10 @@ from wasm_agent.models import (
     DEFAULT_TAGS,
     Budget,
     Collection,
+    Issue,
     ModelDeployment,
     PolicyAssignment,
+    ProposalObservation,
     SecureScore,
     SecurityRecommendation,
     load_criteria,
@@ -80,20 +82,21 @@ def test_policy_facts_cannot_override_measured_values(data: Collection) -> None:
 
 
 def test_before_deploy_requires_same_agent_version_and_completion(data: Collection) -> None:
-    row = findings(data)["BI-SY-08"]
+    row = findings(data)["BI-SY-11"]
     assert row.metric_value == 1
     assert row.level == "L3"
     data.evaluations[0].agent_version = "different"
     data.agents[0].evaluated_before_deploy = None
-    assert findings(data)["BI-SY-08"].level == "N/A"
+    row = findings(data)["BI-SY-11"]
+    assert row.level == "L2" and row.assessment_basis == "configuration" and row.metric_value is None
 
 
 def test_creation_timestamp_is_not_deployment_timestamp(data: Collection) -> None:
     data.agents[0].deployed_at = None
     data.agents[0].evaluated_before_deploy = None
-    row = findings(data)["BI-SY-08"]
+    row = findings(data)["BI-SY-11"]
     assert row.metric_value is None
-    assert row.level == "N/A"
+    assert row.level == "L2" and row.assessment_basis == "configuration"
 
 
 def test_late_evaluation_with_incomplete_history_is_unknown(data: Collection) -> None:
@@ -114,7 +117,7 @@ def test_inactivity_boundaries(data: Collection, inactive_count: int, level: str
             "usage_coverage_start": data.collected_at - timedelta(days=100),
         }, deep=True) for index in range(100)
     ]
-    row = findings(data)["OT-SY-18"]
+    row = findings(data)["OT-SY-28"]
     assert row.metric_value == inactive_count / 100
     assert row.level == level
 
@@ -122,12 +125,12 @@ def test_inactivity_boundaries(data: Collection, inactive_count: int, level: str
 def test_missing_usage_is_not_inactive_or_zero(data: Collection) -> None:
     data.agents[0].last_used_at = None
     data.agents[0].usage_coverage_start = None
-    row = findings(data)["OT-SY-18"]
+    row = findings(data)["OT-SY-28"]
     assert row.metric_value is None and row.level == "N/A"
 
 
 def test_cost_shared_model_not_allocated_twice_and_host_plan_is_included(data: Collection) -> None:
-    row = findings(data)["OT-SY-19"]
+    row = findings(data)["OT-SY-29"]
     assert row.metric_value == 0.8
     assert row.level == "L3"
     assert data.agents[0].cost_30d is None
@@ -137,21 +140,21 @@ def test_cost_shared_model_not_allocated_twice_and_host_plan_is_included(data: C
 
 def test_cost_currency_mixing_and_absence_are_na(data: Collection) -> None:
     data.costs[1].currency = "KRW"
-    assert findings(data)["OT-SY-19"].level == "N/A"
+    assert findings(data)["OT-SY-29"].level == "N/A"
     data.costs = []
-    row = findings(data)["OT-SY-19"]
+    row = findings(data)["OT-SY-29"]
     assert row.metric_value is None and row.level == "N/A"
 
 
 def test_retention_uses_customer_threshold_not_hardcoded_one_year(data: Collection) -> None:
-    assert findings(data)["OE-SY-15"].level == "N/A"
+    assert findings(data)["OE-SY-22"].level == "L2"
     criteria = load_criteria()
     criteria["required_retention_days"] = 60
-    assert next(row for row in evaluate(data, criteria, ALLOWED, TAGS) if row.se_code == "OE-SY-15").level == "N/A"
+    assert next(row for row in evaluate(data, criteria, ALLOWED, TAGS) if row.se_code == "OE-SY-22").level == "L2"
     result = evaluate(data, criteria, ALLOWED, TAGS, {
         "retention_scope_verified": {"value": True, "evidence_refs": ["fixture://effective-table-retention"]},
     })
-    assert next(row for row in result if row.se_code == "OE-SY-15").level == "L3"
+    assert next(row for row in result if row.se_code == "OE-SY-22").level == "L3"
 
 
 def test_interview_gap_exact_boundary(data: Collection) -> None:
@@ -221,12 +224,13 @@ def levels(data: Collection, facts: dict | None = None) -> dict:
 def test_entra_items_are_always_reported_and_stay_conservative(data: Collection) -> None:
     assert set(levels(data)) == set(load_criteria()["items"])
     rows = levels(entra_data(data))
-    entra = {"DS-SY-05", "DP-SY-12", "OE-SY-13", "OE-SY-14"}
+    entra = {"DS-SY-05", "DP-SY-19", "OE-SY-20", "OE-SY-21"}
     assert entra <= set(rows)
-    assert rows["DS-SY-05"].level == "N/A" and rows["DS-SY-05"].metric_value == 3
-    assert rows["OE-SY-13"].level == "L3" and rows["OE-SY-13"].metric_value == 0
-    assert "Agent Registry" in rows["DP-SY-12"].rationale
-    assert rows["OE-SY-14"].level == "L3" and "샘플 과다 권한" in rows["OE-SY-14"].rationale
+    assert rows["DS-SY-05"].level == "L2" and rows["DS-SY-05"].metric_value == 3
+    assert rows["DS-SY-05"].assessment_basis == "configuration"
+    assert rows["OE-SY-20"].level == "L3" and rows["OE-SY-20"].metric_value == 0
+    assert "Agent Registry" in rows["DP-SY-19"].rationale
+    assert rows["OE-SY-21"].level == "L3" and "샘플 과다 권한" in rows["OE-SY-21"].rationale
 
 
 def test_entra_levels_follow_reviewed_thresholds_and_customer_evidence(data: Collection) -> None:
@@ -234,29 +238,34 @@ def test_entra_levels_follow_reviewed_thresholds_and_customer_evidence(data: Col
     data.entra_agent_identities[0].sponsor_count = 0
     data.entra_agent_identities[1].sponsor_count = 0
     rows = levels(data)
-    assert (rows["OE-SY-13"].level, rows["OE-SY-13"].metric_value) == ("L2", 0.5)
+    assert (rows["OE-SY-20"].level, rows["OE-SY-20"].metric_value) == ("L2", 0.5)
     data.entra_agent_identities[1].sponsor_count = 1
-    assert levels(data)["OE-SY-13"].level == "L2"
+    assert levels(data)["OE-SY-20"].level == "L2"
     data.entra_agent_identities[0].sponsor_count = 1
-    assert levels(data)["OE-SY-13"].metric_value == 0
+    assert levels(data)["OE-SY-20"].metric_value == 0
     evidence = {"value": True, "evidence_refs": ["fixture://customer"]}
     assert levels(data, {"major_type_blueprints_defined": evidence})["DS-SY-05"].level == "L4"
     data.entra_blueprints = data.entra_blueprints[:2]
-    assert levels(data)["DS-SY-05"].level == "N/A"
+    assert levels(data)["DS-SY-05"].level == "L2"
     data.entra_blueprints, data.entra_agent_identities = [], []
-    assert levels(data)["DS-SY-05"].level == "L1" and levels(data)["OE-SY-13"].level == "N/A"
+    assert levels(data)["DS-SY-05"].level == "L1" and levels(data)["OE-SY-20"].level == "N/A"
 
 
 def test_entra_item_is_not_blocked_by_an_incomplete_azure_inventory(data: Collection) -> None:
     data = entra_data(data)
     data.facts["inventory_complete"] = False
     rows = levels(data)
-    assert rows["OE-SY-13"].metric_value == 0 and rows["OE-SY-13"].level == "L3"
-    assert rows["DP-SY-12"].level == "N/A" and rows["DP-SY-12"].metric_value is None
+    assert rows["OE-SY-20"].metric_value == 0 and rows["OE-SY-20"].level == "L3"
+    assert rows["DP-SY-19"].level == "N/A" and rows["DP-SY-19"].metric_value is None
 
 
 def test_boolean_policy_does_not_accept_integer_one() -> None:
     assert matches({"policy": 1}, {"policy": {"eq": True}}) is False
+
+
+def test_operate_assessment_codes_are_contiguous() -> None:
+    codes = {code for code in load_criteria()["items"] if code.startswith("OE-SY-")}
+    assert codes == {f"OE-SY-{number}" for number in range(20, 27)}
 
 
 def test_security_score_and_recommendation_age_are_derived_from_collected_evidence(data: Collection) -> None:
@@ -290,10 +299,10 @@ def test_internal_security_score_threshold_is_customer_supplied_and_enables_l3(d
 
     def level(minimum: float | None) -> str:
         rows = evaluate(data, criteria_with(internal_security_score_min=minimum), ALLOWED, TAGS)
-        return next(row.level for row in rows if row.se_code == "BI-SY-09")
+        return next(row.level for row in rows if row.se_code == "BI-SY-12")
 
-    assert level(None) == "N/A"
-    assert level(85) == "N/A"
+    assert level(None) == "L2"
+    assert level(85) == "L2"
     assert level(80) == "L3"
 
 
@@ -397,21 +406,119 @@ def test_public_access_flag_filter_name_and_runtime_option_are_not_effectiveness
         row.rai_policy = None
         row.version_upgrade_option = "NoAutoUpgrade"
     rows = findings(data)
-    assert all(rows[code].level == "N/A" for code in ("DS-SY-07", "BI-SY-10", "BI-SY-12"))
-    assert all(rows[code].metric_value is None for code in ("DS-SY-07", "BI-SY-10", "BI-SY-12"))
+    assert rows["DS-SY-07"].level == rows["BI-SY-14"].level == "L2"
+    assert rows["BI-SY-13"].level == "N/A"
+    assert all(rows[code].assessment_basis == "configuration" for code in ("DS-SY-07", "BI-SY-14"))
+    assert all(rows[code].metric_value is None for code in ("DS-SY-07", "BI-SY-13", "BI-SY-14"))
+
+
+@pytest.fixture
+def configured_data(data: Collection) -> Collection:
+    data = entra_data(data)
+    for agent in data.agents:
+        agent.deployed_at = agent.evaluated_before_deploy = None
+        agent.last_used_at = agent.usage_coverage_start = None
+    data.security = [SecurityRecommendation(
+        subscription_id=data.subscriptions[0], resource_id="account", assessment_id="assessment",
+        severity="Low", status="Healthy",
+    )]
+    data.resources = [{"id": "account", "type": "microsoft.cognitiveservices/accounts", "location": "westus2"}]
+    data.facts["resource_metrics"] = [{"metrics": [{"timeseries": [{"data": [{"total": 0}]}]}]}]
+    entries = [
+        ("DS-SY-07", "agent_host", {
+            "public_network_access": "Enabled", "https_only": True, "vnet_integrated": False, "ip_restrictions": 0,
+        }),
+        ("DS-SY-08", "agent_tools", {"tool_types": ["mcp"], "mcp_approval": ["always"]}),
+        ("DS-SY-09", "tool_endpoints", {"hosts": ["example.invalid"]}),
+        ("BI-SY-13", "ai_account", {"custom_policies": 1, "custom_policy_names": ["safe"]}),
+        ("BI-SY-14", "agent_host", {"runtime": "PYTHON|3.11"}),
+        ("BI-SY-16", "policy_state", {"state": "Compliant", "resources": 1}),
+        ("OE-SY-23", "ai_account", {
+            "identity_type": "SystemAssigned", "assignments": 0, "privileged_assignments": 0,
+            "subscription_scope_assignments": 0, "local_auth_disabled": True,
+        }),
+        ("OE-SY-24", "monitor_resource", {
+            "kind": "metricalerts", "enabled": True, "targets_ai": True, "has_action_group": True,
+        }),
+    ]
+    data.proposal_observations = [
+        ProposalObservation(code=code, kind=kind, subject="account", values=values)
+        for code, kind, values in entries
+    ]
+    for deployment in data.deployments:
+        deployment.rai_policy = "safe"
+    return data
+
+
+def test_observed_configurations_grade_every_basic_entry_without_inventing_primary_metrics(
+    configured_data: Collection,
+) -> None:
+    rows = findings(configured_data)
+    for code in load_criteria()["configuration_grading"]["items"]:
+        row = rows[code]
+        assert row.level == "L2" and row.assessment_basis == "configuration", code
+        assert row.configuration_value > 0 and row.reason is None
+        assert "구성 기반 기본등급" in row.rationale
+    assert rows["BI-SY-11"].metric_value is rows["OT-SY-28"].metric_value is None
+    assert all(row.level not in ("L4", "L5") for row in rows.values())
+
+
+@pytest.mark.parametrize("code", load_criteria()["configuration_grading"]["items"])
+def test_collection_failure_blocks_configuration_grade(configured_data: Collection, code: str) -> None:
+    from wasm_agent.proposals import ISSUE_COLLECTORS
+
+    related = {
+        "BI-SY-11": "foundry_evaluations", "BI-SY-12": "security", "OE-SY-22": "logs",
+        "OT-SY-28": "agent_usage", "DS-SY-05": "entra_blueprints",
+    }
+    configured_data.issues.append(Issue(
+        collector=related[code] if code in related else ISSUE_COLLECTORS[code][0],
+        target="fixture", reason="permission_denied", detail="Confirmed access denied",
+    ))
+    row = findings(configured_data)[code]
+    assert row.level == "N/A" and row.reason == "permission_denied"
+    assert row.configuration_value is None and row.assessment_basis == "criteria"
+
+
+def test_unknown_evaluation_status_is_not_a_completed_configuration(configured_data: Collection) -> None:
+    for run in configured_data.evaluations:
+        run.status = None
+    row = findings(configured_data)["BI-SY-11"]
+    assert row.level == "N/A" and row.metric_value is None and row.configuration_value is None
+
+
+@pytest.mark.parametrize("metrics", [None, [], [{"timeseries": None}], [
+    {"timeseries": [{"data": [{"timeStamp": "2026-11-05T00:00:00Z"}]}]},
+]])
+def test_usage_without_numeric_samples_is_not_a_basic_grade(
+    configured_data: Collection, metrics: list | None,
+) -> None:
+    configured_data.facts["resource_metrics"] = [{"metrics": metrics}]
+    row = findings(configured_data)["OT-SY-28"]
+    assert row.level == "N/A" and row.metric_value is None
+
+
+def test_unknown_identity_and_unrelated_alerts_do_not_produce_basic_grades(configured_data: Collection) -> None:
+    for row in configured_data.proposal_observations:
+        if row.code == "OE-SY-23":
+            row.values["identity_type"] = None
+        if row.code == "OE-SY-24":
+            row.values["targets_ai"] = False
+    rows = findings(configured_data)
+    assert all(rows[code].level == "N/A" for code in ("OE-SY-23", "OE-SY-24", "OE-SY-25"))
 
 
 def test_tag_metric_requires_all_keys_on_the_same_agent_and_cannot_be_overridden(data: Collection) -> None:
     for agent in data.agents:
         agent.owner = agent.sponsor = None
         agent.tags = {"owner": "team", "env": "prod", "cost-center": "x"}
-    assert findings(data)["BI-SY-13"].metric_value == 0
+    assert findings(data)["BI-SY-15"].metric_value == 0
     with pytest.raises(ValueError, match="cannot override"):
         findings(data, {"asset_assessment": {
             "value": {"total": 3, "compliant": 3}, "evidence_refs": ["fixture://conflicting-review"],
         }})
     data.agents[0].sponsor = "team"
-    assert findings(data)["BI-SY-13"].metric_value == pytest.approx(1 / 3)
+    assert findings(data)["BI-SY-15"].metric_value == pytest.approx(1 / 3)
 
 
 @pytest.mark.parametrize("config", load_criteria()["items"].values(), ids=load_criteria()["items"].keys())

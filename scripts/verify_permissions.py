@@ -31,7 +31,7 @@ ARM = "https://management.azure.com"
 ARM_SCOPE = ARM + "/.default"
 AI_SCOPE = "https://ai.azure.com/.default"
 GRAPH_URL = ARM + "/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01"
-SE_CODES = ("DS-SY-06", "BI-SY-08", "BI-SY-09", "OE-SY-15", "OT-SY-18", "OT-SY-19")
+SE_CODES = ("DS-SY-06", "BI-SY-11", "BI-SY-12", "OE-SY-22", "OT-SY-28", "OT-SY-29")
 PROJECT_PATH = re.compile(r"^/api/projects/[^/?#]+$")
 RBAC_REFERENCE = """# 읽기 권한 및 접근 확인
 
@@ -101,18 +101,15 @@ def check_subscription(
                 raise AccessError("error", "구독 밖의 리소스 ID 응답")
             results.append(probe(http, sid, "DS-SY-06", rid, "GET",
                                  ARM + rid + "/deployments?api-version=2024-10-01"))
-            results.append(probe(http, sid, "OE-SY-15", rid, "GET",
+            results.append(probe(http, sid, "OE-SY-22", rid, "GET",
                                  ARM + rid + "/providers/Microsoft.Insights/diagnosticSettings"
                                  "?api-version=2021-05-01-preview"))
-            results.append(probe(http, sid, "OT-SY-18", rid, "GET",
+            results.append(probe(http, sid, "OT-SY-28", rid, "GET",
                                  ARM + rid + "/providers/Microsoft.Insights/metrics"
                                  "?api-version=2018-01-01"))
-        results.append(probe(http, sid, "OE-SY-15", scope, "GET",
-                             ARM + scope + "/providers/Microsoft.Insights/diagnosticSettings"
-                             "?api-version=2021-05-01-preview"))
         for resource in resources:
             if resource.get("type", "").lower() == "microsoft.operationalinsights/workspaces":
-                results.append(probe(http, sid, "OE-SY-15", resource["id"], "GET",
+                results.append(probe(http, sid, "OE-SY-22", resource["id"], "GET",
                                      ARM + resource["id"] + "?api-version=2022-10-01"))
         for project in projects:
             if project["subscription_id"] != sid:
@@ -124,17 +121,17 @@ def check_subscription(
             results.append(probe(http, sid, "FOUNDRY-AGENTS", endpoint, "GET",
                                  endpoint + ("/agents" if profile == "agents_v1" else "/assistants")
                                  + "?api-version=v1&limit=1", audience=AI_SCOPE))
-            results.append(probe(http, sid, "BI-SY-08", endpoint, "GET",
+            results.append(probe(http, sid, "BI-SY-11", endpoint, "GET",
                                  endpoint + ("/openai/v1/evals?limit=1" if profile == "agents_v1"
                                              else "/evaluations/runs?api-version=2025-05-15-preview"),
                                  audience=AI_SCOPE))
         results.append(probe(
-            http, sid, "BI-SY-09", scope, "POST", GRAPH_URL,
+            http, sid, "BI-SY-12", scope, "POST", GRAPH_URL,
             {"subscriptions": [sid], "query": "securityresources | where type =~ "
              "'microsoft.security/assessments' | project id | limit 1"},
         ))
         results.append(probe(
-            http, sid, "BI-SY-09", scope, "GET",
+            http, sid, "BI-SY-12", scope, "GET",
             ARM + scope + "/providers/Microsoft.Security/secureScores?api-version=2020-01-01",
         ))
         results.append(probe(
@@ -143,12 +140,12 @@ def check_subscription(
             "?api-version=2023-04-01&$filter=atScope()",
         ))
         results.append(probe(
-            http, sid, "OT-SY-19", scope, "GET",
+            http, sid, "OT-SY-29", scope, "GET",
             ARM + scope + "/providers/Microsoft.Consumption/budgets?api-version=2023-05-01",
         ))
         now = datetime.now(UTC)
         results.append(probe(
-            http, sid, "OT-SY-19", scope, "POST",
+            http, sid, "OT-SY-29", scope, "POST",
             ARM + scope + "/providers/Microsoft.CostManagement/query?api-version=2023-03-01",
             {"type": "Usage", "timeframe": "Custom",
              "timePeriod": {"from": (now - timedelta(days=30)).isoformat(), "to": now.isoformat()},
@@ -157,7 +154,7 @@ def check_subscription(
         ))
         for code in SE_CODES:
             if not any(result.se_code == code for result in results):
-                detail = "대상 AI 리소스 없음" if code != "BI-SY-08" else "프로젝트 endpoint 입력 없음; 자동 추측하지 않음"
+                detail = "대상 AI 리소스 없음" if code != "BI-SY-11" else "프로젝트 endpoint 입력 없음; 자동 추측하지 않음"
                 results.append(Result(sid, code, scope, "FEATURE_UNAVAILABLE", "not_found", detail))
         return results
     except AccessError as exc:
@@ -177,9 +174,9 @@ def check_entra(credential: Credential, tenant_id: str) -> list[Result]:
         return [
             probe(http, tenant_id, "DS-SY-05", "agentIdentityBlueprint", "GET",
                   v1 + "/applications/microsoft.graph.agentIdentityBlueprint?$top=1", audience=MSGRAPH_SCOPE),
-            probe(http, tenant_id, "OE-SY-13", "agentIdentity", "GET",
+            probe(http, tenant_id, "OE-SY-20", "agentIdentity", "GET",
                   v1 + "/servicePrincipals/microsoft.graph.agentIdentity?$top=1", audience=MSGRAPH_SCOPE),
-            probe(http, tenant_id, "OE-SY-14", "servicePrincipals", "GET",
+            probe(http, tenant_id, "OE-SY-21", "servicePrincipals", "GET",
                   v1 + "/servicePrincipals?$top=1&$select=id", audience=MSGRAPH_SCOPE),
         ]
     finally:

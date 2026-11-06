@@ -70,7 +70,7 @@ def test_merged_workbook_keeps_original_and_adds_proposals_in_domain_blocks(
 ) -> None:
     before = hashlib.sha256(source.read_bytes()).hexdigest()
     output = tmp_path / "merged.xlsx"
-    assert merge_assessment(source, output)["merged_proposals"] == 13
+    assert merge_assessment(source, output)["merged_proposals"] == 12
     assert hashlib.sha256(source.read_bytes()).hexdigest() == before
     with ZipFile(source) as old, ZipFile(output) as new:
         assert old.namelist() == new.namelist()
@@ -80,7 +80,7 @@ def test_merged_workbook_keeps_original_and_adds_proposals_in_domain_blocks(
     merged_book = load_workbook(output)
     assert merged_book.sheetnames == load_workbook(source).sheetnames
     merged = merged_book[SOURCE_SHEET]
-    assert merged.max_row == original.max_row + 12
+    assert merged.max_row == original.max_row + 11
     original_rows = [
         [cell.value for cell in row] for row in original.iter_rows(min_row=1)
         if row[1].value != "OE-SY-15"
@@ -120,7 +120,7 @@ def test_merged_workbook_keeps_original_and_adds_proposals_in_domain_blocks(
 
 
 def test_delivered_workbook_preserves_user_formatting_and_is_idempotent(tmp_path: Path) -> None:
-    delivered = ROOT / "docs" / "assessment-template.xlsx"
+    delivered = ROOT / "docs" / "assessment-result-template.xlsx"
     rebuilt = tmp_path / "rebuilt.xlsx"
     merge_assessment(delivered, rebuilt)
     with ZipFile(delivered) as old, ZipFile(rebuilt) as new:
@@ -137,19 +137,20 @@ def test_delivered_workbook_preserves_user_formatting_and_is_idempotent(tmp_path
 
 
 def test_delivered_criteria_and_scoring_include_every_system_evidence() -> None:
-    book = load_workbook(ROOT / "docs" / "assessment-template.xlsx")
+    book = load_workbook(ROOT / "docs" / "assessment-result-template.xlsx")
     sheet = book[SOURCE_SHEET]
     rows = {row[1].value: row for row in sheet if "-SY-" in str(row[1].value)}
-    assert len(rows) == 32
+    assert len(rows) == 31
     for code, config in load_criteria()["items"].items():
         assert [rows[code][i].value for i in range(6, 11)] == list(config["levels"].values())
     formulas = [cell.value for row in book.worksheets[4].iter_rows(min_row=64, max_row=69) for cell in row if cell.data_type == "f"]
     for row in rows.values():
         assert sum(f"'{SOURCE_SHEET}'!M{row[1].row}" in formula for formula in formulas) == 1
-    assert str(sheet.data_validations.dataValidation[0].sqref) == "M5:M90"
+    assert str(sheet.data_validations.dataValidation[0].sqref) == "M5:M89"
     assert "N/A" in sheet.data_validations.dataValidation[0].formula1
-    assert "OE-SY-16" not in rows
-    assert "감사 로그" in rows["OE-SY-15"][5].value
+    assert sorted(int(code.rsplit("-", 1)[1]) for code in rows) == list(range(1, 32))
+    assert "감사 로그" in rows["OE-SY-22"][5].value
+    assert "관리 ID" in rows["OE-SY-23"][5].value
     assert "조건부 접근" not in str(book.worksheets[1]["H8"].value)
 
 
@@ -159,6 +160,7 @@ def test_legacy_audit_score_and_notes_follow_the_audit_not_the_removed_risk_item
     book = load_workbook(source)
     sheet = book[SOURCE_SHEET]
     scored, output = tmp_path / "scored.xlsx", tmp_path / "updated.xlsx"
+    risk_title = next(row[5].value for row in sheet if row[1].value == "OE-SY-15")
     with ZipFile(source) as archive, ZipFile(scored, "w") as out:
         raw = archive.read(SHEET_CRITERIA)
         root = ET.fromstring(raw)
@@ -183,7 +185,7 @@ def test_legacy_audit_score_and_notes_follow_the_audit_not_the_removed_risk_item
             out.writestr(entry, xml_bytes(root, raw) if entry.filename == SHEET_CRITERIA else archive.read(entry.filename))
     merge_assessment(scored, output)
     sheet = load_workbook(output)[SOURCE_SHEET]
-    audit = [row for row in sheet if row[1].value == "OE-SY-15"]
+    audit = [row for row in sheet if row[1].value == "OE-SY-22"]
     assert len(audit) == 1
     assert (audit[0][12].value, audit[0][13].value) == (2, "audit evidence")
-    assert not any(row[1].value == "OE-SY-16" for row in sheet)
+    assert not any(row[5].value == risk_title for row in sheet)

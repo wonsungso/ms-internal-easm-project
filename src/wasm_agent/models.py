@@ -270,6 +270,8 @@ class Finding(EvidenceModel):
     scope: str
     metric_value: float | int | None = None
     level: Literal["L1", "L2", "L3", "L4", "L5", "N/A"]
+    assessment_basis: Literal["criteria", "configuration"] = "criteria"
+    configuration_value: float | int | None = Field(default=None, gt=0)
     rationale: str
     reason: Reason | None = None
     evidence_refs: list[str] = Field(default_factory=list)

@@ -47,7 +47,7 @@ def test_every_proposal_maps_to_one_lifecycle_domain() -> None:
                for primary, secondary, _ in DOMAINS.values())
     findings = evaluate_proposals(Collection(collected_at=NOW), TAGS)
     assert {item.code: item.area for item in findings} == {code: v[0] for code, v in DOMAINS.items()}
-    assert all("Level은 진단 체크리스트" in item.limit for item in findings)
+    assert all("Level은 6. 수집 결과" in item.limit for item in findings)
     assert {item.status for item in findings} <= {"수집됨", "일부 수집", "수집 불가"}
 
 
@@ -55,15 +55,15 @@ def test_tag_coverage_counts_agents_without_inventing_missing_owners() -> None:
     data = Collection(collected_at=NOW, agents=[
         agent("a", owner="team", tags={"env": "prod", "cost-center": "x"}), agent("b"),
     ])
-    metrics = by_code(data)["BI-SY-13"].metrics
+    metrics = by_code(data)["BI-SY-15"].metrics
     assert metrics == {"agents": 2, "with_owner": 1, "with_sponsor": 0, "with_env": 1, "with_cost_center": 1}
 
 
 def test_failed_step_is_unavailable_not_zero() -> None:
     data = Collection(collected_at=NOW, issues=[Issue(
-        collector="foundry_red_teams", target="p", reason="feature_unavailable", detail="HTTP 404",
-    )], facts={"foundry_project_ids": ["p"]})
-    finding = by_code(data)["BI-SY-11"]
+        collector="proposal_OE-SY-23", target="p", reason="feature_unavailable", detail="HTTP 404",
+    )])
+    finding = by_code(data)["OE-SY-23"]
     assert finding.status == "수집 불가" and finding.reason == "feature_unavailable"
     assert "HTTP 404" in finding.observation
 
@@ -96,7 +96,7 @@ def test_safety_budget_and_tools_metrics() -> None:
         facts={"budget_complete_subscriptions": [SID]},
         proposal_observations=[
             ProposalObservation(
-                code="BI-SY-10", subscription_id=SID, subject=ACCOUNT, kind="ai_account",
+                code="BI-SY-13", subscription_id=SID, subject=ACCOUNT, kind="ai_account",
                 values={"policies": 2, "custom_policies": 1, "custom_enabled_filters": 1,
                         "custom_policy_names": ["strict"]},
             ),
@@ -111,11 +111,11 @@ def test_safety_budget_and_tools_metrics() -> None:
         ],
     )
     result = by_code(data)
-    assert result["BI-SY-10"].metrics["with_policy"] == 2 and result["BI-SY-10"].metrics["with_custom_policy"] == 1
-    assert result["OT-SY-21"].metrics["with_forecast_alert"] == 1
+    assert result["BI-SY-13"].metrics["with_policy"] == 2 and result["BI-SY-13"].metrics["with_custom_policy"] == 1
+    assert result["OT-SY-31"].metrics["with_forecast_alert"] == 1
     assert result["DS-SY-08"].metrics["mcp_approval"] == {"always": 1}
     assert result["DS-SY-09"].metrics["hosts"] == ["learn.microsoft.com"]
-    assert result["BI-SY-12"].metrics["version_upgrade_option"] == {"NoAutoUpgrade": 1, "unknown": 1}
+    assert result["BI-SY-14"].metrics["version_upgrade_option"] == {"NoAutoUpgrade": 1, "unknown": 1}
 
 
 def collector(rows: dict[str, list[dict]], assignments: list[dict] | None = None) -> ProposalCollector:
@@ -159,6 +159,32 @@ def properties_rows() -> list[dict]:
     ]
 
 
+def test_default_allow_all_rule_is_not_reported_as_ip_restriction() -> None:
+    source = collector({"identity": properties_rows()})
+    source.targets(SID)
+    source.http.request.side_effect = None
+    source.http.request.return_value = {"properties": {
+        "ipSecurityRestrictions": [{"ipAddress": "Any", "action": "Allow", "priority": 2147483647}],
+    }}
+    result = Collection(collected_at=NOW)
+    source.network(SID, result)
+    host = next(row for row in result.proposal_observations if row.subject == SITE)
+    assert host.values["ip_restrictions"] == 0
+
+
+def test_monitoring_includes_actual_langchain_host_alert_scope() -> None:
+    source = collector({
+        "identity": properties_rows(),
+        "microsoft.insights": [{
+            "id": "/a/al", "type": "microsoft.insights/metricalerts", "enabled": 1,
+            "scopes": f'["{SITE}"]', "actions": '[{"actionGroupId": "/x/actionGroups/ag"}]',
+        }],
+    })
+    result = Collection(collected_at=NOW)
+    source.monitoring(SID, result)
+    assert any(row.values.get("targets_ai") for row in result.proposal_observations)
+
+
 def test_collector_records_identity_network_safety_and_policy_facts() -> None:
     owner = "/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635"
     reader = "/providers/Microsoft.Authorization/roleDefinitions/acdd72a7-3385-48ef-bd42-f606fba81ae7"
@@ -183,20 +209,20 @@ def test_collector_records_identity_network_safety_and_policy_facts() -> None:
     observed = {(item.code, item.kind): item.values for item in result.proposal_observations}
     host = next(
         item.values for item in result.proposal_observations
-        if item.code == "OE-SY-17" and item.subject == SITE
+        if item.code == "OE-SY-23" and item.subject == SITE
     )
     assert host["privileged_assignments"] == 1 and host["subscription_scope_assignments"] == 1
     assert host["principal_count"] == 2
     assert not any(item.subject.endswith("-other") for item in result.proposal_observations)
-    assert observed[("BI-SY-10", "ai_account")]["custom_policy_names"] == ["strict"]
+    assert observed[("BI-SY-13", "ai_account")]["custom_policy_names"] == ["strict"]
     network = [item.values for item in result.proposal_observations if item.code == "DS-SY-07"]
     assert {"public_network_access": "Enabled", "default_action": None, "private_endpoints": 0} in network
     assert any(item["ip_restrictions"] == 1 and item["https_only"] is True for item in network if "https_only" in item)
-    monitoring = [item.values for item in result.proposal_observations if item.code == "OE-SY-18"]
+    monitoring = [item.values for item in result.proposal_observations if item.code == "OE-SY-24"]
     assert {"kind": "actiongroups", "receivers": {"webhook": 1}} in monitoring
     assert any(item.get("targets_ai") and item.get("has_action_group") for item in monitoring)
     states = {item.values["state"]: item.values["resources"] for item in result.proposal_observations
-              if item.code == "BI-SY-14"}
+              if item.code == "BI-SY-16"}
     assert states == {"Compliant": 1, "NonCompliant": 1}
 
 
@@ -208,6 +234,6 @@ def test_collector_isolates_a_failed_step() -> None:
 
     gathered.http.list_arm.side_effect = broken
     result = gathered.discover([SID])
-    assert {item.collector for item in result.issues} == {"proposal_OE-SY-17", "proposal_BI-SY-10"}
+    assert {item.collector for item in result.issues} == {"proposal_OE-SY-23", "proposal_BI-SY-13"}
     assert "DS-SY-07" in {item.code for item in result.proposal_observations}
-    assert sorted(result.facts["proposal_incomplete"]) == ["BI-SY-10", "OE-SY-17"]
+    assert sorted(result.facts["proposal_incomplete"]) == ["BI-SY-13", "OE-SY-23"]

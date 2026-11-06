@@ -8,6 +8,25 @@ internal_security_score_min: null
 model_policy_definition_ids: []
 overprivileged_permissions_sample: true
 overprivileged_permission_patterns: ["*.ReadWrite.All", "*.Write.All", "*FullControl*"]
+configuration_grading:
+  level: L2
+  minimum_observations: 1
+  items:
+    BI-SY-11: "완료된 평가 기록 조회, 운영 버전의 배포 전 평가 귀속은 추가 검증"
+    BI-SY-12: "보안 권고 또는 보안 점수 조회, AI 점검 범위·내부 목표는 추가 검증"
+    OE-SY-22: "Agent 리소스의 활성 로그 설정 조회, 테이블별 유효 보존기간은 추가 검증"
+    OT-SY-28: "실제 수치 표본이 있는 리소스 사용량 조회, Agent별 90일 미사용 여부는 추가 검증"
+    DS-SY-05: "Blueprint 정의 존재, 주요 유형 표준화는 추가 검증"
+    DS-SY-07: "HTTPS·접근 제한 등 기본 네트워크 보호 설정 확인, 경계 차단 효과는 추가 검증"
+    DS-SY-08: "도구 정의 조회, 고위험 호출의 필수 승인·거부는 추가 검증"
+    DS-SY-09: "외부 도구 호스트 식별, 승인 목록·인증·송신 차단은 추가 검증"
+    BI-SY-13: "모델 배포의 콘텐츠 필터 정책 연결 확인, 실제 차단 효과는 추가 검증"
+    BI-SY-14: "모델 버전 또는 호스트 런타임 식별, 승인 버전·업데이트 절차는 추가 검증"
+    BI-SY-16: "리소스 정책 평가 결과 조회, 예외 승인·편차 해소는 추가 검증"
+    OE-SY-23: "관리 ID 연결 확인, 실제 인증 사용·전체 유효 권한은 추가 검증"
+    OE-SY-24: "대상 AI 리소스의 활성 경보 확인, 계측·SLO·대응 효과는 추가 검증"
+    OE-SY-25: "경보와 작업 그룹 연결 확인, 실제 수신·중단·복구는 추가 검증"
+    OE-SY-26: "리소스 지역 또는 보존 설정 조회, 승인 지역·실제 처리·삭제는 추가 검증"
 items:
   DS-SY-06:
     scope: in_scope
@@ -29,12 +48,12 @@ items:
         when: {allowed_ratio: {lt: 0.9}}
       - level: L1
         when: {declared_no_allowlist: {eq: true}}
-  BI-SY-08:
+  BI-SY-11:
     scope: in_scope
     metric: evaluated_ratio
     levels:
       L1: "운영 대상 전체 확인, 배포 전 평가 이력 보유율 0%"
-      L2: "배포 전 평가 이력 보유율이 0% 초과~80% 미만"
+      L2: "배포 전 평가 0% 초과~80% 미만 또는 완료된 평가 기록 확인(배포 귀속 미검증)"
       L3: "운영 Agent의 80% 이상이 배포 전 평가 이력을 보유함"
       L4: "배포 Agent 100% 평가, 파이프라인에서 자동 실행됨"
       L5: "L4 충족, 지속 평가·자동 경보와 품질 개선 이력"
@@ -51,12 +70,12 @@ items:
         when: {evaluated_ratio: {eq: 0}}
       - level: L1
         when: {evaluation_history_count: {eq: 0}, evaluation_history_complete: {eq: true}}
-  BI-SY-09:
+  BI-SY-12:
     scope: partial
     metric: high_risk_recommendations
     levels:
       L1: "AI 워크로드 보안 태세 점검 기능 미사용"
-      L2: "보안 점검 활성, 고위험 권고가 남아 있거나 내부 점수 미달"
+      L2: "보안 권고·점수 조회 또는 점검 활성이나 고위험 권고·내부 목표 미달"
       L3: "고위험 권고 0건, 보안 점수가 내부 기준 이상 유지됨"
       L4: "L3 충족, 30일 내 조치 이력과 보안 정책 자동 적용 확인"
       L5: "L4 충족, 공격 경로 분석과 위험 자동 조치 개선 이력"
@@ -73,12 +92,12 @@ items:
         when: {security_feature_enabled: {eq: true}, security_score_meets_internal: {eq: false}}
       - level: L1
         when: {security_feature_enabled: {eq: false}}
-  OE-SY-15:
+  OE-SY-22:
     scope: partial
     metric: retention_days
     levels:
       L1: "Agent 활동 감사 로그 미수집"
-      L2: "감사 로그 수집 확인, 유효 보존기간이 승인 기준 미달"
+      L2: "활성 로그 설정 확인, 유효 보존기간·승인 기준 미검증 또는 미달"
       L3: "대상 테이블의 유효 보존기간이 승인 기준 이상"
       L4: "L3 충족, 보존 정책 100% 적용과 정기 리포트 자동 생성"
       L5: "L4 충족, 감사 이상 활동 자동 경보와 개선 이력"
@@ -93,12 +112,12 @@ items:
         when: {retention_scope_verified: {eq: true}, logs_collected: {eq: true}, retention_meets_internal: {eq: false}}
       - level: L1
         when: {logs_collected: {eq: false}}
-  OT-SY-18:
+  OT-SY-28:
     scope: partial
     metric: inactive_ratio
     levels:
       L1: "사용 현황 관리 절차가 없음을 증적으로 확인"
-      L2: "90일 미사용 Agent 비율 20% 이상"
+      L2: "리소스 사용량 표본 확인(Agent별 90일 판정 미검증) 또는 90일 미사용 비율 20% 이상"
       L3: "90일 미사용 Agent 비율 20% 미만"
       L4: "미사용 비율 10% 미만, 미사용 Agent가 자동 알림·정리됨"
       L5: "미사용 5% 미만 유지, 사용 추세로 확대·폐기를 결정함"
@@ -113,7 +132,7 @@ items:
         when: {inactive_ratio: {gte: 0.2}}
       - level: L1
         when: {usage_management_absent: {eq: true}}
-  OT-SY-19:
+  OT-SY-29:
     scope: partial
     metric: attributable_cost_ratio
     levels:
@@ -139,7 +158,7 @@ items:
     metric: blueprint_count
     levels:
       L1: "Agent ID 미사용 또는 Blueprint 정의 0개"
-      L2: "Blueprint 존재, 유형별 표준 또는 적용률 50%에 미달"
+      L2: "Blueprint 존재, 주요 유형 표준 미검증 또는 적용률 50% 미만"
       L3: "주요 유형별 Blueprint 정의, 수집 Agent ID의 50% 이상 연결"
       L4: "주요 유형별 정의, 수집 Agent ID의 90% 이상 연결"
       L5: "Blueprint 사용 데이터로 템플릿을 정기 개정, 적용률 100% 유지"
@@ -156,7 +175,7 @@ items:
         when: {blueprint_count: {gt: 0}, major_type_blueprints_defined: {eq: false}}
       - level: L1
         when: {blueprint_count: {eq: 0}}
-  DP-SY-12:
+  DP-SY-19:
     scope: partial
     requires: entra
     metric: agent_id_ratio
@@ -177,7 +196,7 @@ items:
         when: {agent_id_ratio: {gt: 0, lt: 0.8}}
       - level: L1
         when: {agent_id_ratio: {eq: 0}}
-  OE-SY-13:
+  OE-SY-20:
     scope: in_scope
     requires: entra
     metric: unassigned_ratio
@@ -198,7 +217,7 @@ items:
         when: {unassigned_ratio: {gte: 0.1}}
       - level: L1
         when: {owner_management_absent: {eq: true}}
-  OE-SY-14:
+  OE-SY-21:
     scope: in_scope
     requires: entra
     metric: overprivileged_ratio
@@ -226,7 +245,7 @@ items:
     evidence: "공용 접근·기본 거부·허용 규칙·PE 연결 상태, 호스트 인바운드·송신 시험, 승인 예외"
     levels:
       L1: "대상 확인 완료, 승인된 네트워크 경계 충족률 0%"
-      L2: "경계 충족률 0% 초과~90% 미만 또는 표준 미정립"
+      L2: "HTTPS·접근 제한 등 기본 보호 설정 확인 또는 경계 충족률 0% 초과~90% 미만"
       L3: "90% 이상이 승인 경계 충족, 제한 공용 접근·예외는 근거 검증"
       L4: "충족률 100%, 정책·배포 게이트로 편차 차단과 예외 만료 관리"
       L5: "L4 충족, 접근·송신 시험과 로그 분석으로 경계 지속 개선"
@@ -244,7 +263,7 @@ items:
     evidence: "고위험 도구 분류·호출별 승인·거부 시험, 실행 주체, 앱·MCP 승인 게이트 이력"
     levels:
       L1: "고위험 도구 대상 확인 완료, 필수 승인 통제 충족률 0%"
-      L2: "필수 승인 충족률 0% 초과~90% 미만 또는 위험 분류 미정립"
+      L2: "도구 정의 확인(승인 집행 미검증) 또는 필수 승인 충족률 0% 초과~90% 미만"
       L3: "고위험 도구 호출 경로 90% 이상 승인·거부 통제 검증"
       L4: "충족률 100%, 승인 우회 시험과 릴리스 게이트 운영"
       L5: "L4 충족, 승인·거부·사고 이력으로 자율성 수준 개선"
@@ -262,7 +281,7 @@ items:
     evidence: "승인 엔드포인트·도구·인증 기준, 송신 제한, 실제 연결 시험, 예외 승인 기록"
     levels:
       L1: "외부 연결 대상 확인 완료, 승인 연결 기준 충족률 0%"
-      L2: "승인·인증 충족률 0% 초과~90% 미만 또는 기준 미정립"
+      L2: "외부 도구 호스트 식별(승인·차단 미검증) 또는 승인 충족률 0% 초과~90% 미만"
       L3: "연결 90% 이상이 승인 대상·도구·인증 기준 충족"
       L4: "충족률 100%, 게이트웨이·송신 통제로 미승인 연결 차단"
       L5: "L4 충족, 호출 이상·변경 이력으로 허용 범위 개선"
@@ -273,14 +292,14 @@ items:
       - {level: L2, when: {endpoint_control_ratio: {gt: 0, lt: 0.9}}}
       - {level: L2, when: {endpoint_control_ratio: {gt: 0}, endpoint_standardized: {eq: false}}}
       - {level: L1, when: {endpoint_control_ratio: {eq: 0}}}
-  BI-SY-10:
+  BI-SY-13:
     scope: partial
     metric: content_safety_ratio
     assessment_key: content_safety_assessment
     evidence: "대상 모델·배포별 기본/지정 필터 유효 설정, 승인 기준, 입력·출력 차단 시험"
     levels:
       L1: "필터 지원 대상 확인 완료, 승인 안전 필터 충족률 0%"
-      L2: "유효 필터 충족률 0% 초과~90% 미만 또는 기준 미정립"
+      L2: "배포의 필터 정책 연결 확인(효과 미검증) 또는 충족률 0% 초과~90% 미만"
       L3: "지원 배포 90% 이상이 승인 필터·차단 시험 기준 충족"
       L4: "충족률 100%, 필터 편차를 지원 정책·릴리스 게이트로 차단"
       L5: "L4 충족, 유해 응답·오탐·우회 시험으로 필터 개선"
@@ -291,32 +310,14 @@ items:
       - {level: L2, when: {content_safety_ratio: {gt: 0, lt: 0.9}}}
       - {level: L2, when: {content_safety_ratio: {gt: 0}, content_safety_standardized: {eq: false}}}
       - {level: L1, when: {content_safety_ratio: {eq: 0}}}
-  BI-SY-11:
-    scope: partial
-    metric: redteam_release_ratio
-    assessment_key: redteam_assessment
-    evidence: "Agent·릴리스별 공격 시나리오와 ASR 상한·결함 조치, CI 결과, 지속 시험 이력"
-    levels:
-      L1: "운영 릴리스 대상 확인 완료, 사전 적대적 시험 충족률 0%"
-      L2: "릴리스별 사전 시험 충족률 0% 초과~80% 미만 또는 비표준"
-      L3: "릴리스 80% 이상에 표준 공격 시험·결과·조치 기록"
-      L4: "충족률 100%, 공격 성공률 상한 초과·중대 결함 시 출시 차단"
-      L5: "L4 충족, 운영 중 지속 공격 시험과 개선 이력"
-    rules:
-      - {level: L5, when: {redteam_release_ratio: {eq: 1}, redteam_standardized: {eq: true}, redteam_enforced: {eq: true}, redteam_improved: {eq: true}}}
-      - {level: L4, when: {redteam_release_ratio: {eq: 1}, redteam_standardized: {eq: true}, redteam_enforced: {eq: true}}}
-      - {level: L3, when: {redteam_release_ratio: {gte: 0.8}, redteam_standardized: {eq: true}}}
-      - {level: L2, when: {redteam_release_ratio: {gt: 0, lt: 0.8}}}
-      - {level: L2, when: {redteam_release_ratio: {gt: 0}, redteam_standardized: {eq: false}}}
-      - {level: L1, when: {redteam_release_ratio: {eq: 0}}}
-  BI-SY-12:
+  BI-SY-14:
     scope: partial
     metric: release_control_ratio
     assessment_key: release_assessment
     evidence: "모델·API·SDK·앱 버전과 업데이트 방침, 퇴역 통지, 회귀 시험·승인·대체 복구 기록"
     levels:
       L1: "운영 릴리스 대상 확인 완료, 버전·업데이트 관리 충족률 0%"
-      L2: "버전·업데이트 관리 충족률 0% 초과~90% 미만 또는 비표준"
+      L2: "모델 버전·호스트 런타임 식별 또는 버전 관리 충족률 0% 초과~90% 미만"
       L3: "90% 이상에 승인 버전·수동/자동 업데이트 방침과 퇴역 대응 정의"
       L4: "충족률 100%, 고객 변경 게이트와 자동 업데이트 후 검증·복구 운영"
       L5: "L4 충족, 퇴역·성능 추세로 사전 전환·대체 복구 시험 개선"
@@ -327,7 +328,7 @@ items:
       - {level: L2, when: {release_control_ratio: {gt: 0, lt: 0.9}}}
       - {level: L2, when: {release_control_ratio: {gt: 0}, release_standardized: {eq: false}}}
       - {level: L1, when: {release_control_ratio: {eq: 0}}}
-  BI-SY-13:
+  BI-SY-15:
     scope: partial
     metric: asset_tag_ratio
     assessment_key: asset_assessment
@@ -345,14 +346,14 @@ items:
       - {level: L2, when: {asset_tag_ratio: {gt: 0, lt: 0.9}}}
       - {level: L2, when: {asset_tag_ratio: {gt: 0}, asset_standardized: {eq: false}}}
       - {level: L1, when: {asset_tag_ratio: {eq: 0}}}
-  BI-SY-14:
+  BI-SY-16:
     scope: partial
     metric: policy_control_ratio
     assessment_key: policy_assessment
     evidence: "승인 정책·할당 범위·매개변수·효과·enforcementMode, 준수 결과, 예외 만료·보완 통제"
     levels:
       L1: "필수 정책 통제 대상 확인 완료, 유효 통제 충족률 0%"
-      L2: "필수 통제 충족률 0% 초과~90% 미만 또는 정책 기준 미정립"
+      L2: "정책 평가 결과 조회(예외·유효성 미검증) 또는 필수 통제 충족률 0% 초과~90% 미만"
       L3: "90% 이상 필수 통제 충족, 만료 예외·보완 통제 검증"
       L4: "충족률 100%, 지원 효과별 차단·교정과 만료 예외 대응 자동화"
       L5: "L4 충족, 편차·사고·준수 추세로 정책 세트 개선"
@@ -363,14 +364,14 @@ items:
       - {level: L2, when: {policy_control_ratio: {gt: 0, lt: 0.9}}}
       - {level: L2, when: {policy_control_ratio: {gt: 0}, policy_standardized: {eq: false}}}
       - {level: L1, when: {policy_control_ratio: {eq: 0}}}
-  OE-SY-17:
+  OE-SY-23:
     scope: partial
     metric: identity_control_ratio
     assessment_key: identity_assessment
     evidence: "호출 경로별 관리 ID·연합 인증·승인 예외, 실제 로그인, 유효 ARM·데이터 역할·회수 이력"
     levels:
       L1: "대상 호출 경로 확인 완료, 승인 인증·최소 권한 충족률 0%"
-      L2: "인증·최소 권한 충족률 0% 초과~90% 미만 또는 비표준"
+      L2: "관리 ID 연결 확인(실제 인증·유효 권한 미검증) 또는 승인 충족률 0% 초과~90% 미만"
       L3: "90% 이상 경로에서 승인 무비밀 인증·최소 권한·예외 검증"
       L4: "충족률 100%, 워크로드 권한 변경 게이트·정기 회수 자동화"
       L5: "L4 충족, 실제 권한 사용과 접근 검토로 역할 지속 축소"
@@ -381,14 +382,14 @@ items:
       - {level: L2, when: {identity_control_ratio: {gt: 0, lt: 0.9}}}
       - {level: L2, when: {identity_control_ratio: {gt: 0}, identity_standardized: {eq: false}}}
       - {level: L1, when: {identity_control_ratio: {eq: 0}}}
-  OE-SY-18:
+  OE-SY-24:
     scope: partial
     metric: observability_ratio
     assessment_key: observability_assessment
     evidence: "Agent 귀속 trace·운영 지표 수신, 로그 대상·샘플링, 경보 시험, 승인 SLO·보고서"
     levels:
       L1: "운영 Agent 대상 확인 완료, 유효 관측 체계 충족률 0%"
-      L2: "실제 관측 충족률 0% 초과~90% 미만 또는 SLO 미정립"
+      L2: "대상 AI 리소스의 활성 경보 확인 또는 실제 관측 충족률 0% 초과~90% 미만"
       L3: "Agent 90% 이상 trace·지표·필수 로그·경보 시험, SLO 정의"
       L4: "충족률 100%, 관측 릴리스 게이트와 SLO 수치 보고 운영"
       L5: "L4 충족, 장애·지표 분석으로 SLO·샘플링·경보 개선"
@@ -399,14 +400,14 @@ items:
       - {level: L2, when: {observability_ratio: {gt: 0, lt: 0.9}}}
       - {level: L2, when: {observability_ratio: {gt: 0}, observability_standardized: {eq: false}}}
       - {level: L1, when: {observability_ratio: {eq: 0}}}
-  OE-SY-19:
+  OE-SY-25:
     scope: partial
     metric: incident_routing_ratio
     assessment_key: incident_assessment
     evidence: "활성 AI 대응 경보·작업 그룹 실제 수신 시험, 온콜 경로, 대응 시간·중단·복구 훈련"
     levels:
       L1: "조치 필요 AI 경보 대상 확인 완료, 유효 대응 경로 충족률 0%"
-      L2: "대응 경로 충족률 0% 초과~90% 미만 또는 담당 체계 미정립"
+      L2: "경보·작업 그룹 연결 확인(수신·복구 미검증) 또는 대응 경로 충족률 0% 초과~90% 미만"
       L3: "대상 경보 90% 이상 담당 온콜·SOC 경로 수신 시험 통과"
       L4: "충족률 100%, 경로 누락 검증·대응 시간 측정·정기 훈련"
       L5: "L4 충족, 사고·훈련 결과로 중단·격리·복구 절차 개선"
@@ -417,14 +418,14 @@ items:
       - {level: L2, when: {incident_routing_ratio: {gt: 0, lt: 0.9}}}
       - {level: L2, when: {incident_routing_ratio: {gt: 0}, incident_standardized: {eq: false}}}
       - {level: L1, when: {incident_routing_ratio: {eq: 0}}}
-  OE-SY-20:
+  OE-SY-26:
     scope: partial
     metric: residency_retention_ratio
     assessment_key: residency_assessment
     evidence: "배포 SKU별 저장·처리 지역, 대상 테이블별 유효·총 보존기간, 삭제·법적 보존 예외"
     levels:
       L1: "데이터·로그 대상 확인 완료, 승인 지역·보존 기준 충족률 0%"
-      L2: "지역·보존 충족률 0% 초과~90% 미만 또는 내부 기준 미정립"
+      L2: "리소스 지역·보존 설정 조회(처리·삭제 미검증) 또는 충족률 0% 초과~90% 미만"
       L3: "대상 90% 이상 저장·처리 지역과 유효 보존기간 기준 충족"
       L4: "충족률 100%, 지원 정책·배포 게이트로 지역·보존 편차 통제"
       L5: "L4 충족, 삭제·복구 시험과 이용 추세로 보존·비용 개선"
@@ -435,7 +436,7 @@ items:
       - {level: L2, when: {residency_retention_ratio: {gt: 0, lt: 0.9}}}
       - {level: L2, when: {residency_retention_ratio: {gt: 0}, residency_standardized: {eq: false}}}
       - {level: L1, when: {residency_retention_ratio: {eq: 0}}}
-  OT-SY-21:
+  OT-SY-31:
     scope: partial
     metric: budget_control_ratio
     assessment_key: budget_assessment

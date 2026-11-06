@@ -548,6 +548,7 @@ def test_source_only_repack_reuses_verified_dependencies(tmp_path: Path) -> None
     source = tmp_path / "demo"
     source.mkdir(parents=True)
     (source / "app.py").write_text("new chatbot source", encoding="utf-8")
+    (source / "governance.py").write_text("new governance controls", encoding="utf-8")
     (source / "chat.html").write_text("new chat form", encoding="utf-8")
     (source / "catalog.json").write_text("[]", encoding="utf-8")
     (source / "manage.py").write_text("administrator-only source", encoding="utf-8")
@@ -570,10 +571,11 @@ def test_source_only_repack_reuses_verified_dependencies(tmp_path: Path) -> None
         assert build_linux_package(tmp_path) == archive
     with zipfile.ZipFile(archive) as bundle:
         assert bundle.read("app.py") == (source / "app.py").read_bytes()
+        assert bundle.read("governance.py") == (source / "governance.py").read_bytes()
         assert bundle.read("chat.html") == (source / "chat.html").read_bytes()
         assert bundle.read(native) == b"\x7fELF fixture"
         assert set(bundle.namelist()) == {
-            "app.py", "chat.html", "catalog.json", ".deployment", "requirements.txt", native,
+            "app.py", "governance.py", "chat.html", "catalog.json", ".deployment", "requirements.txt", native,
         }
         assert bundle.testzip() is None
 

@@ -29,7 +29,7 @@ SHEET_QUESTIONS = "xl/worksheets/sheet2.xml"
 SHEET_CRITERIA = "xl/worksheets/sheet4.xml"
 DOMAIN_COLUMN = {"2. Design": "E", "3. Build": "F", "4. Deploy": "G", "5. Operate": "H", "6. Optimize": "I"}
 NOTE = (
-    "- System Evidence 32개를 시트 4에서 평가하고 시트 5 실제 집계에 반영. "
+    "- System Evidence 31개를 시트 4에서 평가하고 시트 5 실제 집계에 반영. "
     "미확보·조회 실패·대상 없음은 N/A이며 L1 또는 0점으로 환산하지 않음"
 )
 ROW_HEIGHT = "25.05"
@@ -64,35 +64,35 @@ MANUAL_LEVELS = {
         "적용률 100%, 신규 환경 편입과 정책 편차 통제 자동화",
         "L4 충족, 위반·우회 시험으로 분류·정책 지속 개선",
     ),
-    "BI-SY-07": (
+    "BI-SY-10": (
         "개발·테스트와 운영의 접근·변경 분리 통제가 없음",
         "환경 일부 분리, 운영 접근·변경 또는 관리 기준 미흡",
         "개발·테스트·운영 분리, 라이선스·지원 범위 내 관리 기준 충족",
         "L3 충족, 지원 배포 경로·권한 통제로 미승인 운영 반영 차단",
         "L4 충족, 환경 이용·위반 이력으로 분리 통제 개선",
     ),
-    "DP-SY-10": (
+    "DP-SY-17": (
         "Agent 자산·배포 등록 절차가 없음을 확인",
         "승인 등록부·실제 Agent 정합률 90% 미만",
         "Agent·책임자·배포 범위·상태 정합률 90% 이상",
         "정합률 98% 이상, 등록 편차·변경 자동 탐지·추적",
         "정합률 100%, L4 충족과 대사·변경 관리 개선 이력",
     ),
-    "DP-SY-11": (
+    "DP-SY-18": (
         "Agent 공유·설치의 승인 범위 통제 기준이 없음",
         "공유·설치 일부 제한, 승인 대상·범위와 불일치",
         "지원 제품별 공유·설치 범위가 승인 대상과 일치",
         "L3 충족, 지원 설정·승인 경로로 편차 통제와 감사 추적",
         "L4 충족, 설치·공유·위반 이력으로 허용 기준 개선",
     ),
-    "OT-SY-17": (
+    "OT-SY-27": (
         "승인되지 않은 Agent 탐지·대사 절차가 없음을 확인",
         "미승인 비율 5% 이상 또는 탐지 건 조치율 80% 미만",
         "관측 범위·기간 명시, 미승인 비율 5% 미만과 조치율 80% 이상",
         "미승인 비율 1% 미만, L3 충족과 지원 경로별 자동 통보·통제",
         "관측 범위 내 미승인 0건, L4 충족과 탐지·수요 전환 개선",
     ),
-    "OT-SY-20": (
+    "OT-SY-30": (
         "민감 데이터 노출 점검·조치 절차가 없음을 확인",
         "확인된 고위험 노출 조치율 90% 미만",
         "고위험 노출 조치율 90% 이상, 지원 데이터 경로별 보호 검증",
@@ -276,8 +276,11 @@ def merge_assessment(source: Path, output: Path) -> dict[str, str | int]:
             raise ValueError("질문별 평가 기준 시트가 있는 원본 평가 모델이 필요합니다.")
         strings = shared_strings(archive)
         book = load_workbook(BytesIO(raw))
-        existing = {row[1].value for row in book[SOURCE_SHEET]}
-        present = existing & DOMAINS.keys()
+        se_rows = [row for row in book[SOURCE_SHEET] if "-SY-" in str(row[1].value)]
+        present = {
+            code for code in DOMAINS
+            if any(TITLES[code] in str(row[5].value) for row in se_rows)
+        }
         if present and present != DOMAINS.keys():
             raise ValueError("SE 항목이 일부만 병합된 파일입니다. 전체 원본 또는 검토 템플릿을 사용하세요.")
         patched = {} if present else {
@@ -320,8 +323,23 @@ def review_parts(archive: ZipFile, patched: dict[str, bytes]) -> dict[str, bytes
     raw = patched.get(SHEET_CRITERIA, archive.read(SHEET_CRITERIA))
     root = ET.fromstring(raw)
     data = root.find(f"{Q}sheetData")
+
+    def remove_assessment_row(row: ET.Element) -> None:
+        removed = int(row.get("r"))
+        data.remove(row)
+        for remaining in data:
+            number = int(remaining.get("r"))
+            if number > removed:
+                set_row_number(remaining, number - 1)
+        dimension = root.find(f"{Q}dimension")
+        dimension.set("ref", re.sub(
+            r"(\d+)$", lambda match: str(int(match[1]) - 1), dimension.get("ref"),
+        ))
+
     old_audit = next((
-        row for row in data if value(row.find(f"{Q}c[@r='B{row.get('r')}']")) == "OE-SY-16"
+        row for row in data
+        if value(row.find(f"{Q}c[@r='B{row.get('r')}']")) == "OE-SY-16"
+        and "감사 로그" in value(row.find(f"{Q}c[@r='F{row.get('r')}']"))
     ), None)
     if old_audit is not None:
         retired = next((
@@ -329,17 +347,30 @@ def review_parts(archive: ZipFile, patched: dict[str, bytes]) -> dict[str, bytes
         ), None)
         if retired is None:
             raise ValueError("감사 로그 코드 이전에 필요한 기존 항목이 없습니다.")
-        removed = int(retired.get("r"))
-        data.remove(retired)
-        for row in data:
-            number = int(row.get("r"))
-            if number > removed:
-                set_row_number(row, number - 1)
-        replace_text(old_audit, "B", "OE-SY-15")
-        dimension = root.find(f"{Q}dimension")
-        dimension.set("ref", re.sub(
-            r"(\d+)$", lambda match: str(int(match[1]) - 1), dimension.get("ref"),
-        ))
+        remove_assessment_row(retired)
+        replace_text(old_audit, "B", "OE-SY-22")
+    retired_redteam = next((
+        row for row in data
+        if value(row.find(f"{Q}c[@r='E{row.get('r')}']")) == "System Evidence"
+        and "red team" in value(row.find(f"{Q}c[@r='F{row.get('r')}']")).lower()
+    ), None)
+    if retired_redteam is not None:
+        remove_assessment_row(retired_redteam)
+    system_rows = [
+        row for row in data
+        if value(row.find(f"{Q}c[@r='E{row.get('r')}']")) == "System Evidence"
+    ]
+    if len(system_rows) != 31:
+        raise ValueError("연속 SE 번호를 부여하려면 System Evidence 31개가 필요합니다.")
+    for index, row in enumerate(system_rows, 1):
+        previous = value(row.find(f"{Q}c[@r='B{row.get('r')}']"))
+        replace_text(row, "B", f"{previous[:2]}-SY-{index:02}")
+    for row in data:
+        title = value(row.find(f"{Q}c[@r='F{row.get('r')}']"))
+        for code in TITLES:
+            if TITLES[code] in title:
+                replace_text(row, "B", code)
+                break
     criteria = load_criteria()["items"]
     groups: dict[tuple[str, str], list[int]] = {}
     seen = set()
@@ -362,9 +393,9 @@ def review_parts(archive: ZipFile, patched: dict[str, bytes]) -> dict[str, bytes
             if value(memo) == "초안 - 점수 산정 제외":
                 replace_text(row, "N", "")
     if seen != criteria.keys() | MANUAL_LEVELS.keys():
-        raise ValueError("System Evidence 32개 코드가 정확히 일치하지 않습니다.")
+        raise ValueError("System Evidence 31개 코드가 정확히 일치하지 않습니다.")
     rows = {int(row.get("r")): row for row in data}
-    replace_text(rows[3], "B", "인터뷰 54개 + SE 32개 = 86개. 1~5 정수 또는 N/A. 미확보·대상 없음은 N/A, L1은 확인된 부재. 비율 임계값은 본 진단 기준이며 Microsoft 인증 기준 아님")
+    replace_text(rows[3], "B", "인터뷰 54개 + SE 31개 = 85개. 1~5 정수 또는 N/A. 미확보·대상 없음은 N/A, L1은 확인된 부재. 비율 임계값은 본 진단 기준이며 Microsoft 인증 기준 아님")
     validation = root.find(f"{Q}dataValidations/{Q}dataValidation")
     validation.set("type", "custom")
     validation.set("sqref", f"M5:M{max(rows)}")
@@ -388,10 +419,18 @@ def review_parts(archive: ZipFile, patched: dict[str, bytes]) -> dict[str, bytes
                     if not block.startswith("▸ Agent 대상 조건부 접근")
                 )
                 replace_text(row, cell_ref(cell.get("r"))[0], text)
+            if "▸ 적대적 시험" in text:
+                text = "\n\n".join(
+                    block for block in text.split("\n\n") if "▸ 적대적 시험" not in block
+                )
+                replace_text(row, cell_ref(cell.get("r"))[0], text)
             if "(추가 제안)" in text:
                 replace_text(row, cell_ref(cell.get("r"))[0], text.replace(" (추가 제안)", ""))
             elif "점수 산정" in text and "포함하지 않음" in text:
-                lines = [line for line in text.splitlines() if "추가 제안 13개" not in line]
+                lines = [
+                    line for line in text.splitlines()
+                    if not any(marker in line for marker in ("추가 제안 12개", "추가 제안 13개"))
+                ]
                 replace_text(row, cell_ref(cell.get("r"))[0], "\n".join([*lines, NOTE]))
     patched[SHEET_QUESTIONS] = xml_bytes(root, raw)
 
@@ -400,10 +439,10 @@ def review_parts(archive: ZipFile, patched: dict[str, bytes]) -> dict[str, bytes
     data = root.find(f"{Q}sheetData")
     example = {int(row.get("r")): row for row in data}
     if (
-        value(example[46].find(f"{Q}c[@r='C46']")) == "OE-SY-15"
-        and value(example[47].find(f"{Q}c[@r='C47']")) == "OE-SY-16"
+        value(example[46].find(f"{Q}c[@r='C46']")) == "OE-SY-22"
+        and value(example[47].find(f"{Q}c[@r='C47']")) == "OE-SY-23"
     ):
-        replace_text(example[46], "C", "OE-SY-15")
+        replace_text(example[46], "C", "OE-SY-22")
         old = example[46].find(f"{Q}c[@r='D46']")
         audit_score = deepcopy(example[47].find(f"{Q}c[@r='D47']"))
         audit_score.set("r", "D46")
@@ -429,7 +468,7 @@ def review_parts(archive: ZipFile, patched: dict[str, bytes]) -> dict[str, bytes
             else:
                 row.append(text_cell(ref, "23" if number == 63 else "61", text))
 
-    append(61, {"B": "실제 평가 집계 - 시트 4 입력 점수 연동 (인터뷰 54개 + System Evidence 32개)"})
+    append(61, {"B": "실제 평가 집계 - 시트 4 입력 점수 연동 (인터뷰 54개 + System Evidence 31개)"})
     append(62, {"B": "빈칸·N/A는 평균 제외. 4개 인터뷰 관점과 SE 확보 시 영역 산정, 6개 영역 확보 시 종합 산정. 미확보는 0점 아님"})
     headers = ("영역", "Process", "People", "Data", "Technology", "System Evidence", "인터뷰 평균", "괴리", "최종 점수", "Level", "상태")
     append(63, dict(zip("BCDEFGHIJKL", headers, strict=True)))
