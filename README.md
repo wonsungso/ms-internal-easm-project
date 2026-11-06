@@ -221,6 +221,8 @@ bash setup.sh cleanup-plan   # 삭제 대상 조회만
 bash setup.sh cleanup-apply  # 진단 앱·SP·해당 역할 할당 삭제, 미사용 진단 역할만 삭제
 ```
 
+- 역할 삭제 확인이 지연되면 잠시 후 `cleanup-plan`으로 확인하고 `cleanup-apply`를 재실행합니다. 이미 삭제한 앱·SP는 다시 생성하지 않습니다.
+
 | 담당 | 정리할 항목 | 수행 방법 |
 | --- | --- | --- |
 | 고객 | 진단 SP의 Azure 역할 할당 | 정리 스크립트가 승인 구독 IAM의 해당 SP 할당을 먼저 회수하고 잔여 여부 확인 |

@@ -34,6 +34,8 @@ class FakeCLI:
         self.name = "wasmagent-diagnostic"
         self.eligible = False
         self.deny_pim = False
+        self.role_delete_requested = False
+        self.delayed_role_reads = 0
         self.assignments = [{
             "id": f"/subscriptions/{SID}/providers/Microsoft.Authorization/roleAssignments/target",
             "principalId": PRINCIPAL,
@@ -58,11 +60,15 @@ class FakeCLI:
             return deepcopy(self.assignments)
         if args[:3] == ("role", "definition", "list"):
             spec = role_spec([SID])
+            visible = self.role
+            if self.role_delete_requested and self.delayed_role_reads > 0:
+                visible = True
+                self.delayed_role_reads -= 1
             return [{
                 "name": ROLE, "roleName": spec["Name"], "roleType": "CustomRole",
                 "assignableScopes": spec["AssignableScopes"],
                 "permissions": [{"dataActions": spec["DataActions"]}],
-            }] if self.role else []
+            }] if visible else []
         if args[:3] == ("rest", "--method", "GET"):
             if self.deny_pim:
                 raise RuntimeError("PIM permission denied")
@@ -79,6 +85,7 @@ class FakeCLI:
             return None
         if args[:3] == ("role", "definition", "delete"):
             self.role = False
+            self.role_delete_requested = True
             return None
         raise AssertionError(args)
 
@@ -212,3 +219,50 @@ def test_future_eligibility_schedule_also_prevents_role_deletion() -> None:
     ]
     assert cleanup.eligible_role_usage(cli, SID, ROLE) is True
     assert "roleEligibilitySchedules?" in cli.run.call_args.args[-1]
+
+
+def test_role_deletion_waits_for_eventual_consistency_without_repeating_delete(target: dict) -> None:
+    cli = FakeCLI()
+    cli.delayed_role_reads = 3
+    with patch.object(cleanup.time, "sleep") as sleep:
+        result = cleanup.execute(cli, target, True)
+    assert result["custom_role"] == "deleted"
+    assert sleep.call_count == 3
+    assert sum(call[:3] == ("role", "definition", "delete") for call in cli.calls) == 1
+
+
+def test_persistent_role_visibility_is_not_reported_as_success(target: dict, tmp_path: Path) -> None:
+    cli = FakeCLI()
+    cli.delayed_role_reads = 100
+    source, receipt = tmp_path / "setup.json", tmp_path / "cleanup-result.json"
+    source.write_text(json.dumps(target), encoding="utf-8")
+    with patch.object(cleanup, "AzureCLI", return_value=cli), patch.object(cleanup.time, "sleep") as sleep:
+        assert cleanup.main([
+            "--config-file", str(source), "--result-file", str(receipt), "--apply",
+        ]) == 1
+    assert sleep.call_count == 5
+    assert not cli.app and not cli.sp and not cli.assignments
+    assert not receipt.exists()
+    assert json.loads(source.read_text(encoding="utf-8")) == target
+    assert sum(call[:3] == ("role", "definition", "delete") for call in cli.calls) == 1
+
+
+def test_role_deletion_is_verified_across_all_approved_subscriptions() -> None:
+    from unittest.mock import Mock
+
+    other_sid = "22222222-2222-4222-8222-222222222222"
+    cli = Mock()
+    cli.run.side_effect = [[], [{"name": ROLE}], [], []]
+    with patch.object(cleanup.time, "sleep") as sleep:
+        cleanup.wait_for_custom_role_deletion(cli, ROLE, [SID, other_sid])
+    assert [call.args[-1] for call in cli.run.call_args_list] == [SID, other_sid, SID, other_sid]
+    sleep.assert_called_once_with(2)
+
+
+def test_role_deletion_lookup_error_is_not_treated_as_absence() -> None:
+    from unittest.mock import Mock
+
+    cli = Mock()
+    cli.run.side_effect = RuntimeError("permission denied")
+    with pytest.raises(RuntimeError, match="permission denied"):
+        cleanup.wait_for_custom_role_deletion(cli, ROLE, [SID])

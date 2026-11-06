@@ -136,6 +136,26 @@ def unused_custom_role(
     return role, "unused"
 
 
+def wait_for_custom_role_deletion(cli: AzureCLI, role_id: str, subscriptions: list[str]) -> None:
+    for attempt in range(6):
+        remaining = []
+        for sid in subscriptions:
+            rows = cli.run("role", "definition", "list", "--name", role_id, "--subscription", sid)
+            if not isinstance(rows, list) or any(row.get("name", "").lower() != role_id.lower() for row in rows):
+                raise ValueError("사용자 지정 역할 삭제 확인 응답이 예상 ID와 다릅니다.")
+            if rows:
+                remaining.append(sid)
+        if not remaining:
+            return
+        if attempt < 5:
+            print(f"사용자 지정 역할 삭제 반영 대기: {attempt + 1}/6", flush=True)
+            time.sleep(min(2 ** (attempt + 1), 15))
+    raise RuntimeError(
+        "진단 앱·SP·역할 할당 삭제는 확인됐지만 사용자 지정 역할 삭제 확인이 지연되고 있습니다. "
+        "잠시 후 cleanup-plan으로 확인하고 cleanup-apply를 재실행하세요. 역할 삭제 완료로 처리하지 않았습니다."
+    )
+
+
 def execute(cli: AzureCLI, target: dict[str, Any], apply: bool) -> dict[str, Any]:
     if cli.run("account", "show").get("tenantId", "").lower() != target["tenant_id"]:
         raise ValueError("로그인 테넌트가 setup.json과 다릅니다.")
@@ -177,8 +197,7 @@ def execute(cli: AzureCLI, target: dict[str, Any], apply: bool) -> dict[str, Any
     if role is not None and role_status == "unused":
         sid = target["subscription_ids"][0]
         cli.run("role", "definition", "delete", "--name", role["name"], "--subscription", sid)
-        if cli.run("role", "definition", "list", "--name", role["name"], "--subscription", sid):
-            raise RuntimeError("사용자 지정 역할 삭제 완료를 확인하지 못했습니다.")
+        wait_for_custom_role_deletion(cli, role["name"], target["subscription_ids"])
         role_status = "deleted"
     summary.update({
         "verified_at": datetime.now(UTC).isoformat(), "role_assignments": 0,
@@ -206,7 +225,7 @@ def main(argv: list[str] | None = None) -> int:
             args.result_file.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
         return 0
     except (ValueError, KeyError, TypeError, RuntimeError, OSError) as exc:
-        print(f"정리 중단: {exc}. 완료로 처리하지 않았습니다.", file=sys.stderr)
+        print(f"정리 중단: {exc} 정리 완료로 처리하지 않았습니다.", file=sys.stderr)
         return 1
 
 
