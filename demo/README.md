@@ -62,6 +62,7 @@ python -m demo.diagnostics codespace --codespace '<Codespace 이름>' --apply
 - `.wasm-agent/demo/lab.json`의 호스트별 `chat_url`을 엽니다. 기본 허용자는 배포를 실행한 관리자 1명이며 다른 사용자를 자동 추가하지 않습니다.
 - Agent 선택 → 질문 입력 → **질문 보내기**를 사용합니다. 각 호스트는 Foundry 8개와 자기 LangChain 1개를 보여주므로 화면의 중복 목록을 추가 Agent로 세지 않습니다.
 - App Service 로그인·동일 테넌트·허용 사용자 검증을 적용합니다. 서버는 User Assigned MI 연합 인증을 사용하며 client secret을 만들지 않습니다. 모델 호출 주체는 웹 앱 MI로, 진단 SP와 다릅니다.
+- 인바운드 경계 데모는 App Service 1개에 승인된 공인 IP 대역 허용과 기본 거부를 적용합니다. 허용 대역 밖에서는 로그인·`/health` 접근도 차단되며, SCM 설정과 나머지 워크로드는 유지합니다. 실제 적용 기록은 `.wasm-agent/demo/network-boundary-20261109.json`에서 확인합니다.
 - 동시 호출 1개, 사용자별 분당 10회·호스트별 하루 100회, 메시지 2,000자·대화 8,000자·10개 메시지·응답 256토큰으로 제한합니다. 일일 카운트는 재시작 후 유지되지만 비용 상한을 보장하지 않습니다.
 - 질문·답변·사용자 ID는 앱 로그에 쓰지 않고 완료 이벤트·Agent ID·토큰 수만 기록합니다. `/health` 조회는 모델을 호출하지 않으며 비로그인 채팅은 차단합니다.
 - Linux CPython 3.11 wheel을 사전 패키징합니다. 배포 ZIP에는 [app.py](app.py)·[catalog.json](catalog.json)·[chat.html](chat.html)과 의존성만 넣고 관리자 코드·설정·테스트는 제외합니다. 새 Kudu 배포 ID의 완료와 실제 모델 응답을 각각 검증합니다.

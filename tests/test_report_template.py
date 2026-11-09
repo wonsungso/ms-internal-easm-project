@@ -14,7 +14,7 @@ from openpyxl.cell.rich_text import CellRichText, TextBlock
 from wasm_agent import report_template
 from wasm_agent.models import DEFAULT_TAGS, Collection, Finding, load_criteria
 from wasm_agent.proposals import evaluate_proposals
-from wasm_agent.report_excel import write_workbook
+from wasm_agent.report_excel import _emphasize_numbers, write_workbook
 from wasm_agent.report_template import CRITERIA_SHEET, RESULT_SHEET, assessment_template_path
 
 
@@ -56,7 +56,7 @@ def test_result_copies_a_through_f_exactly_and_maps_by_code(output: Path) -> Non
     book = load_workbook(output)
     source, result = book[CRITERIA_SHEET], book[RESULT_SHEET]
     assert book.active.title == RESULT_SHEET
-    assert {str(merged) for merged in result.merged_cells.ranges} == {"B2:M2", "B3:M3"}
+    assert {str(merged) for merged in result.merged_cells.ranges} == {"B2:N2", "B3:N3"}
     for index, sheet in enumerate(book, 1):
         assert sheet.title.startswith(f"{index}. ")
     for row in range(1, source.max_row + 1):
@@ -82,6 +82,23 @@ def test_result_copies_a_through_f_exactly_and_maps_by_code(output: Path) -> Non
     ]
 
 
+def test_result_preserves_bold_titles_and_regular_bullet_descriptions(output: Path) -> None:
+    book = load_workbook(output, rich_text=True)
+    implemented = load_criteria()["items"]
+    for row in range(5, book[RESULT_SHEET].max_row + 1):
+        source = book[CRITERIA_SHEET].cell(row, 6).value
+        result = book[RESULT_SHEET].cell(row, 6).value
+        assert result == source
+        if book[RESULT_SHEET].cell(row, 2).value not in implemented:
+            assert isinstance(result, str)
+            assert "\n- " not in result
+            continue
+        assert isinstance(result, CellRichText)
+        assert result[0].font.b is True
+        assert result[1].font.b is False
+        assert all(line.startswith("- ") for line in result[1].text.splitlines()[1:])
+
+
 def test_unknown_result_code_fails_explicitly_without_writing(tmp_path: Path) -> None:
     path = tmp_path / "invalid.xlsx"
     with pytest.raises(ValueError, match="템플릿에 없는 SE 코드"):
@@ -104,7 +121,7 @@ def test_historical_grade_is_not_described_with_new_api_thresholds(tmp_path: Pat
     sheet = load_workbook(path)[RESULT_SHEET]
     row = next(row for row in range(5, sheet.max_row + 1) if sheet.cell(row, 2).value == "DS-SY-05")
     assert "수집 당시 기준의 등급" in sheet.cell(row, 9).value
-    assert sheet.cell(row, 11).value == "수집 당시 다음 단계"
+    assert sheet.cell(row, 12).value == "수집 당시 다음 단계"
     assert finding.level == "L2"
 
 
@@ -130,18 +147,20 @@ def test_all_findings_link_to_the_matching_detail_row_and_preserve_existing_metr
     for row in range(5, results.max_row + 1):
         code = results.cell(row, 2).value
         evidence = results.cell(row, 10)
+        link = results.cell(row, 11)
+        assert evidence.hyperlink is None
         if code not in detail_rows:
-            assert evidence.hyperlink is None
+            assert link.value is None and link.hyperlink is None
             continue
-        assert isinstance(evidence.value, CellRichText)
-        assert str(evidence.value).endswith("\n수집결과")
+        assert isinstance(evidence.value, (str, CellRichText))
+        assert evidence.font.bold is False
+        assert not str(evidence.value).endswith("\n수집결과")
         assert "보존할 판정 근거" in str(evidence.value)
-        label = evidence.value[-1]
-        assert isinstance(label, TextBlock)
-        assert label.text == "\n수집결과" and label.font.u == "single"
-        assert not any(isinstance(part, str) and part == "\n" for part in evidence.value)
-        assert evidence.hyperlink.target is None and evidence.hyperlink.id is None
-        assert evidence.hyperlink.location == f"'7. 수집결과 근거'!A{detail_rows[code]}"
+        assert link.value == "수집결과" and link.font.u == "single"
+        assert link.font.color.rgb == "FF0563C1"
+        assert link.alignment.horizontal == "center"
+        assert link.hyperlink.target is None and link.hyperlink.id is None
+        assert link.hyperlink.location == f"'7. 수집결과 근거'!A{detail_rows[code]}"
         linked += 1
     assert linked == 22
 
@@ -163,13 +182,13 @@ def test_result_level_display_preserves_machine_grade(tmp_path: Path, level: str
         "판정 보류" if level == "N/A" else f"Level {level[1:]} ({source.cell(row, 6 + int(level[1:])).value})"
     )
     assert finding.level == level
-    score = sheet.cell(row, 12)
+    score = sheet.cell(row, 13)
     assert score.value == (None if level == "N/A" else int(level[1:]))
     if level != "N/A":
         assert score.data_type == "n"
     rich_sheet = load_workbook(path, rich_text=True)[RESULT_SHEET]
     judgment = rich_sheet.cell(row, 9).value
-    action = rich_sheet.cell(row, 11).value
+    action = rich_sheet.cell(row, 12).value
     if level == "N/A":
         assert judgment == "판정 보류" and action == finding.next_step
     else:
@@ -178,7 +197,8 @@ def test_result_level_display_preserves_machine_grade(tmp_path: Path, level: str
             ("Level " + level[1:], True),
         ]
         if level == "L5":
-            assert action == finding.next_step and "Level 6" not in str(action)
+            assert action is None
+            assert finding.next_step == "L5 운영 증적을 지속 확인"
         else:
             next_level = int(level[1:]) + 1
             assert isinstance(action, CellRichText)
@@ -188,27 +208,45 @@ def test_result_level_display_preserves_machine_grade(tmp_path: Path, level: str
             ]
 
 
-def test_evidence_label_only_is_bold_and_cause_column_is_removed(tmp_path: Path) -> None:
+@pytest.mark.parametrize(("text", "bold"), [
+    ("API 충족 1 / 대상 3, 비율 33.33%", ["1", "3", "33.33%"]),
+    ("비용 -1,234.50, 보존 90일, 비율 0/0개", ["-1,234.50", "90", "0/0"]),
+    ("westus2, DS-SY-07, L4, /subscriptions/123, 2026-11-09", []),
+    ("수집 결과 없음", []),
+    (" 1\n2 ", ["1", "2"]),
+])
+def test_evidence_emphasizes_numbers_without_changing_text(text: str, bold: list[str]) -> None:
+    content = _emphasize_numbers(text)
+    assert str(content) == text
+    assert [
+        part.text.strip() for part in content if isinstance(part, TextBlock) and part.font.b
+    ] == bold
+    assert not any(isinstance(part, str) and part.isspace() for part in content)
+
+
+def test_only_evidence_numbers_are_bold_and_cause_column_is_removed(tmp_path: Path) -> None:
     path = tmp_path / "rich.xlsx"
     data = Collection(collected_at=datetime.now(UTC), facts={"deployment_inventory_complete": True})
     write_workbook(data, [Finding(
         se_code="DS-SY-06", level="L2", scope="partial", metric_value=0,
-        rationale="실제 근거", reason="permission_denied",
+        rationale="실제 근거: 충족 1 / 대상 3, 비율 33.33%", reason="permission_denied",
     )], path)
     sheet = load_workbook(path, rich_text=True)[RESULT_SHEET]
     row = next(row for row in range(5, sheet.max_row + 1) if sheet.cell(row, 2).value == "DS-SY-06")
-    assert sheet.max_column == 13
-    assert [sheet.cell(4, column).value for column in range(9, 14)] == [
-        "판정", "근거", "다음조치", "평가 점수\n(1~5)", "검토메모",
+    assert sheet.max_column == 14
+    assert [sheet.cell(4, column).value for column in range(9, 15)] == [
+        "판정", "근거", "수집결과", "다음조치", "평가 점수\n(1~5)", "검토메모",
     ]
     evidence = sheet.cell(row, 10).value
     assert isinstance(evidence, CellRichText)
     bold = [part for part in evidence if isinstance(part, TextBlock) and part.font.b]
-    assert [part.text for part in bold] == ["수집 결과:", "판정 근거:"]
+    assert {"1", "3", "33.33%"} <= {part.text for part in bold}
+    assert all(re.fullmatch(r"[0-9.,%/ +\-]+", part.text) for part in bold)
+    assert sheet.cell(row, 10).font.bold is False
     assert "평가 범위:" not in str(evidence) and "세부 조회 상태:" not in str(evidence)
     assert "조회 권한 부족" in str(evidence)
     assert "실제 근거" in str(evidence)
-    assert sheet.cell(row, 12).alignment.horizontal == "center"
+    assert sheet.cell(row, 13).alignment.horizontal == "center"
 
 
 def test_installed_template_location_is_supported(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

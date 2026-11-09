@@ -17,6 +17,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from openpyxl import load_workbook
 
+from scripts.assessment_descriptions import ITEM_DETAILS
 from scripts.proposal_levels import LEVELS
 from wasm_agent.models import load_criteria
 from wasm_agent.proposals import DOMAINS, PRODUCTS, TITLES
@@ -311,6 +312,24 @@ def replace_text(row: ET.Element, column: str, text: str) -> None:
     row.remove(cell)
 
 
+def replace_question(row: ET.Element, title: str, description: str) -> None:
+    ref = f"F{row.get('r')}"
+    cell = row.find(f"{Q}c[@r='{ref}']")
+    if cell is None:
+        raise ValueError(f"필수 셀 없음: {ref}")
+    replacement = text_cell(ref, cell.get("s", "0"), "")
+    inline = replacement.find(f"{Q}is")
+    inline.clear()
+    bullets = "\n".join("- " + point for point in description.splitlines())
+    for text, bold in ((title, "1"), ("\n" + bullets, "0")):
+        run = ET.SubElement(inline, f"{Q}r")
+        properties = ET.SubElement(run, f"{Q}rPr")
+        ET.SubElement(properties, f"{Q}b", {"val": bold})
+        ET.SubElement(run, f"{Q}t", {"{http://www.w3.org/XML/1998/namespace}space": "preserve"}).text = text
+    row.insert(list(row).index(cell), replacement)
+    row.remove(cell)
+
+
 def review_parts(archive: ZipFile, patched: dict[str, bytes]) -> dict[str, bytes]:
     strings = shared_strings(archive)
 
@@ -383,11 +402,14 @@ def review_parts(archive: ZipFile, patched: dict[str, bytes]) -> dict[str, bytes
             domain = value(row.find(f"{Q}c[@r='C{number}']"))
             perspective = value(row.find(f"{Q}c[@r='E{number}']"))
             groups.setdefault((domain, perspective), []).append(number)
+            if code in criteria:
+                if code not in ITEM_DETAILS:
+                    raise ValueError(f"수집 항목 설명이 없습니다: {code}")
+                replace_question(row, criteria[code]["title"], ITEM_DETAILS[code])
         if code not in criteria and code not in MANUAL_LEVELS:
             continue
         seen.add(code)
         if code in criteria:
-            replace_text(row, "F", criteria[code]["title"])
             replace_text(row, "L", criteria[code]["evidence"])
         levels = criteria[code]["levels"].values() if code in criteria else MANUAL_LEVELS[code]
         for column, text in zip("GHIJK", levels, strict=True):
@@ -447,7 +469,7 @@ def review_parts(archive: ZipFile, patched: dict[str, bytes]) -> dict[str, bytes
                 product = PRODUCTS.get(code, "Microsoft Entra Agent ID" if criteria[code].get("requires") else "Azure API")
                 summaries.append(f"▸ {code} {criteria[code]['title']}\n  [{product}]")
             elif code in MANUAL_LEVELS and value(row.find(f"{Q}c[@r='C{number}']")) == domain:
-                title = value(row.find(f"{Q}c[@r='F{number}']"))
+                title = value(row.find(f"{Q}c[@r='F{number}']")).split("\n", 1)[0]
                 summaries.append(f"▸ {code} {title}")
         if summaries and summary_row is not None:
             replace_text(summary_row, column, "\n\n".join(summaries))

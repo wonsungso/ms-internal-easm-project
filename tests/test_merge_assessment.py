@@ -9,7 +9,9 @@ from zipfile import ZipFile
 
 import pytest
 from openpyxl import load_workbook
+from openpyxl.cell.rich_text import CellRichText, TextBlock
 
+from scripts.assessment_descriptions import ITEM_DETAILS
 from scripts.merge_assessment import (
     ROOT,
     SHEET_CRITERIA,
@@ -92,7 +94,8 @@ def test_merged_workbook_keeps_original_and_adds_proposals_in_domain_blocks(
     assert len(kept) == len(original_rows)
     for number, (old, new) in enumerate(zip(original_rows, kept, strict=True), 1):
         if number >= 5 and "-SY-" not in str(old[1]):
-            assert new[:6] == old[:6]
+            assert new[:5] == old[:5]
+            assert new[5].startswith(old[5])
     seen = {}
     for row in merged.iter_rows(min_row=5):
         code = row[1].value
@@ -127,7 +130,7 @@ def test_delivered_workbook_preserves_user_formatting_and_is_idempotent(tmp_path
         assert old.namelist() == new.namelist()
         for name in UNTOUCHED:
             assert old.read(name) == new.read(name), name
-    before, after = load_workbook(delivered), load_workbook(rebuilt)
+    before, after = load_workbook(delivered, rich_text=True), load_workbook(rebuilt, rich_text=True)
     for old_sheet, new_sheet in zip(before, after, strict=True):
         for row in old_sheet:
             for cell in row:
@@ -152,6 +155,32 @@ def test_delivered_criteria_and_scoring_include_every_system_evidence() -> None:
     assert "실행 로그" in rows["OE-SY-22"][5].value
     assert "관리 ID" in rows["OE-SY-23"][5].value
     assert "조건부 접근" not in str(book.worksheets[1]["H8"].value)
+
+
+def test_only_implemented_evidence_has_bold_titles_and_bullet_descriptions() -> None:
+    book = load_workbook(ROOT / "docs" / "assessment-result-template.xlsx", rich_text=True)
+    sheet = book[SOURCE_SHEET]
+    rows = {row[1].value: row for row in sheet.iter_rows(min_row=5) if row[1].value}
+    assert len(rows) == 85
+    assert len(ITEM_DETAILS) == 22
+    assert ITEM_DETAILS.keys() == load_criteria()["items"].keys()
+    for code, row in rows.items():
+        content = row[5].value
+        if code not in ITEM_DETAILS:
+            assert isinstance(content, str)
+            assert "\n- " not in content
+            continue
+        assert isinstance(content, CellRichText)
+        assert len(content) == 2 and all(isinstance(part, TextBlock) for part in content)
+        assert content[0].text and content[0].font.b is True
+        assert content[1].font.b is False
+        bullets = content[1].text.splitlines()[1:]
+        assert bullets and all(line.startswith("- ") for line in bullets)
+        assert "\n".join(line[2:] for line in bullets) == ITEM_DETAILS[code]
+        assert not any(line.endswith(("합니다.", "않습니다.", "아닙니다.")) for line in bullets)
+        assert row[5].alignment.wrap_text
+    summary = "\n".join(str(cell.value) for row in book.worksheets[1] for cell in row)
+    assert not any(detail in summary for detail in ITEM_DETAILS.values())
 
 
 def test_legacy_audit_score_and_notes_follow_the_audit_not_the_removed_risk_item(

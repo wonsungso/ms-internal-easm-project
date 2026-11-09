@@ -30,7 +30,7 @@ def assessment_template_path() -> Path:
 
 def load_report_template() -> tuple[Workbook, bytes]:
     content = assessment_template_path().read_bytes()
-    book = load_workbook(BytesIO(content), keep_links=False)
+    book = load_workbook(BytesIO(content), keep_links=False, rich_text=True)
     if len(book.worksheets) != 5 or CRITERIA_SHEET not in book.sheetnames:
         raise ValueError("평가 결과 템플릿에는 원본 1~5번 시트와 질문별 평가 기준이 필요합니다.")
     return book, content

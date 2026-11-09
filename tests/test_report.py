@@ -521,12 +521,12 @@ def test_workbook_sheets_tables_borders_and_validation(tmp_path: Path) -> None:
     assert validations[0].type == "whole" and validations[0].operator == "between"
     assert validations[0].formula1 == "1" and validations[0].formula2 == "5"
     assert validations[0].allow_blank is True
-    assert validations[0].showErrorMessage is True and "L5" in validations[0].sqref
+    assert validations[0].showErrorMessage is True and "M5" in validations[0].sqref
     checklist = book[RESULT_SHEET]
-    assert checklist["L4"].value == "평가 점수\n(1~5)" and checklist["B4"].value == "No"
+    assert checklist["M4"].value == "평가 점수\n(1~5)" and checklist["B4"].value == "No"
     assert checklist["I4"].font.bold is True
-    assert checklist.freeze_panes == "G5" and checklist.auto_filter.ref == "B4:M89"
-    assert all(checklist.cell(row, 12).alignment.horizontal == "center" for row in range(4, 90))
+    assert checklist.freeze_panes == "G5" and checklist.auto_filter.ref == "B4:N89"
+    assert all(checklist.cell(row, 13).alignment.horizontal == "center" for row in range(4, 90))
     for row in range(5, checklist.max_row + 1):
         if checklist.cell(row, 7).value == "수집됨":
             assert checklist.row_dimensions[row].height == 110
@@ -596,10 +596,10 @@ def test_result_categories_do_not_hide_partial_collection_or_failed_queries(tmp_
     assert "일부 수집" in sheet.cell(rows["BI-SY-11"], 10).value
     assert sheet.cell(rows["DS-SY-06"], 7).value == "수집하지 않음"
     assert "조회 권한 부족" in sheet.cell(rows["DS-SY-06"], 10).value
-    assert sheet.cell(rows["DS-SY-06"], 12).value is None
+    assert sheet.cell(rows["DS-SY-06"], 13).value is None
     assert sheet.cell(rows["DM-PR-01"], 7).value == "인터뷰 필요"
-    assert sheet.cell(rows["DM-PR-01"], 12).value is None
-    assert sheet.cell(rows["DM-SY-01"], 12).value is None
+    assert sheet.cell(rows["DM-PR-01"], 13).value is None
+    assert sheet.cell(rows["DM-SY-01"], 13).value is None
 
 
 def test_merged_raw_preserves_evidence_references_without_a_reference_sheet(tmp_path: Path) -> None:
@@ -650,14 +650,14 @@ def test_user_strings_never_become_formulas_or_external_links(tmp_path: Path, te
     book = load_workbook(path)
     agent = raw_record(book, "Agent Raw 데이터")
     assert agent["agent_name"].value == text and agent["agent_name"].data_type == "s"
-    assert record(book[RESULT_SHEET])["근거"].value.endswith("판정 근거: " + text + "\n수집결과")
+    assert record(book[RESULT_SHEET])["근거"].value.endswith("판정 근거: " + text)
     assert json.loads(raw_record(book, "Agent Raw 데이터")["evidence_refs"].value) == [text]
     amount = raw_record(book, "비용 Raw 데이터")["amount"]
     assert amount.value == -12.5 and amount.data_type == "n"
     for cell in all_cells(book):
         assert cell.data_type != "f"
         if cell.hyperlink is not None:
-            assert cell.parent.title == RESULT_SHEET and cell.column == 10
+            assert cell.parent.title == RESULT_SHEET and cell.column == 11
             assert cell.hyperlink.target is None
             assert cell.hyperlink.location.startswith("'7. 수집결과 근거'!A")
     with ZipFile(path) as archive:

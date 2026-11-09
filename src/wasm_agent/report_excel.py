@@ -158,6 +158,34 @@ def _value(value: Any) -> Any:
     return value
 
 
+def _emphasize_numbers(text: str) -> CellRichText:
+    number = r"[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?"
+    pattern = rf"(?<![A-Za-z0-9_./:-]){number}(?:\s*/\s*{number})?%?(?![A-Za-z0-9_./:%-])"
+    content = CellRichText()
+    position = 0
+    for match in re.finditer(pattern, text):
+        prefix = text[position:match.start()]
+        if prefix:
+            if prefix.isspace() and content:
+                previous = content[-1]
+                if isinstance(previous, TextBlock):
+                    previous.text += prefix
+                else:
+                    content[-1] = previous + prefix
+            elif not prefix.isspace():
+                content.append(prefix)
+        leading = prefix if prefix.isspace() and not content else ""
+        content.append(TextBlock(InlineFont(b=True), leading + match.group()))
+        position = match.end()
+    suffix = text[position:]
+    if suffix:
+        if suffix.isspace() and content and isinstance(content[-1], TextBlock):
+            content[-1].text += suffix
+        else:
+            content.append(suffix)
+    return content
+
+
 def _cell(sheet: Worksheet, row: int, column: int, value: Any) -> None:
     value = _value(value)
     if isinstance(value, str) and len(value) > 32767:
@@ -340,23 +368,18 @@ def _result_sheet(book: Workbook, data: Collection, findings: list[Finding]) -> 
     source = book[CRITERIA_SHEET]
     sheet = book.copy_worksheet(source)
     sheet.title = RESULT_SHEET
-    for merged in list(sheet.merged_cells.ranges):
-        if merged.max_col > 9:
-            sheet.unmerge_cells(str(merged))
-            sheet.merge_cells(
-                start_row=merged.min_row, end_row=merged.max_row,
-                start_column=merged.min_col, end_column=merged.max_col - 1,
-            )
     sheet.delete_cols(10)
+    sheet.insert_cols(11)
     sheet.views = deepcopy(source.views)
     sheet.sheet_view.tabSelected = True
     sheet.freeze_panes = "G5"
-    sheet.auto_filter.ref = f"B4:M{source.max_row}"
+    sheet.auto_filter.ref = f"B4:N{source.max_row}"
     sheet.print_title_rows = "1:4"
-    headers = ("확인상태", "지표", "판정", "근거", "다음조치", source.cell(4, 13).value, "검토메모")
+    headers = ("확인상태", "지표", "판정", "근거", "수집결과", "다음조치", source.cell(4, 13).value, "검토메모")
     for column, header in enumerate(headers, 7):
         sheet.cell(4, column, header)
-    sheet.cell(4, 12)._style = copy(source.cell(4, 13)._style)
+    sheet.cell(4, 11)._style = copy(sheet.cell(4, 10)._style)
+    sheet.cell(4, 13)._style = copy(source.cell(4, 13)._style)
     header_font = copy(sheet.cell(4, 9).font)
     header_font.bold = True
     sheet.cell(4, 9).font = header_font
@@ -366,7 +389,7 @@ def _result_sheet(book: Workbook, data: Collection, findings: list[Finding]) -> 
     rows = {}
     for number in range(5, source.max_row + 1):
         code = source.cell(number, 2).value
-        for column in range(7, 14):
+        for column in range(7, 15):
             sheet.cell(number, column).value = None
         if not code:
             continue
@@ -377,7 +400,7 @@ def _result_sheet(book: Workbook, data: Collection, findings: list[Finding]) -> 
                 None, None,
                 "자동 수집 결과 없음 또는 자동 수집 범위 밖 - 수동 확인 필요"
                 if "-SY-" in str(code) else "인터뷰를 통해 확인하는 수동 심사 항목",
-                None, None, None,
+                None, None, None, None,
             )
         else:
             rows[finding.se_code] = number
@@ -401,13 +424,14 @@ def _result_sheet(book: Workbook, data: Collection, findings: list[Finding]) -> 
                 ("수집 결과: " + readable(summary) + "\n" if summary else "")
                 + ("조회 제한: " + readable(finding.reason) + " (" + status + ")\n" if finding.reason else "")
                 + "판정 근거: " + readable(finding.rationale),
-                readable(finding.next_step),
+                None,
+                None if finding.level == "L5" else readable(finding.next_step),
                 int(finding.level[1:]) if finding.level != "N/A"
                 and status in ("수집됨", "일부 수집", "증적 확인") else None,
                 None,
             )
         for column, value in enumerate(values, 7):
-            style = copy(source.cell(number, column + (column >= 10))._style)
+            style = copy(source.cell(number, column + (column == 10))._style)
             _cell(sheet, number, column, value)
             sheet.cell(number, column)._style = style
         if finding is not None and finding.level != "N/A":
@@ -422,32 +446,25 @@ def _result_sheet(book: Workbook, data: Collection, findings: list[Finding]) -> 
                 condition = source.cell(number, 6 + next_level).value
                 if not isinstance(condition, str) or not condition.strip():
                     raise ValueError(f"{finding.se_code}: L{next_level} 평가기준 문장이 없습니다.")
-                sheet.cell(number, 11).value = CellRichText(
+                sheet.cell(number, 12).value = CellRichText(
                     TextBlock(InlineFont(b=True), f"Level {next_level}"), ": " + condition,
                 )
         evidence = sheet.cell(number, 10)
         if finding is not None and isinstance(evidence.value, str):
-            rationale = readable(finding.rationale)
-            prefix = evidence.value[:-(len("판정 근거: ") + len(rationale))]
-            content = CellRichText()
-            if prefix.startswith("수집 결과:"):
-                content.append(TextBlock(InlineFont(b=True), "수집 결과:"))
-                prefix = prefix[len("수집 결과:"):]
-            if prefix:
-                content.append(prefix)
-            content.append(TextBlock(InlineFont(b=True), "판정 근거:"))
-            content.append(" " + rationale)
-            evidence.value = content
-        sheet.cell(number, 12).alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            evidence.value = _emphasize_numbers(evidence.value)
+            font = copy(evidence.font)
+            font.bold = False
+            evidence.font = font
+        sheet.cell(number, 11).alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        sheet.cell(number, 13).alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         if sheet.cell(number, 7).value == "수집됨":
             sheet.row_dimensions[number].height = 110
-    sheet.cell(4, 12).alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    sheet.cell(4, 11).alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    sheet.cell(4, 13).alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
     if rows.keys() != by_code.keys():
         raise ValueError("평가 결과 템플릿에 없는 SE 코드가 수집 결과에 포함되었습니다.")
-    for column, width in enumerate((16, 25, 55, 90, 60, 18, 30), 7):
+    for column, width in enumerate((16, 25, 55, 90, 14, 60, 18, 30), 7):
         sheet.column_dimensions[get_column_letter(column)].width = width
-    if "N" in sheet.column_dimensions:
-        del sheet.column_dimensions["N"]
     validation = DataValidation(
         type="whole", operator="between", formula1="1", formula2="5", allow_blank=True,
     )
@@ -456,7 +473,7 @@ def _result_sheet(book: Workbook, data: Collection, findings: list[Finding]) -> 
     validation.showErrorMessage = True
     validation.errorStyle = "stop"
     sheet.add_data_validation(validation)
-    validation.add(f"L5:L{source.max_row}")
+    validation.add(f"M5:M{source.max_row}")
     book.active = sheet
     return rows
 
@@ -505,21 +522,17 @@ def write_workbook(
         code = item["SE 코드"]
         if code not in result_rows:
             continue
-        cell = book[RESULT_SHEET].cell(result_rows[code], 10)
-        text = str(cell.value) + "\n수집결과"
-        if len(text) > 32767:
-            raise ValueError(f"Excel 셀 길이 오류: {RESULT_SHEET}!{cell.coordinate} - {len(text)}자, 최대 32767자")
-        content = cell.value if isinstance(cell.value, CellRichText) else CellRichText(str(cell.value))
-        # Excel rejects a separate whitespace-only run before this link label.
-        content.append(TextBlock(InlineFont(
-            rFont=cell.font.name, sz=cell.font.sz, color="FF0563C1", u="single",
-        ), "\n수집결과"))
-        cell.value = content
+        cell = book[RESULT_SHEET].cell(result_rows[code], 11)
+        cell.value = "수집결과"
+        font = copy(cell.font)
+        font.color = "FF0563C1"
+        font.underline = "single"
+        cell.font = font
         cell.hyperlink = Hyperlink(
             ref=cell.coordinate, location=f"'{proposals_sheet.title}'!A{row}",
             display="수집결과", tooltip=f"{code} 수집결과 근거로 이동",
         )
-    _cell(proposals_sheet, 1, 1, "수집된 설정·값·건수와 검증 한계. 다음조치는 6. 수집 결과의 K열 확인")
+    _cell(proposals_sheet, 1, 1, "수집된 설정·값·건수와 검증 한계. 다음조치는 6. 수집 결과의 L열 확인")
     proposals_sheet.merge_cells("A1:I1")
     proposals_sheet.row_dimensions[1].height = 30
     proposals_sheet.print_title_rows = "1:3"
