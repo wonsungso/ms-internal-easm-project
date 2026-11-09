@@ -216,13 +216,14 @@ def test_collector_records_identity_network_safety_and_policy_facts() -> None:
     assert not any(item.subject.endswith("-other") for item in result.proposal_observations)
     assert observed[("BI-SY-13", "ai_account")]["custom_policy_names"] == ["strict"]
     network = [item.values for item in result.proposal_observations if item.code == "DS-SY-07"]
-    assert {"public_network_access": "Enabled", "default_action": None, "private_endpoints": 0} in network
+    assert any(row["public_network_access"] == "Enabled" and row["default_action"] is None
+               and row["private_endpoints"] == 0 and row["approved_private_endpoints"] == 0 for row in network)
     assert any(item["ip_restrictions"] == 1 and item["https_only"] is True for item in network if "https_only" in item)
     monitoring = [item.values for item in result.proposal_observations if item.code == "OE-SY-24"]
     assert {"kind": "actiongroups", "receivers": {"webhook": 1}} in monitoring
     assert any(item.get("targets_ai") and item.get("has_action_group") for item in monitoring)
     states = {item.values["state"]: item.values["resources"] for item in result.proposal_observations
-              if item.code == "BI-SY-16"}
+              if item.code == "BI-SY-16" and item.kind == "policy_state"}
     assert states == {"Compliant": 1, "NonCompliant": 1}
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
@@ -25,6 +26,7 @@ PROPERTIES_QUERY = (
     " publicNetworkAccess=tostring(properties.publicNetworkAccess),"
     " defaultAction=tostring(properties.networkAcls.defaultAction),"
     " privateEndpoints=array_length(properties.privateEndpointConnections),"
+    " privateConnections=properties.privateEndpointConnections,"
     " disableLocalAuth=tobool(properties.disableLocalAuth), httpsOnly=tobool(properties.httpsOnly),"
     " vnetSubnet=tostring(properties.virtualNetworkSubnetId),"
     " ingressExternal=tobool(properties.configuration.ingress.external),"
@@ -74,15 +76,28 @@ class ProposalCollector:
         return [self.http.last_ref] if self.http.last_ref else []
 
     def graph(self, sid: str, query: str) -> list[dict[str, Any]]:
-        page = self.http.request("POST", GRAPH_URL, body={
-            "subscriptions": [sid], "query": query, "options": {"resultFormat": "objectArray", "$top": 1000},
-        })
-        rows = page.get("data")
-        if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
-            raise AccessError("error", "Resource Graph data 배열 형식 불일치")
-        if str(page.get("resultTruncated", "false")).lower() == "true":
-            raise AccessError("error", "Resource Graph 결과 잘림")
-        return rows
+        rows, seen = [], set()
+        token = None
+        while True:
+            options: dict[str, Any] = {"resultFormat": "objectArray", "$top": 1000}
+            if token:
+                options["$skipToken"] = token
+            page = self.http.request("POST", GRAPH_URL, body={
+                "subscriptions": [sid], "query": query, "options": options,
+            })
+            data = page.get("data")
+            if not isinstance(data, list) or not all(isinstance(row, dict) for row in data):
+                raise AccessError("error", "Resource Graph data 배열 형식 불일치")
+            rows.extend(data)
+            token = page.get("$skipToken")
+            if token:
+                if not isinstance(token, str) or token in seen:
+                    raise AccessError("error", "Resource Graph 페이지 커서 형식 오류·반복")
+                seen.add(token)
+            elif str(page.get("resultTruncated", "false")).lower() == "true":
+                raise AccessError("error", "Resource Graph 결과 잘림")
+            else:
+                return rows
 
     def discover(self, subscriptions: Sequence[str]) -> Collection:
         result = Collection(collected_at=self.now)
@@ -93,6 +108,11 @@ class ProposalCollector:
             ):
                 try:
                     step(sid, result)
+                    result.facts.setdefault({
+                        "OE-SY-23": "proposal_identity_complete", "DS-SY-07": "proposal_network_complete",
+                        "BI-SY-13": "proposal_safety_complete", "OE-SY-24": "proposal_monitoring_complete",
+                        "BI-SY-16": "proposal_policy_subscriptions",
+                    }[name], []).append(sid)
                 except AccessError as exc:
                     result.issues.append(issue(self.http, "proposal_" + name, sid, exc, self.required_roles))
                     result.facts.setdefault("proposal_incomplete", []).append(name)
@@ -167,6 +187,13 @@ class ProposalCollector:
                     "public_network_access": row.get("publicNetworkAccess") or None,
                     "default_action": row.get("defaultAction") or None,
                     "private_endpoints": row.get("privateEndpoints"),
+                    "approved_private_endpoints": sum(
+                        (connection.get("properties") or {}).get("privateLinkServiceConnectionState", {}).get(
+                            "status",
+                        ) == "Approved" for connection in row.get("privateConnections") or []
+                    ) if isinstance(row.get("privateConnections"), list) else (
+                        0 if row.get("privateEndpoints") == 0 else None
+                    ),
                 },
                 evidence_refs=refs,
             ))
@@ -185,6 +212,14 @@ class ProposalCollector:
                         and str(rule.get("action", "")).lower() == "allow"
                     )
                 )
+                allow_all = any(
+                    str(rule.get("action", "")).lower() == "allow"
+                    and str(rule.get("ipAddress", "")).lower() in ("any", "0.0.0.0/0", "::/0")
+                    for rule in rules
+                )
+                default_action = properties.get("ipSecurityRestrictionsDefaultAction")
+                default_deny = default_action == "Deny" if default_action in ("Allow", "Deny") else bool(rules)
+                ip_boundary = default_deny and not allow_all
             result.proposal_observations.append(ProposalObservation(
                 code="DS-SY-07", subscription_id=sid, subject=row["id"], kind="agent_host",
                 values={
@@ -193,6 +228,8 @@ class ProposalCollector:
                     "vnet_integrated": bool(row.get("vnetSubnet")),
                     "ip_restrictions": restrictions,
                     "ingress_external": truthy(row.get("ingressExternal")),
+                    "host_type": row["type"].lower(),
+                    "ip_default_deny": ip_boundary if row["type"].lower() == "microsoft.web/sites" else False,
                 },
                 evidence_refs=self.refs(),
             ))
@@ -215,6 +252,16 @@ class ProposalCollector:
         accounts, _ = self.targets(sid)
         for row in accounts:
             policies = self.http.list_arm(ARM + row["id"] + "/raiPolicies?api-version=2024-10-01")
+            filter_states = {}
+            for policy in policies:
+                entries = (policy.get("properties") or {}).get("contentFilters")
+                if not policy.get("name"):
+                    raise AccessError("error", "필터 정책 이름 누락")
+                filter_states[policy["name"]] = (
+                    any(entry["enabled"] for entry in entries) if isinstance(entries, list) and all(
+                        isinstance(entry, dict) and type(entry.get("enabled")) is bool for entry in entries
+                    ) else None
+                )
             custom = [
                 item for item in policies
                 if (item.get("properties") or {}).get("type") != "SystemManaged"
@@ -230,6 +277,12 @@ class ProposalCollector:
                     "policies": len(policies), "custom_policies": len(custom),
                     "custom_enabled_filters": len(filters),
                     "custom_policy_names": sorted(item.get("name", "") for item in custom),
+                    "enabled_policy_names": sorted(
+                        item["name"] for item in policies if item.get("name")
+                        and any(entry.get("enabled") is True
+                                for entry in (item.get("properties") or {}).get("contentFilters") or [])
+                    ),
+                    "policy_filter_enabled": filter_states,
                 },
                 evidence_refs=self.refs(),
             ))
@@ -239,6 +292,10 @@ class ProposalCollector:
         refs = self.refs()
         accounts, hosts = self.targets(sid)
         ai_ids = [row["id"].lower() for row in (*accounts, *hosts)]
+        groups = {
+            row["id"].lower(): row for row in rows
+            if row["type"].lower().endswith("/actiongroups")
+        }
         for row in rows:
             kind = row["type"].lower().rsplit("/", 1)[-1]
             values: dict[str, Any] = {"kind": kind}
@@ -255,6 +312,47 @@ class ProposalCollector:
                     scope and (ai.startswith(scope.rstrip("/") + "/") or ai == scope)
                     for ai in ai_ids for scope in _scope_list(scopes)
                 )
+                values["target_ids"] = sorted({
+                    ai for ai in ai_ids for scope in _scope_list(scopes)
+                    if ai == scope or ai.startswith(scope.rstrip("/") + "/")
+                })
+                actions = row.get("actions")
+                if isinstance(actions, str):
+                    try:
+                        actions = json.loads(actions) if actions else []
+                    except json.JSONDecodeError as exc:
+                        raise AccessError("error", "경보 actions JSON 형식 불일치") from exc
+                if isinstance(actions, dict):
+                    action_groups = actions.get("actionGroups") or []
+                elif isinstance(actions, list):
+                    action_groups = actions
+                else:
+                    raise AccessError("error", "경보 actions 형식 불일치")
+                if not isinstance(action_groups, list) or not all(
+                    isinstance(action, (str, dict)) for action in action_groups
+                ):
+                    raise AccessError("error", "경보 작업 그룹 목록 형식 불일치")
+                ids = [action if isinstance(action, str) else action.get("actionGroupId") for action in action_groups]
+                resolved = []
+                for identifier in ids:
+                    if not isinstance(identifier, str) or not identifier:
+                        resolved.append(None)
+                        continue
+                    group = groups.get(identifier.lower())
+                    if group is None:
+                        resolved.append(False)
+                        continue
+                    enabled = truthy(group.get("enabled"))
+                    receivers = group.get("receivers")
+                    if enabled is None or not isinstance(receivers, dict):
+                        resolved.append(None)
+                    else:
+                        resolved.append(enabled and any(
+                            count > 0 for count in receivers.values() if type(count) is int
+                        ))
+                values["action_group_resolved"] = (
+                    True if True in resolved else None if None in resolved else False
+                )
             result.proposal_observations.append(ProposalObservation(
                 code="OE-SY-24", subscription_id=sid, subject=row["id"], kind=kind, values=values,
                 evidence_refs=refs,
@@ -267,6 +365,27 @@ class ProposalCollector:
         ))
         rows = self.graph(sid, POLICY_QUERY.format(types=types))
         refs = self.refs()
+        accounts, hosts = self.targets(sid)
+        relevant = {row["id"].lower() for row in (*accounts, *hosts)}
+        relevant.update(
+            agent.resource_id.lower() for agent in self.data.agents
+            if agent.subscription_id == sid and agent.resource_id
+        )
+        rows = [row for row in rows if str(row.get("resourceId", "")).lower() in relevant]
+        by_resource: dict[str, set[str]] = {}
+        for row in rows:
+            rid = row.get("resourceId")
+            if not isinstance(rid, str) or not rid:
+                raise AccessError("error", "정책 평가 resourceId 누락")
+            by_resource.setdefault(rid.lower(), set()).add(str(row.get("state") or "Unknown"))
+        for rid, states in by_resource.items():
+            state = "NonCompliant" if "NonCompliant" in states else (
+                "Compliant" if states == {"Compliant"} else "Unknown"
+            )
+            result.proposal_observations.append(ProposalObservation(
+                code="BI-SY-16", subscription_id=sid, subject=rid, kind="policy_resource",
+                values={"state": state, "evaluation_states": sorted(states)}, evidence_refs=refs,
+            ))
         for state in sorted({str(row.get("state") or "Unknown") for row in rows}):
             matched = [row for row in rows if str(row.get("state") or "Unknown") == state]
             result.proposal_observations.append(ProposalObservation(
@@ -277,7 +396,6 @@ class ProposalCollector:
                 },
                 evidence_refs=refs,
             ))
-        result.facts.setdefault("proposal_policy_subscriptions", []).append(sid)
 
 
 def _scope_list(scopes: str) -> list[str]:

@@ -156,6 +156,11 @@ class Budget(EvidenceModel):
     enabled_alerts: int = 0
     forecast_alerts: int = 0
     thresholds: list[float] = Field(default_factory=list)
+    actual_alerts: int | None = Field(default=None, ge=0)
+    period_start: AwareDatetime | None = None
+    period_end: AwareDatetime | None = None
+    filters_empty: bool | None = None
+    notifications_with_receivers: bool | None = None
     evidence_refs: list[str] = Field(default_factory=list)
 
 
@@ -273,6 +278,7 @@ class Finding(EvidenceModel):
     level: Literal["L1", "L2", "L3", "L4", "L5", "N/A"]
     assessment_basis: Literal["criteria", "configuration"] = "criteria"
     configuration_value: float | int | None = Field(default=None, gt=0)
+    level_criterion: str | None = None
     rationale: str
     reason: Reason | None = None
     evidence_refs: list[str] = Field(default_factory=list)

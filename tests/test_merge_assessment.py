@@ -149,7 +149,7 @@ def test_delivered_criteria_and_scoring_include_every_system_evidence() -> None:
     assert str(sheet.data_validations.dataValidation[0].sqref) == "M5:M89"
     assert "N/A" in sheet.data_validations.dataValidation[0].formula1
     assert sorted(int(code.rsplit("-", 1)[1]) for code in rows) == list(range(1, 32))
-    assert "감사 로그" in rows["OE-SY-22"][5].value
+    assert "실행 로그" in rows["OE-SY-22"][5].value
     assert "관리 ID" in rows["OE-SY-23"][5].value
     assert "조건부 접근" not in str(book.worksheets[1]["H8"].value)
 

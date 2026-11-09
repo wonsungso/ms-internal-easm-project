@@ -71,12 +71,29 @@ class FoundryCollector:
         base = {"subscription_id": project["subscriptionId"], "subject": record.agent_id, "evidence_refs": refs}
         found = [ProposalObservation(
             code="DS-SY-08", kind="agent_tools",
-            values={"tool_types": sorted({str(tool.get("type")) for tool in tools}), "mcp_approval": approvals},
+            values={
+                "tool_types": sorted({str(tool.get("type")) for tool in tools}), "mcp_approval": approvals,
+                "mcp_approval_modes": [
+                    tool.get("require_approval") if isinstance(tool.get("require_approval"), str)
+                    else "custom" if isinstance(tool.get("require_approval"), dict) else None
+                    for tool in tools if tool.get("type") == "mcp"
+                ],
+            },
             **base,
         )]
-        if hosts:
+        urls = [
+            str(tool.get("server_url") or tool.get("url"))
+            for tool in tools if tool.get("server_url") or tool.get("url")
+        ]
+        if urls:
             found.append(ProposalObservation(
-                code="DS-SY-09", kind="tool_endpoints", values={"hosts": hosts}, **base,
+                code="DS-SY-09", kind="tool_endpoints", values={
+                    "hosts": hosts,
+                    "endpoint_https": [
+                        parsed.scheme == "https" and bool(parsed.hostname) and not parsed.username
+                        and not parsed.password for url in urls for parsed in [urlparse(url)]
+                    ],
+                }, **base,
             ))
         return found
 
@@ -133,7 +150,7 @@ class FoundryCollector:
                     existing = projects.get(project["id"].lower())
                     endpoint = existing["endpoint"] if existing else (candidates[0] if candidates else None)
                     if not endpoint:
-                        raise AccessError("not_found", "프로젝트 ARM 응답에 데이터 endpoint가 없음; 수동 설정 필요")
+                        raise AccessError("not_found", "프로젝트 ARM 응답에 데이터 endpoint가 없음")
                     projects[project["id"].lower()] = {
                         "id": project["id"], "subscriptionId": sid, "endpoint": endpoint,
                         "tags": {**(account.get("tags") or {}), **(detail.get("tags") or {})},

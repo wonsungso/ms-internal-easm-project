@@ -42,6 +42,7 @@ class SignalCollector:
             ]:
                 try:
                     operation(sid, result)
+                    result.facts.setdefault(name + "_complete_subscriptions", []).append(sid)
                 except AccessError as exc:
                     roles = {
                         "cost": ("Reader", "Cost Management Reader"),
@@ -256,6 +257,7 @@ class SignalCollector:
                     name for candidates in self.monitor.values() for name in candidates if name in names
                 })
                 if not selected:
+                    signals.append({"resource_id": rid, "metrics": [], "evidence_ref": self.http.last_ref})
                     continue
                 params = urlencode({
                     "api-version": "2018-01-01",
@@ -347,10 +349,15 @@ class SignalCollector:
         url = ARM + f"/subscriptions/{sid}/providers/Microsoft.Consumption/budgets?api-version=2023-05-01"
         for row in self.http.list_arm(url):
             properties = row.get("properties") or {}
+            notifications = properties.get("notifications")
+            if not isinstance(notifications, dict):
+                raise AccessError("error", "예산 notifications 객체 누락")
             alerts = [
-                note for note in (properties.get("notifications") or {}).values()
+                note for note in notifications.values()
                 if isinstance(note, dict) and note.get("enabled") is True
             ]
+            if any(note.get("thresholdType") not in ("Actual", "Forecasted") for note in alerts):
+                raise AccessError("error", "활성 예산 경보의 thresholdType 누락·알 수 없는 값")
             result.budgets.append(Budget(
                 subscription_id=sid, budget_id=row["id"], amount=properties.get("amount"),
                 category=properties.get("category"), time_grain=properties.get("timeGrain"),
@@ -358,7 +365,20 @@ class SignalCollector:
                 forecast_alerts=sum(1 for note in alerts if note.get("thresholdType") == "Forecasted"),
                 thresholds=sorted(
                     float(note["threshold"]) for note in alerts
-                    if isinstance(note.get("threshold"), (int, float))
+                    if type(note.get("threshold")) in (int, float)
+                ),
+                actual_alerts=sum(note.get("thresholdType") == "Actual" for note in alerts),
+                period_start=_when((properties.get("timePeriod") or {}).get("startDate")),
+                period_end=_when((properties.get("timePeriod") or {}).get("endDate")),
+                filters_empty=not bool(properties.get("filter")),
+                notifications_with_receivers=all(
+                    any(
+                        isinstance(note.get(key), list) and any(
+                            isinstance(value, str) and bool(value.strip()) for value in note[key]
+                        ) for key in ("contactEmails", "contactGroups", "contactRoles")
+                    )
+                    and type(note.get("threshold")) in (int, float) and note["threshold"] > 0
+                    for note in alerts
                 ),
                 evidence_refs=[self.http.last_ref] if self.http.last_ref else [],
             ))

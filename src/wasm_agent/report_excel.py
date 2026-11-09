@@ -68,13 +68,13 @@ SE_AREAS = {
     "DP": "4. Deploy", "OE": "5. Operate", "OT": "6. Optimize",
 }
 SE_NAMES = {
-    "DS-SY-06": "허용 모델 사용 관리",
-    "BI-SY-11": "배포 전 Agent 품질 평가",
-    "BI-SY-12": "AI 워크로드 보안 관리",
-    "OE-SY-22": "Agent 활동 감사 로그 관리",
-    "OT-SY-28": "장기 미사용 Agent 관리",
-    "OT-SY-29": "Agent별 비용 식별 및 배분",
-    "DS-SY-05": "Agent ID 템플릿(Blueprint) 정의",
+    "DS-SY-06": "모델 배포 버전·업데이트 구성",
+    "BI-SY-11": "Foundry 프로젝트 평가 실행 이력",
+    "BI-SY-12": "AI 리소스 보안 권고 상태",
+    "OE-SY-22": "Agent 리소스 실행 로그 연결",
+    "OT-SY-28": "AI 리소스 사용량 관측 범위",
+    "OT-SY-29": "AI 비용의 단일 Agent 귀속",
+    "DS-SY-05": "Agent ID의 Blueprint 연결",
     "DP-SY-19": "Agent ID 부여율(Azure Agent 기준)",
     "OE-SY-20": "소유자·후원자 미지정 Agent",
     "OE-SY-21": "Agent 부여 권한·과다 권한",
@@ -92,8 +92,7 @@ FIELD_NAMES = {
     "usage_coverage_start": "사용 관측 시작 시각",
     "evaluated_before_deploy": "배포 전 평가 여부", "guardrail_applied": "안전장치 적용 여부",
 }
-RATIOS = {"DS-SY-06", "BI-SY-11", "OT-SY-28", "OT-SY-29", "DP-SY-19", "OE-SY-20", "OE-SY-21"}
-RATIOS.update(TITLES)
+RATIOS = set(SE_NAMES)
 EMPTY = "수집된 데이터 없음 - 미수행 또는 0건으로 확정하지 않음"
 ORIGINAL = "원본 JSON"
 FONT_SIZE = 10
@@ -385,7 +384,11 @@ def _result_sheet(book: Workbook, data: Collection, findings: list[Finding]) -> 
             status, summary = collection_summary(data, finding)
             level_text = readable(finding.level)
             if finding.level != "N/A":
-                criterion = source.cell(number, 6 + int(finding.level[1:])).value
+                legacy_grade = data.facts.get("assessment_revision") is not None and not data.facts.get("grading_profile")
+                criterion = finding.level_criterion or (
+                    "수집 당시 기준의 등급 - 원본 JSON 판정 근거 참조" if legacy_grade else
+                    source.cell(number, 6 + int(finding.level[1:])).value
+                )
                 if not isinstance(criterion, str) or not criterion.strip():
                     raise ValueError(f"{finding.se_code}: {finding.level} 평가기준 문장이 없습니다.")
                 level_text = f"Level {finding.level[1:]} ({criterion})"
@@ -412,7 +415,9 @@ def _result_sheet(book: Workbook, data: Collection, findings: list[Finding]) -> 
             sheet.cell(number, 9).value = CellRichText(
                 TextBlock(InlineFont(b=True), label), level_text[len(label):],
             )
-            if finding.level != "L5":
+            if finding.level != "L5" and not (
+                data.facts.get("assessment_revision") is not None and not data.facts.get("grading_profile")
+            ):
                 next_level = int(finding.level[1:]) + 1
                 condition = source.cell(number, 6 + next_level).value
                 if not isinstance(condition, str) or not condition.strip():

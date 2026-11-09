@@ -281,6 +281,8 @@ def merge_assessment(source: Path, output: Path) -> dict[str, str | int]:
             code for code in DOMAINS
             if any(TITLES[code] in str(row[5].value) for row in se_rows)
         }
+        if len(se_rows) == 31 and DOMAINS.keys() <= {str(row[1].value) for row in se_rows}:
+            present = set(DOMAINS)
         if present and present != DOMAINS.keys():
             raise ValueError("SE 항목이 일부만 병합된 파일입니다. 전체 원본 또는 검토 템플릿을 사용하세요.")
         patched = {} if present else {
@@ -384,6 +386,9 @@ def review_parts(archive: ZipFile, patched: dict[str, bytes]) -> dict[str, bytes
         if code not in criteria and code not in MANUAL_LEVELS:
             continue
         seen.add(code)
+        if code in criteria:
+            replace_text(row, "F", criteria[code]["title"])
+            replace_text(row, "L", criteria[code]["evidence"])
         levels = criteria[code]["levels"].values() if code in criteria else MANUAL_LEVELS[code]
         for column, text in zip("GHIJK", levels, strict=True):
             replace_text(row, column, text)
@@ -432,6 +437,23 @@ def review_parts(archive: ZipFile, patched: dict[str, bytes]) -> dict[str, bytes
                     if not any(marker in line for marker in ("추가 제안 12개", "추가 제안 13개"))
                 ]
                 replace_text(row, cell_ref(cell.get("r"))[0], "\n".join([*lines, NOTE]))
+    summary_row = root.find(f"{Q}sheetData/{Q}row[@r='8']")
+    for domain, column in DOMAIN_COLUMN.items():
+        summaries = []
+        for row in data:
+            number = row.get("r")
+            code = value(row.find(f"{Q}c[@r='B{number}']"))
+            if code in criteria and value(row.find(f"{Q}c[@r='C{number}']")) == domain:
+                product = PRODUCTS.get(code, "Microsoft Entra Agent ID" if criteria[code].get("requires") else "Azure API")
+                summaries.append(f"▸ {code} {criteria[code]['title']}\n  [{product}]")
+            elif code in MANUAL_LEVELS and value(row.find(f"{Q}c[@r='C{number}']")) == domain:
+                title = value(row.find(f"{Q}c[@r='F{number}']"))
+                summaries.append(f"▸ {code} {title}")
+        if summaries and summary_row is not None:
+            replace_text(summary_row, column, "\n\n".join(summaries))
+    notes_row = root.find(f"{Q}sheetData/{Q}row[@r='10']")
+    if notes_row is not None:
+        replace_text(notes_row, "B", NOTE + "\n- API 구성·기록의 항목별 충족률로 평가. 제품별 조회 범위와 분모는 기준표 참조")
     patched[SHEET_QUESTIONS] = xml_bytes(root, raw)
 
     raw = archive.read(SHEET_SCORING)

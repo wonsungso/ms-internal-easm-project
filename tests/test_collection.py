@@ -217,7 +217,8 @@ def test_secure_score_policy_and_budget_collectors_keep_only_evidence_fields() -
         [{"id": "b1", "properties": {
             "amount": 100, "category": "Cost", "timeGrain": "Monthly",
             "notifications": {
-                "on": {"enabled": True, "threshold": 80, "contactEmails": ["owner@example.com"]},
+                "on": {"enabled": True, "thresholdType": "Actual", "threshold": 80,
+                       "contactEmails": ["owner@example.com"]},
                 "off": {"enabled": False, "threshold": 100},
             },
         }}],

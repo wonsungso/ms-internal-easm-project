@@ -6,18 +6,18 @@ from typing import Any
 from wasm_agent.models import Collection, Issue, ProposalFinding, ProposalObservation, Reason
 
 TITLES = {
-    "BI-SY-15": "Agent 자산 대장·책임 태그",
-    "OE-SY-23": "관리 ID와 ARM 역할 범위",
-    "DS-SY-07": "네트워크 경계와 공용 접근",
-    "BI-SY-13": "Content Safety 정책 연결",
-    "OE-SY-24": "관측·경보 구성",
-    "DS-SY-08": "도구 구성과 승인 모드",
-    "DS-SY-09": "외부 도구 엔드포인트",
-    "OE-SY-25": "경보 전달 경로(작업 그룹)",
-    "OT-SY-31": "예산·예측 경보",
-    "OE-SY-26": "지역과 보존 설정",
-    "BI-SY-16": "Azure 정책 준수 상태",
-    "BI-SY-14": "릴리스 버전 고정·런타임",
+    "BI-SY-15": "Agent 책임·환경·비용 메타데이터",
+    "OE-SY-23": "관리 ID·키 인증·직접 ARM 역할 구성",
+    "DS-SY-07": "AI 리소스 인바운드 경계 구성",
+    "BI-SY-13": "콘텐츠 필터 정책 연결",
+    "OE-SY-24": "AI 리소스 활성 경보 범위",
+    "DS-SY-08": "MCP 도구 필수 승인 모드",
+    "DS-SY-09": "외부 도구 HTTPS 연결 구성",
+    "OE-SY-25": "AI 경보의 작업 그룹·수신자 연결",
+    "OT-SY-31": "구독 예산·실제·예측 경보 구성",
+    "OE-SY-26": "리소스 지역·workspace 보존 구성",
+    "BI-SY-16": "AI 리소스 정책 평가 준수",
+    "BI-SY-14": "Agent 버전·호스트 런타임 식별",
 }
 # (주 영역, 보조 영역, 근거): 영역 정의와 질문은 평가 모델 Excel '2. 질문 및 확인사항' 기준
 DOMAINS = {
@@ -44,18 +44,18 @@ PRODUCTS = {
     "BI-SY-14": "Azure OpenAI 배포, App Service",
 }
 LIMITS = {
-    "BI-SY-15": "태그 존재 여부만 확인. 승인된 자산 대장과의 대사와 업무 목적·변경 이력은 고객 제출 자료가 필요함",
+    "BI-SY-15": "같은 Agent의 태그·메타데이터 존재를 확인. 값의 업무 승인·인사 상태를 뜻하지 않음",
     "OE-SY-23": "관리 ID 연결과 동일 구독의 직접 ARM 역할 할당만 확인. 타 구독·상속·Graph·데이터 평면 권한과 실제 인증 사용은 별도 검증 필요",
     "DS-SY-07": "ARM 네트워크 설정만 확인. 실제 연결 차단, 앱 내부 우회, 송신 허용 목록 검증은 확인 불가",
     "BI-SY-13": "정책 연결과 구성만 확인. 필터의 실제 방어 효과와 입력·출력 시험 결과는 확인 불가",
     "OE-SY-24": "경보 규칙과 Application Insights 존재만 확인. 계측·샘플링·SLO 승인과 대응 이력은 확인 불가",
-    "DS-SY-08": "Foundry Agent 정의의 도구 유형과 MCP 승인 모드만 확인. 승인 우회 방지와 실행 주체 귀속은 확인 불가",
-    "DS-SY-09": "Foundry Agent 정의의 도구 엔드포인트 호스트만 확인(경로·쿼리 제외). 승인 목록 대조와 인증 방식은 확인 불가",
+    "DS-SY-08": "MCP require_approval 모드 기준이며 함수·내장 도구와 런타임 승인 우회 효과는 포함하지 않음",
+    "DS-SY-09": "외부 도구 URL의 HTTPS 구성 확인. 업무 승인·상대 서버 신뢰·인증 성공을 뜻하지 않음",
     "OE-SY-25": "작업 그룹 수신자 유형 수와 경보 연결만 확인(주소 미수집). SOC 수신, 중단·복구 훈련은 확인 불가",
     "OT-SY-31": "구독 예산의 예측 경보 설정만 확인. Agent 단위 비용 귀속과 통보 후 조치 이력은 확인 불가",
     "OE-SY-26": "리소스 위치와 로그 보존 설정만 확인. 실제 처리 지역, 앱 메모리, 삭제 검증은 확인 불가",
     "BI-SY-16": "정책 준수 상태만 확인. 예외 만료 승인과 편차 검토 기록은 확인 불가. 정책 준수가 앱 동작 안전을 보장하지 않음",
-    "BI-SY-14": "배포 메타데이터의 런타임·모델 버전 업그레이드 옵션만 확인. 소스·빌드 출처와 SDK 승인은 확인 불가",
+    "BI-SY-14": "Foundry Agent 버전·호스트 런타임·이미지 다이제스트 확인. 소스·빌드 출처와 배포 승인은 포함하지 않음",
 }
 ISSUE_COLLECTORS = {
     "OE-SY-23": ("proposal_OE-SY-23",), "DS-SY-07": ("proposal_DS-SY-07",), "BI-SY-13": ("proposal_BI-SY-13", "model_deployments"),
@@ -244,7 +244,7 @@ def build(code: str, data: Collection, tags: dict[str, Any]) -> tuple[dict[str, 
             f"설정값 {', '.join(str(value) + '일' for value in retention) or '확인 자료 없음'}"
         ), bool(locations)
     if code == "BI-SY-16":
-        rows = observations(data, code)
+        rows = [item for item in observations(data, code) if item.kind == "policy_state"]
         states: Counter[str] = Counter()
         for item in rows:
             states[item.values["state"]] += item.values["resources"]

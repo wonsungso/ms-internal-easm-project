@@ -108,19 +108,18 @@ console.log(action.action_id);
 - 평가 진입점은 `demo.agents.evaluate_agent(project, entry, version, path)`입니다. 저장 영수증의 `agent_id`, `agent_version`, `run_id`, `status`, 실제 완료 시각/통과 항목을 확인합니다. 기존 `expand()`는 endpoint 연결 후 평가를 실행하므로 이 순서만으로 배포 전 평가를 입증하지 않습니다.
 - `.wasm-agent/demo/chatbot-expansion/<lab_id>/state.json`의 `published_at`은 관리자 실행 영수증입니다. 버전 생성 시각, 이 값 또는 계정 전체 토큰 수를 Agent의 실제 배포 시각/사용 이력으로 바꾸지 않습니다.
 
-### 저장 수집 결과와 정책 사실
+### 수집 결과와 API 등급
 
-- `demo.governance.generate_policy_facts(collection_path, baseline, evidence_directory, verified_runtimes)`는 실제 저장된 `Collection` JSON만 읽습니다. 수집기는 이 모듈을 import하지 않습니다.
-- `read_collection_file(path)`는 `(Collection, embedded_evidence)`를 반환합니다. 실제 `schema_version: 1` raw 래퍼와 명시적인 단독 Collection을 지원합니다. 잘못된 래퍼/버전/누락 증적 구조는 오류이며 단독 Collection으로 재해석하지 않습니다.
-- `DemoBaseline`은 `demo_evidence=True`, `customer_policy_approved=False`, `digest(catalog)` 및 카탈로그 10개 각각의 실제 `platform/resource_id/agent_id` 매핑을 요구합니다. 자동 추측하지 않습니다.
-- 전체 수집 완료, 10개 대조, 실제 `owner/sponsor/env/cost-center` 및 카탈로그 환경 일치가 확인될 때만 `asset_standardized`를 생성합니다. 수집된 `asset_tag_ratio`를 덮어쓰지 않습니다.
-- 선택 `VerifiedRuntime` 영수증은 실제 HTTPS 관측과 성공한 배포 확인 후에만 생성합니다. `verification="https_observed_and_deployment_verified"`, 실제 리소스/배포 ID, 성공 상태, 관측 시각, 배포 코드 해시, `/health`의 보고서가 필요합니다. baseline의 `expected_policy_sha256`도 실제 허용 주소 설정과 대조합니다. 로컬 보고서를 배포 증거로 바꾸지 않습니다.
-- 도구/endpoint 사실은 모든 대상의 실행 경로와 검증된 배포가 확인되어야 합니다. 현재 카탈로그에는 로컬 gate 밖의 Foundry 도구가 있어 로컬 검사만으로 전체 평가를 생성하지 않습니다. 버전 생성만 확인된 경우 출시 사실도 생략합니다.
-- 반환 `PolicyProof.policy_facts`는 기존 `value/evidence_refs` 계약이며 `.model_dump(mode="json")`으로 내보낼 수 있습니다. 증적 폴더에는 식별자/태그/URL 대신 입력 해시, 대조 결과, 개수만 저장합니다. `omitted`와 `deployment_required`에 미확보 사유/추가 단계가 남습니다.
-- Azure Policy/예산 집행, SLO, RAI 효과, SOC 전달, 지역 보장, 보존기간이나 L4/L5 개선 증거는 만들지 않습니다. 이 baseline은 고객 정책 승인이 아닙니다.
-- 예산은 예외적으로 전체 구독의 저장 API 증적을 검증하면 `budget_assessment`와 `budget_standardized`만 생성합니다. 수집 완료, 자산/비용센터 대조, 구독 전체 무필터 범위(`filter: {}`), 수집 시점의 유효 기간, 양수 금액, 월별 Cost 예산, 활성 실제/예측 경보와 설정된 수신자가 모두 필요합니다. 통지 전달이나 초과 지출 차단은 입증하지 않습니다.
-- `DemoBaseline.required_budget_amount`는 선택 양수 금액입니다. 지정하면 실제 예산액과 정확히 일치해야 합니다. `demo/config.yaml`의 `budget_usd`를 사용하려면 해당 값을 명시적으로 전달합니다. 다르거나 알 수 없으면 예산 사실을 생략하며 0이나 L1로 바꾸지 않습니다. 미지정 시 금액 기준 승인을 주장하지 않고 양수 금액 존재만 검사합니다.
-- 예산은 단순화된 `Budget`만으로 판정하지 않습니다. raw 래퍼의 `evidence:<key>` 참조에 대응하는 실제 응답·기간·필터·경보와 수집 값의 일치를 확인합니다. 증적이 없는 단독 Collection은 예산 사실을 만들지 않습니다.
+| 구분 | 사용 방법 |
+| --- | --- |
+| 등급 기준 | `config/criteria.yaml`의 API 필드·분모·비율 규칙 적용 |
+| 수집 실행 | `python -m demo.manage collect`로 실제 Azure API 구성·기록을 수집 |
+| 데모 런타임 | `/health`의 코드 해시·검사 결과와 성공한 배포 ID를 대조. API 구성 등급과 실행 시험 결과는 구분 |
+| 이전 검증 도우미 | `generate_policy_facts`는 과거 데모 검증 호환용이며 현재 API 등급 입력으로 사용하지 않음 |
+| 저장 파일 | `read_collection_file(path)`는 원본 JSON의 Collection과 첨부 증적을 읽음. 잘못된 스키마는 오류 |
+
+- 완료 평가 실행은 프로젝트 평가 이력으로 집계합니다. 버전 생성 시각을 운영 배포 시각으로 간주하지 않습니다.
+- 예산은 현재 유효 기간·무필터 범위·실제/예측 경보·수신자 구성을 API에서 대조합니다. 실제 알림 전달이나 지출 차단을 뜻하지 않습니다.
 
 ![실제 로그인 동의 - 식별자 마스킹과 클릭 위치](imgs/01-entra-consent.png)
 

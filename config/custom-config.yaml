@@ -1,30 +1,9 @@
-# 고객별 선택 입력입니다. 파일이 없어도 기본 수집은 실행됩니다.
-# 등급 임계값·규칙은 같은 폴더의 criteria.yaml에서 수정합니다.
-# 허용 모델 등 미입력 시 해당 지표를 추정하지 않으며 기본 구성 등급은 별도 적용합니다.
+# 수집 기술 설정입니다. 파일이 없어도 기본 수집은 실행됩니다.
+# API 지표·등급 임계값·규칙은 같은 폴더의 criteria.yaml에서 수정합니다.
 workers: 3
-
-# DS-SY-06: 조직이 허용하는 모델 (없으면 허용 비율은 판정 보류)
-allowed_models: []
-#  - {name: gpt-4.1-nano, version: "2025-04-14"}
-
-# DS-SY-06 L4: 모델 배포를 제한하는 Azure Policy 정의/이니셔티브 ID (없으면 정책 수집 생략)
-model_policy_definition_ids: []
-
-# OE-SY-22 / BI-SY-12 / OE-SY-21: 내부 기준 (없으면 해당 조건은 판정 보류 또는 내장 샘플 패턴)
-required_retention_days: null
-internal_security_score_min: null
-overprivileged_permission_patterns: []
-
-# API로 확인되지 않는 정성 조건 (증적과 함께 입력)
-# policy_facts:
-#   network_assessment: {value: {total: 10, compliant: 9}, evidence_refs: ["network-review"]}
-#   network_standardized: {value: true, evidence_refs: ["approved-network-standard"]}
-#   network_enforced: {value: true, evidence_refs: ["gate-test-and-exception-expiry"]}
-#   network_improved: {value: true, evidence_refs: ["review-and-improvement-history"]}
-# assessment의 total은 승인 범위 전체 대상 수, compliant는 모든 L3 통제를 충족한 대상 수입니다.
-# 대상 0개는 N/A. API 구성값만으로 승인·유효성·실제 동작을 추정하지 않습니다.
-# 항목별 assessment 키와 L3/L4/L5 증적 조건은 docs/api-notes.md 참조.
-policy_facts: {}
 
 # LangChain 등 자체 Agent 식별용 태그 규약 (기본값: agent-type, owner, sponsor, env, cost-center)
 # tags: {agent_type_key: agent-type, owner_key: owner}
+
+# 프로젝트는 기본 자동 발견합니다. 명시 대상은 projects 설정으로 지정할 수 있습니다.
+projects: []

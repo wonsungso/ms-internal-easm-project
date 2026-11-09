@@ -1,534 +1,399 @@
 from __future__ import annotations
 
-from datetime import timedelta
-from pathlib import Path
+from datetime import UTC, datetime, timedelta
+from functools import cache
 
 import pytest
 
-from wasm_agent.evaluation import derive_facts, evaluate, matches
+from wasm_agent.api_grading import Measurement, measurements
+from wasm_agent.evaluation import evaluate, matches
 from wasm_agent.models import (
     DEFAULT_TAGS,
+    AgentEvidence,
     Budget,
     Collection,
+    EntraAgentIdentity,
+    EntraBlueprint,
+    EvaluationRun,
     Issue,
+    LogSetting,
     ModelDeployment,
-    PolicyAssignment,
     ProposalObservation,
-    SecureScore,
-    SecurityRecommendation,
-    load_criteria,
 )
-from wasm_agent.proposals import TITLES
+from wasm_agent.models import (
+    load_criteria as read_criteria,
+)
 
-ROOT = Path(__file__).parents[1]
-ALLOWED = {"models": [
-    {"name": "gpt-4.1-nano", "version": "2025-04-14", "format": "OpenAI"},
-    {"name": "gpt-4o-mini", "version": "2024-07-18", "format": "OpenAI"},
-]}
-TAGS = DEFAULT_TAGS
+
+@cache
+def load_criteria() -> dict:
+    return read_criteria()
+
+
+NOW = datetime(2026, 11, 9, tzinfo=UTC)
+SID = "11111111-1111-4111-8111-111111111111"
+ACCOUNT = f"/subscriptions/{SID}/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/ai"
+PROJECT = ACCOUNT + "/projects/p"
+BLUEPRINT = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+CODES = list(load_criteria()["items"])
+
+
+def grade(data: Collection, criteria: dict | None = None, facts: dict | None = None) -> dict:
+    return {row.se_code: row for row in evaluate(data, criteria or load_criteria(), {}, DEFAULT_TAGS, facts)}
 
 
 @pytest.fixture
 def data() -> Collection:
-    value = Collection.model_validate_json((ROOT / "tests" / "fixtures" / "three_subscriptions.json").read_text())
-    for agent in value.agents:
-        agent.mark_unknowns()
+    criteria = load_criteria()
+    value = Collection(
+        collected_at=NOW, subscriptions=[SID],
+        resources=[{"id": ACCOUNT, "subscriptionId": SID, "type": "microsoft.cognitiveservices/accounts",
+                    "kind": "AIServices", "location": "westus2"}],
+        agents=[AgentEvidence(
+            collected_at=NOW, platform="foundry", agent_id="agent", agent_name="agent", agent_version="1",
+            subscription_id=SID, resource_id=PROJECT, model_resource_id=ACCOUNT, detection_confidence="tag",
+            tags={"owner": "team", "sponsor": "team", "env": "prod", "cost-center": "engineering"},
+        )],
+        deployments=[ModelDeployment(
+            subscription_id=SID, resource_id=ACCOUNT + "/deployments/m", account_id=ACCOUNT, name="m",
+            model="gpt", version="1", format="OpenAI", version_upgrade_option="NoAutoUpgrade", rai_policy="safe",
+        )],
+        evaluations=[EvaluationRun(subscription_id=SID, project_id=PROJECT, run_id="run", status="completed")],
+        entra_blueprints=[EntraBlueprint(blueprint_id=BLUEPRINT, tags=[
+            f"subscriptionId:{SID}", "accountName:ai", "projectName:p", "agentName:agent",
+        ])],
+        entra_agent_identities=[EntraAgentIdentity(
+            identity_id="identity", blueprint_id=BLUEPRINT, account_enabled=True,
+            owner_count=1, sponsor_count=1, owners_all_disabled=False,
+        )],
+        logs=[LogSetting(subscription_id=SID, resource_id=ACCOUNT, enabled=True,
+                         workspace_id="/workspace", retention_days=90)],
+        budgets=[Budget(
+            subscription_id=SID, budget_id="/budget", amount=100, category="Cost", time_grain="Monthly",
+            actual_alerts=1, forecast_alerts=1, enabled_alerts=2, thresholds=[80, 90],
+            period_start=NOW - timedelta(days=1), period_end=NOW + timedelta(days=30),
+            filters_empty=True, notifications_with_receivers=True,
+        )],
+        facts={
+            "inventory_complete": True, "agent_inventory_complete": True,
+            "deployment_inventory_complete": True, "entra_blueprints_complete": True,
+            "entra_agents_complete": True, "evaluation_complete_projects": [PROJECT], "foundry_project_ids": [PROJECT],
+            "resource_metrics": [{"resource_id": ACCOUNT, "metrics": [{"timeseries": [{"data": [{"total": 0}]}]}]}],
+        },
+    )
+    from wasm_agent.models import CostRecord, SecurityRecommendation
+
+    value.costs = [CostRecord(subscription_id=SID, resource_id=ACCOUNT, amount=10, currency="USD", usage_date="20261109")]
+    value.security = [SecurityRecommendation(subscription_id=SID, resource_id=ACCOUNT,
+                                            assessment_id="/assessment", severity="Low", status="Healthy")]
+    entries = [
+        ("DS-SY-07", "ai_account", {"public_network_access": "Disabled", "approved_private_endpoints": 1}),
+        ("DS-SY-08", "agent_tools", {"mcp_approval_modes": ["always"]}),
+        ("DS-SY-09", "tool_endpoints", {"endpoint_https": [True]}),
+        ("BI-SY-13", "ai_account", {"enabled_policy_names": ["safe"], "policy_filter_enabled": {"safe": True}}),
+        ("BI-SY-16", "policy_resource", {"state": "Compliant"}),
+        ("OE-SY-23", "ai_account", {
+            "identity_type": "SystemAssigned", "principal_count": 1,
+            "privileged_assignments": 0, "local_auth_disabled": True,
+        }),
+        ("OE-SY-24", "metricalerts", {
+            "kind": "metricalerts", "targets_ai": True, "target_ids": [ACCOUNT],
+            "enabled": True, "action_group_resolved": True,
+        }),
+    ]
+    value.proposal_observations = [
+        ProposalObservation(code=code, subscription_id=SID, subject=ACCOUNT, kind=kind,
+                            values=fields, evidence_refs=["fixture://api"])
+        for code, kind, fields in entries
+    ]
+    for config in criteria["items"].values():
+        for key in config.get("complete_subscriptions", []):
+            value.facts[key] = [SID]
     return value
 
 
-def criteria_with(**updates: object) -> dict:
-    return {**load_criteria(), **updates}
+def test_complete_api_snapshot_grades_all_22_controls_without_qualitative_inputs(data: Collection) -> None:
+    rows = grade(data)
+    assert len(rows) == 22
+    assert all(row.level == "L5" and row.metric_value == 1 for row in rows.values())
+    assert all(row.reason is None and row.assessment_basis == "criteria" for row in rows.values())
+    assert data.facts["grading_profile"] == "api_configuration_v1"
 
 
-def facts_for(data: Collection, **criteria_updates: object) -> dict:
-    return derive_facts(data, criteria_with(**criteria_updates), ALLOWED, TAGS)
+@pytest.mark.parametrize("good,level", [(0, "L1"), (1, "L2"), (8, "L3"), (9, "L4"), (10, "L5")])
+def test_real_api_field_combinations_reach_every_level_for_all22_controls(
+    data: Collection, good: int, level: str,
+) -> None:
+    from copy import deepcopy
 
-
-def findings(data: Collection, facts: dict | None = None, interviews: dict | None = None) -> dict:
-    rows = evaluate(data, load_criteria(), ALLOWED, TAGS, facts, interviews)
-    return {row.se_code: row for row in rows}
-
-
-@pytest.mark.parametrize("allowed_count,level", [(79, "L2"), (80, "L2"), (85, "L2"), (89, "L2"), (90, "L3"), (100, "L3")])
-def test_model_allowlist_boundaries_have_no_unclassified_band(data: Collection, allowed_count: int, level: str) -> None:
-    template = data.deployments[0]
-    data.deployments = [
-        ModelDeployment(**{
-            **template.model_dump(),
-            "resource_id": f"/fixture/model/{index}", "name": f"model-{index}",
-            "model": "gpt-4o-mini" if index < allowed_count else "not-allowed",
-        }) for index in range(100)
-    ]
-    row = findings(data)["DS-SY-06"]
-    assert row.metric_value == allowed_count / 100
-    assert row.level == level
-
-
-def test_perfect_ratio_alone_does_not_grant_l4(data: Collection) -> None:
-    assert findings(data)["DS-SY-06"].level == "L3"
-    assert findings(data, {"model_policy_enforced": {
-        "value": True, "evidence_refs": ["fixture://enforced-policy"],
-    }})["DS-SY-06"].level == "L4"
-    with pytest.raises(ValueError, match="requires value and evidence_refs"):
-        findings(data, {"model_policy_enforced": True})
-
-
-def test_policy_facts_cannot_override_measured_values(data: Collection) -> None:
-    with pytest.raises(ValueError, match="cannot override"):
-        findings(data, {"allowed_ratio": {"value": 1, "evidence_refs": ["fixture://not-metric"]}})
-    data.deployments = []
-    with pytest.raises(ValueError, match="cannot override"):
-        findings(data, {"allowed_ratio": {"value": 1, "evidence_refs": ["fixture://not-metric"]}})
-
-
-def test_before_deploy_requires_same_agent_version_and_completion(data: Collection) -> None:
-    row = findings(data)["BI-SY-11"]
-    assert row.metric_value == 1
-    assert row.level == "L3"
-    data.evaluations[0].agent_version = "different"
-    data.agents[0].evaluated_before_deploy = None
-    row = findings(data)["BI-SY-11"]
-    assert row.level == "L2" and row.assessment_basis == "configuration" and row.metric_value is None
-
-
-def test_creation_timestamp_is_not_deployment_timestamp(data: Collection) -> None:
-    data.agents[0].deployed_at = None
-    data.agents[0].evaluated_before_deploy = None
-    row = findings(data)["BI-SY-11"]
-    assert row.metric_value is None
-    assert row.level == "L2" and row.assessment_basis == "configuration"
-
-
-def test_late_evaluation_with_incomplete_history_is_unknown(data: Collection) -> None:
-    data.evaluations[0].completed_at = data.agents[0].deployed_at + timedelta(days=1)
-    data.facts["evaluation_complete_projects"] = []
-    data.agents[0].evaluated_before_deploy = None
-    findings(data)
-    assert data.agents[0].evaluated_before_deploy is None
-
-
-@pytest.mark.parametrize("inactive_count,level", [(0, "L3"), (19, "L3"), (20, "L2"), (39, "L2"), (40, "L2")])
-def test_inactivity_boundaries(data: Collection, inactive_count: int, level: str) -> None:
-    template = data.agents[0]
-    data.agents = [
-        template.model_copy(update={
-            "agent_id": f"agent-{index}",
-            "last_used_at": data.collected_at - timedelta(days=91 if index < inactive_count else 1),
-            "usage_coverage_start": data.collected_at - timedelta(days=100),
-        }, deep=True) for index in range(100)
-    ]
-    row = findings(data)["OT-SY-28"]
-    assert row.metric_value == inactive_count / 100
-    assert row.level == level
-
-
-def test_missing_usage_is_not_inactive_or_zero(data: Collection) -> None:
-    data.agents[0].last_used_at = None
-    data.agents[0].usage_coverage_start = None
-    row = findings(data)["OT-SY-28"]
-    assert row.metric_value is None and row.level == "N/A"
-
-
-def test_cost_shared_model_not_allocated_twice_and_host_plan_is_included(data: Collection) -> None:
-    row = findings(data)["OT-SY-29"]
-    assert row.metric_value == 0.8
-    assert row.level == "L3"
-    assert data.agents[0].cost_30d is None
-    assert data.agents[1].cost_30d == 40
-    assert data.agents[2].cost_30d == 40
-
-
-def test_cost_currency_mixing_and_absence_are_na(data: Collection) -> None:
-    data.costs[1].currency = "KRW"
-    assert findings(data)["OT-SY-29"].level == "N/A"
-    data.costs = []
-    row = findings(data)["OT-SY-29"]
-    assert row.metric_value is None and row.level == "N/A"
-
-
-def test_retention_uses_customer_threshold_not_hardcoded_one_year(data: Collection) -> None:
-    assert findings(data)["OE-SY-22"].level == "L2"
-    criteria = load_criteria()
-    criteria["required_retention_days"] = 60
-    assert next(row for row in evaluate(data, criteria, ALLOWED, TAGS) if row.se_code == "OE-SY-22").level == "L2"
-    result = evaluate(data, criteria, ALLOWED, TAGS, {
-        "retention_scope_verified": {"value": True, "evidence_refs": ["fixture://effective-table-retention"]},
-    })
-    assert next(row for row in result if row.se_code == "OE-SY-22").level == "L3"
-
-
-def test_interview_gap_exact_boundary(data: Collection) -> None:
-    assert findings(data, interviews={"DS-SY-06": 4.5})["DS-SY-06"].gap_flag is True
-    assert findings(data, interviews={"DS-SY-06": 4.49})["DS-SY-06"].gap_flag is False
-
-
-def test_partial_subscription_denominator_never_produces_confident_score(data: Collection) -> None:
-    data.facts["inventory_complete"] = False
-    assert all(row.level == "N/A" and row.metric_value is None for row in findings(data).values())
-
-
-def entra_data(data: Collection, mapped: bool = True) -> Collection:
-    from wasm_agent.models import EntraAgentIdentity, EntraBlueprint
-
-    sid = data.subscriptions[0]
-    project = f"/subscriptions/{sid}/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/acct/projects/proj"
-    first = data.agents[0].model_copy(update={
-        "platform": "foundry", "resource_id": project, "subscription_id": sid, "agent_name": "a1",
-        "agent_id": "a1", "tags": {"env": "prod"},
-    })
-    second = first.model_copy(update={"agent_name": "a2", "agent_id": "a2"})
-    data.agents = [first, second]
-    tags = ["agentName:A1", "projectName:Proj", "accountName:ACCT", f"subscriptionId:{sid.upper()}"]
-    data.entra_blueprints = [
-        EntraBlueprint(blueprint_id="bp-1", tags=tags if mapped else []),
-        EntraBlueprint(blueprint_id="bp-2"), EntraBlueprint(blueprint_id="bp-3"),
-    ]
-    data.entra_agent_identities = [
-        EntraAgentIdentity(identity_id=f"id-{index}", blueprint_id="bp-1", owner_count=1, sponsor_count=1,
-                           owners_all_disabled=False)
-        for index in range(4)
-    ]
-    data.facts.update({
-        "entra_requested": True, "entra_blueprints_complete": True, "entra_agents_complete": True,
-    })
-    return data
-
-
-def test_entra_facts_map_azure_agents_by_blueprint_tags_and_never_use_names_of_people(data: Collection) -> None:
-    facts = facts_for(entra_data(data))
-    assert facts["agent_identity_count"] == 4 and facts["blueprint_count"] == 3
-    assert facts["blueprint_based_ratio"] == 1
-    assert facts["agent_id_ratio"] == 0.5
-    assert facts["unassigned_ratio"] == 0 and facts["overprivileged_ratio"] == 0
-    assert "agent_ca_coverage" not in facts and "unremediated_risk_detections" not in facts
-    assert facts_for(entra_data(data, mapped=False))["agent_id_ratio"] == 0
-
-
-def test_entra_unassigned_and_overprivileged_are_derived_from_graph_evidence(data: Collection) -> None:
-    data = entra_data(data)
-    identities = data.entra_agent_identities
-    identities[0].sponsor_count = 0
-    identities[1].owners_all_disabled = True
-    identities[2].overprivileged_roles = ["Mail.ReadWrite.All"]
-    facts = facts_for(data)
-    assert facts["unassigned_ratio"] == 0.5 and facts["overprivileged_ratio"] == 0.25
-    data.facts["entra_agents_complete"] = False
-    assert "unassigned_ratio" not in facts_for(data) and "agent_identity_count" not in facts_for(data)
-
-
-def levels(data: Collection, facts: dict | None = None) -> dict:
-    rows = evaluate(data, load_criteria(), ALLOWED, TAGS, facts)
-    return {row.se_code: row for row in rows}
-
-
-def test_entra_items_are_always_reported_and_stay_conservative(data: Collection) -> None:
-    assert set(levels(data)) == set(load_criteria()["items"])
-    rows = levels(entra_data(data))
-    entra = {"DS-SY-05", "DP-SY-19", "OE-SY-20", "OE-SY-21"}
-    assert entra <= set(rows)
-    assert rows["DS-SY-05"].level == "L2" and rows["DS-SY-05"].metric_value == 3
-    assert rows["DS-SY-05"].assessment_basis == "configuration"
-    assert rows["OE-SY-20"].level == "L3" and rows["OE-SY-20"].metric_value == 0
-    assert "Agent Registry" in rows["DP-SY-19"].rationale
-    assert rows["OE-SY-21"].level == "L3" and "샘플 과다 권한" in rows["OE-SY-21"].rationale
-
-
-def test_entra_levels_follow_reviewed_thresholds_and_customer_evidence(data: Collection) -> None:
-    data = entra_data(data)
-    data.entra_agent_identities[0].sponsor_count = 0
-    data.entra_agent_identities[1].sponsor_count = 0
-    rows = levels(data)
-    assert (rows["OE-SY-20"].level, rows["OE-SY-20"].metric_value) == ("L2", 0.5)
-    data.entra_agent_identities[1].sponsor_count = 1
-    assert levels(data)["OE-SY-20"].level == "L2"
-    data.entra_agent_identities[0].sponsor_count = 1
-    assert levels(data)["OE-SY-20"].metric_value == 0
-    evidence = {"value": True, "evidence_refs": ["fixture://customer"]}
-    assert levels(data, {"major_type_blueprints_defined": evidence})["DS-SY-05"].level == "L4"
-    data.entra_blueprints = data.entra_blueprints[:2]
-    assert levels(data)["DS-SY-05"].level == "L2"
-    data.entra_blueprints, data.entra_agent_identities = [], []
-    assert levels(data)["DS-SY-05"].level == "L1" and levels(data)["OE-SY-20"].level == "N/A"
-
-
-def test_entra_item_is_not_blocked_by_an_incomplete_azure_inventory(data: Collection) -> None:
-    data = entra_data(data)
-    data.facts["inventory_complete"] = False
-    rows = levels(data)
-    assert rows["OE-SY-20"].metric_value == 0 and rows["OE-SY-20"].level == "L3"
-    assert rows["DP-SY-19"].level == "N/A" and rows["DP-SY-19"].metric_value is None
-
-
-def test_boolean_policy_does_not_accept_integer_one() -> None:
-    assert matches({"policy": 1}, {"policy": {"eq": True}}) is False
-
-
-def test_operate_assessment_codes_are_contiguous() -> None:
-    codes = {code for code in load_criteria()["items"] if code.startswith("OE-SY-")}
-    assert codes == {f"OE-SY-{number}" for number in range(20, 27)}
-
-
-def test_security_score_and_recommendation_age_are_derived_from_collected_evidence(data: Collection) -> None:
-    sids = data.subscriptions
-    assert "security_score" not in facts_for(data)
-    data.facts["secure_score_complete_subscriptions"] = list(sids)
-    data.secure_scores = [
-        SecureScore(subscription_id=sid, percentage=value) for sid, value in zip(sids, (0.9, 0.75, 0.8), strict=True)
-    ]
-    data.security = [SecurityRecommendation(
-        subscription_id=sids[0], resource_id="r", assessment_id="a", severity="High", status="Unhealthy",
-        first_evaluation_date=data.collected_at - timedelta(days=40),
-        status_change_date=data.collected_at - timedelta(days=10),
-    )]
-    facts = facts_for(data)
-    assert facts["security_score"] == pytest.approx(75)
-    assert facts["recommendation_max_age_days"] == 10
-    data.security[0].status_change_date = data.security[0].first_evaluation_date = None
-    assert "recommendation_max_age_days" not in facts_for(data)
-    data.secure_scores.pop()
-    assert "security_score" not in facts_for(data)
-
-
-def test_internal_security_score_threshold_is_customer_supplied_and_enables_l3(data: Collection) -> None:
-    sids = data.subscriptions
-    data.facts["secure_score_complete_subscriptions"] = list(sids)
-    data.secure_scores = [SecureScore(subscription_id=sid, percentage=0.8) for sid in sids]
-    data.security = [SecurityRecommendation(
-        subscription_id=sids[0], resource_id="r", assessment_id="a", severity="Low", status="Healthy",
-    )]
-
-    def level(minimum: float | None) -> str:
-        rows = evaluate(data, criteria_with(internal_security_score_min=minimum), ALLOWED, TAGS)
-        return next(row.level for row in rows if row.se_code == "BI-SY-12")
-
-    assert level(None) == "L2"
-    assert level(85) == "L2"
-    assert level(80) == "L3"
-
-
-def test_model_policy_enforcement_requires_every_subscription_and_customer_definition(data: Collection) -> None:
-    sids = data.subscriptions
-    definition = "/providers/Microsoft.Authorization/policyDefinitions/model-allowlist"
-    data.facts["policy_complete_subscriptions"] = list(sids)
-    assert "model_policy_assigned" not in facts_for(data)
-    data.policy_assignments = [
-        PolicyAssignment(
-            subscription_id=sid, assignment_id=f"/a/{sid}", policy_definition_id=definition.upper(),
-            enforcement_mode="Default",
-        ) for sid in sids
-    ]
-    assert facts_for(data, model_policy_definition_ids=[definition])["model_policy_assigned"] is True
-    assert "model_policy_enforced" not in facts_for(data, model_policy_definition_ids=[definition])
-    data.policy_assignments[1].enforcement_mode = "DoNotEnforce"
-    assert facts_for(data, model_policy_definition_ids=[definition])["model_policy_assigned"] is False
-    data.facts["policy_complete_subscriptions"] = list(sids[:2])
-    assert "model_policy_assigned" not in facts_for(data, model_policy_definition_ids=[definition])
-
-
-def test_budget_alerts_and_cost_center_tags_enable_the_l4_cost_condition(data: Collection) -> None:
-    sids = {agent.subscription_id for agent in data.agents}
-    data.facts["budget_complete_subscriptions"] = sorted(sids)
-    data.budgets = [Budget(subscription_id=sid, budget_id=f"/b/{sid}", enabled_alerts=1) for sid in sorted(sids)]
-    assert facts_for(data)["budget_alerts_configured"] is True
-    assert facts_for(data)["cost_allocation_tagged"] is False
-    for agent in data.agents:
-        agent.tags["cost-center"] = "cc-1"
-    assert facts_for(data)["cost_allocation_tagged"] is True
-    data.budgets[0].enabled_alerts = 0
-    assert facts_for(data)["budget_alerts_configured"] is False
-    data.facts["budget_complete_subscriptions"] = sorted(sids)[:1]
-    assert "budget_alerts_configured" not in facts_for(data)
-
-
-@pytest.mark.parametrize("code", TITLES)
-@pytest.mark.parametrize("level", [1, 2, 3, 4, 5])
-def test_all_azure_controls_are_scored_with_cumulative_evidence(code: str, level: int) -> None:
-    criteria = load_criteria()
-    config = criteria["items"][code]
-    target = next(rule["when"][config["metric"]]["gte"] for rule in config["rules"] if rule["level"] == "L3")
-    compliant = 0 if level == 1 else int(target * 100) - 1 if level == 2 else 100
-    policy = {
-        config["assessment_key"]: {
-            "value": {"total": 100, "compliant": compliant}, "evidence_refs": ["fixture://complete-review"],
-        },
-    }
-    if level >= 3:
-        rule = next(rule for rule in config["rules"] if rule["level"] == f"L{level}")
-        policy.update({
-            name: {"value": True, "evidence_refs": [f"fixture://{name}"]}
-            for name in rule["when"] if name != config["metric"]
+    snapshot = Collection(collected_at=NOW)
+    for index in range(10):
+        complete = index < good
+        sid = f"{index + 1:08}-1111-4111-8111-111111111111"
+        account = f"/subscriptions/{sid}/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/ai{index}"
+        project = account + "/projects/p"
+        blueprint = f"blueprint-{index}"
+        snapshot.subscriptions.append(sid)
+        snapshot.resources.append({
+            "id": account, "subscriptionId": sid, "type": "microsoft.cognitiveservices/accounts",
+            "kind": "AIServices", "location": "westus2",
         })
-    data = Collection(collected_at="2026-11-05T00:00:00Z", facts={
-        "inventory_complete": True, "agent_inventory_complete": True,
-    })
-    row = next(item for item in evaluate(data, criteria, {}, TAGS, policy) if item.se_code == code)
-    assert row.level == f"L{level}" and row.metric_value == compliant / 100
-    if level == 5:
-        enforced = next(name for name in policy if name.endswith("_enforced"))
-        del policy[enforced]
-        row = next(item for item in evaluate(data, criteria, {}, TAGS, policy) if item.se_code == code)
-        assert row.level == "L3"
-
-
-@pytest.mark.parametrize("code", TITLES)
-def test_perfect_control_ratio_does_not_invent_standardization_or_automation(code: str) -> None:
-    config = load_criteria()["items"][code]
-    data = Collection(collected_at="2026-11-05T00:00:00Z", facts={"inventory_complete": True})
-    policy = {config["assessment_key"]: {
-        "value": {"total": 10, "compliant": 10}, "evidence_refs": ["fixture://review"],
-    }}
-    row = next(item for item in evaluate(data, load_criteria(), {}, TAGS, policy) if item.se_code == code)
-    assert row.level == "N/A" and row.metric_value == 1
-    policy[config["assessment_key"]]["value"] = {"total": 0, "compliant": 0}
-    row = next(item for item in evaluate(data, load_criteria(), {}, TAGS, policy) if item.se_code == code)
-    assert row.level == "N/A" and row.metric_value is None
-
-
-@pytest.mark.parametrize("value", [
-    {"total": 2, "compliant": 3}, {"total": -1, "compliant": 0},
-    {"total": 10, "compliant": True}, {"total": 10.0, "compliant": 9},
-    {"total": 10}, 1, None,
-])
-def test_reviewed_assessment_rejects_invalid_counts(data: Collection, value: object) -> None:
-    with pytest.raises(ValueError, match="requires integer counts"):
-        findings(data, {"network_assessment": {"value": value, "evidence_refs": ["fixture://review"]}})
-
-
-def test_public_access_flag_filter_name_and_runtime_option_are_not_effectiveness_scores(data: Collection) -> None:
-    from wasm_agent.models import ProposalObservation
-
-    data.proposal_observations = [
-        ProposalObservation(code="DS-SY-07", subject="acct", kind="ai_account", values={
-            "public_network_access": "Enabled", "default_action": "Deny", "private_endpoints": 1,
-        }),
-    ]
-    for row in data.deployments:
-        row.rai_policy = None
-        row.version_upgrade_option = "NoAutoUpgrade"
-    rows = findings(data)
-    assert rows["DS-SY-07"].level == rows["BI-SY-14"].level == "L2"
-    assert rows["BI-SY-13"].level == "N/A"
-    assert all(rows[code].assessment_basis == "configuration" for code in ("DS-SY-07", "BI-SY-14"))
-    assert all(rows[code].metric_value is None for code in ("DS-SY-07", "BI-SY-13", "BI-SY-14"))
-
-
-@pytest.fixture
-def configured_data(data: Collection) -> Collection:
-    data = entra_data(data)
-    for agent in data.agents:
-        agent.deployed_at = agent.evaluated_before_deploy = None
-        agent.last_used_at = agent.usage_coverage_start = None
-    data.security = [SecurityRecommendation(
-        subscription_id=data.subscriptions[0], resource_id="account", assessment_id="assessment",
-        severity="Low", status="Healthy",
-    )]
-    data.resources = [{"id": "account", "type": "microsoft.cognitiveservices/accounts", "location": "westus2"}]
-    data.facts["resource_metrics"] = [{"metrics": [{"timeseries": [{"data": [{"total": 0}]}]}]}]
-    entries = [
-        ("DS-SY-07", "agent_host", {
-            "public_network_access": "Enabled", "https_only": True, "vnet_integrated": False, "ip_restrictions": 0,
-        }),
-        ("DS-SY-08", "agent_tools", {"tool_types": ["mcp"], "mcp_approval": ["always"]}),
-        ("DS-SY-09", "tool_endpoints", {"hosts": ["example.invalid"]}),
-        ("BI-SY-13", "ai_account", {"custom_policies": 1, "custom_policy_names": ["safe"]}),
-        ("BI-SY-14", "agent_host", {"runtime": "PYTHON|3.11"}),
-        ("BI-SY-16", "policy_state", {"state": "Compliant", "resources": 1}),
-        ("OE-SY-23", "ai_account", {
-            "identity_type": "SystemAssigned", "assignments": 0, "privileged_assignments": 0,
-            "subscription_scope_assignments": 0, "local_auth_disabled": True,
-        }),
-        ("OE-SY-24", "monitor_resource", {
-            "kind": "metricalerts", "enabled": True, "targets_ai": True, "has_action_group": True,
-        }),
-    ]
-    data.proposal_observations = [
-        ProposalObservation(code=code, kind=kind, subject="account", values=values)
-        for code, kind, values in entries
-    ]
-    for deployment in data.deployments:
-        deployment.rai_policy = "safe"
-    return data
-
-
-def test_observed_configurations_grade_every_basic_entry_without_inventing_primary_metrics(
-    configured_data: Collection,
-) -> None:
-    rows = findings(configured_data)
-    for code in load_criteria()["configuration_grading"]["items"]:
-        row = rows[code]
-        assert row.level == "L2" and row.assessment_basis == "configuration", code
-        assert row.configuration_value > 0 and row.reason is None
-        assert "구성 기반 기본등급" in row.rationale
-    assert rows["BI-SY-11"].metric_value is rows["OT-SY-28"].metric_value is None
-    assert all(row.level not in ("L4", "L5") for row in rows.values())
-
-
-@pytest.mark.parametrize("code", load_criteria()["configuration_grading"]["items"])
-def test_collection_failure_blocks_configuration_grade(configured_data: Collection, code: str) -> None:
-    from wasm_agent.proposals import ISSUE_COLLECTORS
-
-    related = {
-        "BI-SY-11": "foundry_evaluations", "BI-SY-12": "security", "OE-SY-22": "logs",
-        "OT-SY-28": "agent_usage", "DS-SY-05": "entra_blueprints",
+        agent = data.agents[0].model_copy(deep=True, update={
+            "subscription_id": sid, "resource_id": project, "model_resource_id": account,
+            "agent_id": f"agent-{index}", "agent_name": f"agent-{index}",
+            "agent_version": "1" if complete else "",
+        })
+        if not complete:
+            agent.tags.pop("cost-center")
+        snapshot.agents.append(agent)
+        snapshot.entra_blueprints.append(EntraBlueprint(blueprint_id=blueprint, tags=[
+            f"subscriptionId:{sid}", f"accountName:ai{index}", "projectName:p", f"agentName:agent-{index}",
+        ]))
+        snapshot.entra_agent_identities.append(data.entra_agent_identities[0].model_copy(update={
+            "identity_id": f"identity-{index}", "blueprint_id": blueprint if complete else "not-collected",
+            "owner_count": 1 if complete else 0,
+            "app_roles": [] if complete else ["Data.Write.All"],
+            "overprivileged_roles": [] if complete else ["Data.Write.All"],
+        }))
+        snapshot.deployments.append(data.deployments[0].model_copy(update={
+            "subscription_id": sid, "account_id": account, "resource_id": account + "/deployments/m",
+            "version": "1" if complete else "", "rai_policy": "safe" if complete else "missing",
+        }))
+        snapshot.evaluations.append(data.evaluations[0].model_copy(update={
+            "subscription_id": sid, "project_id": project, "run_id": f"run-{index}",
+            "status": "completed" if complete else "failed",
+        }))
+        snapshot.security.append(data.security[0].model_copy(update={
+            "subscription_id": sid, "resource_id": account, "assessment_id": f"/assessment/{index}",
+            "status": "Healthy" if complete else "Unhealthy",
+        }))
+        snapshot.logs.append(data.logs[0].model_copy(update={
+            "subscription_id": sid, "resource_id": account, "enabled": complete,
+        }))
+        snapshot.budgets.append(data.budgets[0].model_copy(update={
+            "subscription_id": sid, "budget_id": f"/budget/{index}", "forecast_alerts": 1 if complete else 0,
+        }))
+        snapshot.costs.append(data.costs[0].model_copy(update={
+            "subscription_id": sid, "resource_id": account if complete else f"/shared-workspace/{index}",
+        }))
+        for original in data.proposal_observations:
+            row = original.model_copy(deep=True, update={"subscription_id": sid, "subject": account})
+            field_values = deepcopy(row.values)
+            if row.code == "DS-SY-07":
+                field_values["public_network_access"] = "Disabled" if complete else "Enabled"
+            elif row.code == "DS-SY-08":
+                field_values["mcp_approval_modes"] = ["always" if complete else "never"]
+            elif row.code == "DS-SY-09":
+                field_values["endpoint_https"] = [complete]
+            elif row.code == "BI-SY-16":
+                field_values["state"] = "Compliant" if complete else "NonCompliant"
+            elif row.code == "OE-SY-23":
+                field_values["principal_count"] = 1 if complete else 0
+            elif row.code == "OE-SY-24":
+                field_values.update({"enabled": complete, "target_ids": [account], "action_group_resolved": complete})
+            row.values = field_values
+            snapshot.proposal_observations.append(row)
+    snapshot.facts = {
+        "inventory_complete": True, "agent_inventory_complete": True, "deployment_inventory_complete": True,
+        "entra_blueprints_complete": True, "entra_agents_complete": True,
+        "foundry_project_ids": [run.project_id for run in snapshot.evaluations],
+        "evaluation_complete_projects": [run.project_id for run in snapshot.evaluations],
+        "resource_metrics": [
+            {"resource_id": row["id"], "metrics": [{"timeseries": [{"data": [{"total": 0}]}]}]
+             if index < good else []}
+            for index, row in enumerate(snapshot.resources)
+        ],
     }
-    configured_data.issues.append(Issue(
-        collector=related[code] if code in related else ISSUE_COLLECTORS[code][0],
-        target="fixture", reason="permission_denied", detail="Confirmed access denied",
-    ))
-    row = findings(configured_data)[code]
-    assert row.level == "N/A" and row.reason == "permission_denied"
-    assert row.configuration_value is None and row.assessment_basis == "criteria"
+    for config in load_criteria()["items"].values():
+        for key in config["complete_subscriptions"]:
+            snapshot.facts[key] = snapshot.subscriptions
+    rows = grade(snapshot)
+    assert len(rows) == 22
+    for code, row in rows.items():
+        assert row.metric_value == pytest.approx(good / 10), (code, row.rationale)
+        assert row.level == level, (code, row.rationale)
 
 
-def test_unknown_evaluation_status_is_not_a_completed_configuration(configured_data: Collection) -> None:
-    for run in configured_data.evaluations:
-        run.status = None
-    row = findings(configured_data)["BI-SY-11"]
-    assert row.level == "N/A" and row.metric_value is None and row.configuration_value is None
-
-
-@pytest.mark.parametrize("metrics", [None, [], [{"timeseries": None}], [
-    {"timeseries": [{"data": [{"timeStamp": "2026-11-05T00:00:00Z"}]}]},
-]])
-def test_usage_without_numeric_samples_is_not_a_basic_grade(
-    configured_data: Collection, metrics: list | None,
+@pytest.mark.parametrize("code", CODES)
+@pytest.mark.parametrize("ratio,level", [
+    (0, "L1"), (0.01, "L2"), (0.7999, "L2"), (0.8, "L3"),
+    (0.8999, "L3"), (0.9, "L4"), (0.9999, "L4"), (1, "L5"),
+])
+def test_exact_thresholds_for_every_control(
+    data: Collection, code: str, ratio: float, level: str, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    configured_data.facts["resource_metrics"] = [{"metrics": metrics}]
-    row = findings(configured_data)["OT-SY-28"]
-    assert row.level == "N/A" and row.metric_value is None
+    from wasm_agent import evaluation
+
+    original = measurements(data, load_criteria(), DEFAULT_TAGS)
+    original[code] = Measurement(total=10000, compliant=ratio * 10000, detail="Boundary API measurement")
+    monkeypatch.setattr(evaluation, "measurements", lambda *args: original)
+    row = grade(data)[code]
+    assert row.level == level and row.metric_value == pytest.approx(ratio)
+    assert row.level_criterion == load_criteria()["items"][code]["levels"][level]
 
 
-def test_unknown_identity_and_unrelated_alerts_do_not_produce_basic_grades(configured_data: Collection) -> None:
-    for row in configured_data.proposal_observations:
-        if row.code == "OE-SY-23":
-            row.values["identity_type"] = None
-        if row.code == "OE-SY-24":
-            row.values["targets_ai"] = False
-    rows = findings(configured_data)
-    assert all(rows[code].level == "N/A" for code in ("OE-SY-23", "OE-SY-24", "OE-SY-25"))
+@pytest.mark.parametrize("code", CODES)
+def test_related_collection_error_prevents_any_level(data: Collection, code: str) -> None:
+    collector = load_criteria()["items"][code]["collectors"][0]
+    data.issues.append(Issue(collector=collector, target="fixture", reason="permission_denied", detail="Denied API"))
+    row = grade(data)[code]
+    assert row.level == "N/A" and row.metric_value is None and row.reason == "permission_denied"
 
 
-def test_tag_metric_requires_all_keys_on_the_same_agent_and_cannot_be_overridden(data: Collection) -> None:
-    for agent in data.agents:
-        agent.owner = agent.sponsor = None
-        agent.tags = {"owner": "team", "env": "prod", "cost-center": "x"}
-    assert findings(data)["BI-SY-15"].metric_value == 0
-    with pytest.raises(ValueError, match="cannot override"):
-        findings(data, {"asset_assessment": {
-            "value": {"total": 3, "compliant": 3}, "evidence_refs": ["fixture://conflicting-review"],
-        }})
-    data.agents[0].sponsor = "team"
-    assert findings(data)["BI-SY-15"].metric_value == pytest.approx(1 / 3)
+@pytest.mark.parametrize("code", CODES)
+def test_empty_denominator_is_not_success_or_l1(
+    data: Collection, code: str, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from wasm_agent import evaluation
+
+    original = measurements(data, load_criteria(), DEFAULT_TAGS)
+    original[code] = Measurement(unavailable="대상 없음")
+    monkeypatch.setattr(evaluation, "measurements", lambda *args: original)
+    row = grade(data)[code]
+    assert row.level == "N/A" and row.metric_value is None and row.reason == "not_found"
 
 
-@pytest.mark.parametrize("config", load_criteria()["items"].values(), ids=load_criteria()["items"].keys())
-def test_every_l5_also_satisfies_an_l4_rule(config: dict) -> None:
-    for rule in config["rules"]:
-        if rule["level"] != "L5":
-            continue
-        facts = {}
-        for name, conditions in rule["when"].items():
-            operator, value = next(iter(conditions.items()))
-            facts[name] = value / 2 if operator == "lt" else value
-        assert matches(facts, rule["when"])
-        assert any(matches(facts, lower["when"]) for lower in config["rules"] if lower["level"] == "L4")
+@pytest.mark.parametrize("code", CODES)
+def test_completeness_markers_cannot_be_omitted(data: Collection, code: str) -> None:
+    config = load_criteria()["items"][code]
+    data.facts["inventory_complete"] = False
+    data.facts["entra_agents_complete"] = data.facts["entra_blueprints_complete"] = False
+    assert grade(data)[code].level == "N/A"
+    if config.get("complete_subscriptions"):
+        data.facts["inventory_complete"] = True
+        data.facts[config["complete_subscriptions"][0]] = []
+        assert grade(data)[code].level == "N/A"
+
+
+def test_ten_blueprints_and_ten_linked_identities_receive_level5(data: Collection) -> None:
+    data.entra_blueprints = [EntraBlueprint(blueprint_id=f"blueprint-{i}") for i in range(10)]
+    data.entra_agent_identities = [EntraAgentIdentity(identity_id=f"id-{i}", blueprint_id=f"blueprint-{i}")
+                                    for i in range(10)]
+    row = grade(data)["DS-SY-05"]
+    assert row.level == "L5" and row.metric_value == 1
+    data.entra_agent_identities[0].blueprint_id = "outside"
+    assert grade(data)["DS-SY-05"].level == "L4"
+    data.entra_agent_identities[1].blueprint_id = None
+    assert grade(data)["DS-SY-05"].level == "L3"
+
+
+@pytest.mark.parametrize("field,value", [
+    ("period_end", NOW - timedelta(seconds=1)), ("period_start", NOW + timedelta(days=1)),
+    ("filters_empty", False), ("amount", 0), ("actual_alerts", 0),
+    ("forecast_alerts", 0), ("notifications_with_receivers", False),
+])
+def test_budget_must_be_effective_and_include_both_notification_types(
+    data: Collection, field: str, value: object,
+) -> None:
+    setattr(data.budgets[0], field, value)
+    row = grade(data)["OT-SY-31"]
+    assert row.level == "L1" and row.metric_value == 0
+
+
+def test_missing_budget_fields_are_unknown_not_zero(data: Collection) -> None:
+    data.budgets[0].period_end = None
+    assert grade(data)["OT-SY-31"].level == "N/A"
+    data.budgets = []
+    assert grade(data)["OT-SY-31"].level == "L1"
+
+
+def test_model_unknown_update_option_does_not_count_as_configured(data: Collection) -> None:
+    data.deployments[0].version_upgrade_option = None
+    assert grade(data)["DS-SY-06"].level == "N/A"
+    data.deployments[0].version_upgrade_option = "unrecognized"
+    assert grade(data)["DS-SY-06"].level == "L1"
+
+
+def test_mcp_never_custom_and_missing_modes_are_not_always(data: Collection) -> None:
+    tool = next(row for row in data.proposal_observations if row.code == "DS-SY-08")
+    tool.values["mcp_approval_modes"] = ["never"]
+    assert grade(data)["DS-SY-08"].level == "L1"
+    tool.values["mcp_approval_modes"] = ["custom"]
+    assert grade(data)["DS-SY-08"].level == "L1"
+    tool.values["mcp_approval_modes"] = [None]
+    assert grade(data)["DS-SY-08"].level == "N/A"
+    tool.values["mcp_approval_modes"] = []
+    assert grade(data)["DS-SY-08"].level == "N/A"
+
+
+def test_cost_shared_resources_are_not_attributed_twice(data: Collection) -> None:
+    data.agents.append(data.agents[0].model_copy(update={"agent_id": "other"}))
+    assert grade(data)["OT-SY-29"].metric_value == 0
+    data.costs[0].amount = 0
+    assert grade(data)["OT-SY-29"].level == "N/A"
+    data.costs[0].amount = -1
+    assert grade(data)["OT-SY-29"].level == "N/A"
+
+
+def test_not_applicable_recommendations_and_unknown_fields_do_not_mean_healthy(data: Collection) -> None:
+    data.security[0].status = "NotApplicable"
+    assert grade(data)["BI-SY-12"].level == "N/A"
+    data.security[0].status = None
+    assert grade(data)["BI-SY-12"].level == "N/A"
+
+
+def test_missing_filter_configuration_is_unknown_not_disabled(data: Collection) -> None:
+    row = next(row for row in data.proposal_observations if row.code == "BI-SY-13")
+    row.values["policy_filter_enabled"] = {"safe": None}
+    assert grade(data)["BI-SY-13"].level == "N/A"
+    row.values["policy_filter_enabled"] = {"safe": False}
+    assert grade(data)["BI-SY-13"].level == "L1"
+
+
+def test_noncompliance_and_exemption_are_not_perfect_policy_coverage(data: Collection) -> None:
+    row = next(row for row in data.proposal_observations if row.code == "BI-SY-16")
+    row.values["state"] = "NonCompliant"
+    assert grade(data)["BI-SY-16"].level == "L1"
+    row.values["state"] = "Unknown"
+    assert grade(data)["BI-SY-16"].level == "N/A"
+
+
+def test_missing_owner_counts_and_unresolved_role_names_are_unknown(data: Collection) -> None:
+    data.entra_agent_identities[0].owner_count = None
+    data.entra_agent_identities[0].app_roles = ["unresolved:abc"]
+    assert grade(data)["OE-SY-20"].level == grade(data)["OE-SY-21"].level == "N/A"
+
+
+def test_fully_linked_blueprint_must_have_actual_agent_identity_for_azure_link(data: Collection) -> None:
+    data.entra_agent_identities[0].blueprint_id = "other"
+    assert grade(data)["DP-SY-19"].level == "L1"
+
+
+def test_metric_zero_is_observed_but_missing_timeseries_is_not(data: Collection) -> None:
+    assert grade(data)["OT-SY-28"].level == "L5"
+    data.facts["resource_metrics"][0]["metrics"] = []
+    assert grade(data)["OT-SY-28"].level == "L1"
+    data.facts["resource_metrics"] = []
+    assert grade(data)["OT-SY-28"].level == "N/A"
+
+
+def test_configuration_name_count_does_not_prove_a_network_boundary(data: Collection) -> None:
+    row = next(row for row in data.proposal_observations if row.code == "DS-SY-07")
+    row.values["public_network_access"] = "Enabled"
+    assert grade(data)["DS-SY-07"].level == "L1"
+    row.values["public_network_access"] = "Disabled"
+    row.values["approved_private_endpoints"] = None
+    assert grade(data)["DS-SY-07"].level == "N/A"
+
+
+def test_qualitative_facts_cannot_elevate_api_grades(data: Collection) -> None:
+    with pytest.raises(ValueError, match="policy_facts"):
+        grade(data, facts={"major_type_blueprints_defined": {"value": True, "evidence_refs": ["file"]}})
+
+
+def test_rules_reject_unknown_operator_and_missing_values() -> None:
+    assert not matches({}, {"coverage": {"eq": 0}})
+    assert matches({"coverage": 0}, {"coverage": {"eq": 0}})
+    with pytest.raises(ValueError, match="Unknown criteria operator"):
+        matches({"coverage": 1}, {"coverage": {"unknown": 1}})
+
+
+def test_all_criteria_have_exactly_api_metrics_and_exhaustive_level_definitions() -> None:
+    criteria = load_criteria()
+    assert len(criteria["items"]) == 22
+    assert "configuration_grading" not in criteria
+    for config in criteria["items"].values():
+        assert list(config["levels"]) == ["L1", "L2", "L3", "L4", "L5"]
+        assert all(set(rule["when"]) == {"coverage"} for rule in config["rules"])
+        for value in (0, 0.001, 0.79, 0.8, 0.89, 0.9, 0.99, 1):
+            assert sum(matches({"coverage": value}, rule["when"]) for rule in config["rules"]) == 1

@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import timedelta
 from typing import Any, Protocol
 
-from wasm_agent.models import AgentEvidence, Collection, Finding
-from wasm_agent.proposals import ISSUE_COLLECTORS, LIMITS, build
+from wasm_agent.api_grading import PROFILE, Measurement, measurements
+from wasm_agent.models import Collection, Finding
 
 
 class Evaluator(Protocol):
@@ -14,8 +13,7 @@ class Evaluator(Protocol):
 
 def matches(facts: dict[str, Any], conditions: dict[str, dict[str, Any]]) -> bool:
     operations = {
-        "eq": lambda a, b: a == b,
-        "gt": lambda a, b: a > b, "gte": lambda a, b: a >= b,
+        "eq": lambda a, b: a == b, "gt": lambda a, b: a > b, "gte": lambda a, b: a >= b,
         "lt": lambda a, b: a < b, "lte": lambda a, b: a <= b,
     }
     for key, tests in conditions.items():
@@ -33,265 +31,19 @@ def matches(facts: dict[str, Any], conditions: dict[str, dict[str, Any]]) -> boo
     return True
 
 
-def evidence_refs(data: Collection) -> list[str]:
-    result = set()
-    for field in (
-        "agents", "deployments", "evaluations", "costs", "security", "secure_scores", "policy_assignments",
-        "budgets", "entra_blueprints", "entra_agent_identities",
-        "logs", "issues",
-    ):
-        for entry in getattr(data, field):
-            result.update(entry.evidence_refs)
-    return sorted(result)
-
-
-def derive_facts(
-    data: Collection, criteria: dict[str, Any], allowed: dict[str, Any],
-    conventions: dict[str, Any],
-) -> dict[str, Any]:
-    facts: dict[str, Any] = {}
-    azure_agents = [agent for agent in data.agents if agent.platform in ("foundry", "langchain")]
-    models = allowed.get("models") or []
-    if data.deployments and models and data.facts.get("deployment_inventory_complete", False):
-        hits = sum(any(
-            item.get("name") == deployment.model
-            and item.get("version") == deployment.version
-            and item.get("format") == deployment.format
-            for item in models
-        ) for deployment in data.deployments)
-        facts["allowed_ratio"] = hits / len(data.deployments)
-        facts["outside_ratio"] = (len(data.deployments) - hits) / len(data.deployments)
-    production = [
-        agent for agent in azure_agents
-        if agent.tags.get(conventions["environment_key"]) in conventions["production_values"]
-    ]
-    complete_projects = set(data.facts.get("evaluation_complete_projects", []))
-    project_ids = set(data.facts.get("foundry_project_ids", []))
-    if production and project_ids and project_ids <= complete_projects:
-        facts["evaluation_history_complete"] = True
-        facts["evaluation_history_count"] = len(data.evaluations)
-        if not data.evaluations and all(agent.platform == "foundry" for agent in production):
-            for agent in production:
-                agent.evaluated_before_deploy = False
-                agent.field_status.pop("evaluated_before_deploy", None)
-    for agent in production:
-        if agent.deployed_at is None:
-            continue
-        runs = [
-            run for run in data.evaluations
-            if run.agent_id == agent.agent_id
-            and run.agent_version == agent.agent_version
-            and run.project_id == agent.resource_id
-            and run.completed_at is not None
-            and run.status in ("completed", "succeeded", "Succeeded")
-        ]
-        if runs:
-            before = any(run.completed_at <= agent.deployed_at for run in runs)
-            if before or agent.resource_id in complete_projects:
-                agent.evaluated_before_deploy = before
-                agent.field_status.pop("evaluated_before_deploy", None)
-    if production and all(agent.evaluated_before_deploy is not None for agent in production):
-        facts["evaluated_ratio"] = sum(agent.evaluated_before_deploy is True for agent in production) / len(production)
-    inactivity = []
-    cutoff = data.collected_at - timedelta(days=criteria["inactivity_days"])
-    for agent in azure_agents:
-        if agent.last_used_at is not None and agent.last_used_at > cutoff:
-            inactivity.append(False)
-        elif agent.usage_coverage_start is not None and agent.usage_coverage_start <= cutoff:
-            inactivity.append(agent.last_used_at is None or agent.last_used_at <= cutoff)
-        else:
-            inactivity.append(None)
-    if inactivity and None not in inactivity:
-        facts["inactive_ratio"] = sum(value is True for value in inactivity) / len(inactivity)
-    if data.logs and all(setting.enabled for setting in data.logs) and not any(
-        item.collector == "logs" for item in data.issues
-    ):
-        retention = [setting.retention_days for setting in data.logs if setting.retention_days is not None]
-        if len(retention) == len(data.logs):
-            facts["retention_days"] = min(retention)
-            required = criteria.get("required_retention_days")
-            if required is not None:
-                facts["retention_meets_internal"] = facts["retention_days"] >= required
-        if data.facts.get("audit_activity_observed"):
-            facts["logs_collected"] = True
-    currencies = {row.currency for row in data.costs}
-    complete_cost = set(data.facts.get("cost_complete_subscriptions", []))
-    if data.costs and len(currencies) == 1 and set(data.subscriptions) <= complete_cost:
-        amount = sum(row.amount for row in data.costs)
-        if amount > 0 and all(row.amount >= 0 for row in data.costs):
-            allocated = 0.0
-            agent_costs: dict[tuple[str | None, str, str | None, str], float] = {}
-            for row in data.costs:
-                matching = [
-                    agent for agent in azure_agents
-                    if row.resource_id.lower() in {
-                        (agent.resource_id or "").lower(), (agent.model_resource_id or "").lower(),
-                        *[rid.lower() for rid in agent.cost_resource_ids],
-                    }
-                ]
-                if len(matching) == 1:
-                    allocated += row.amount
-                    agent = matching[0]
-                    key = (agent.subscription_id, agent.platform, agent.resource_id, agent.agent_id)
-                    agent_costs[key] = agent_costs.get(key, 0) + row.amount
-            for agent in azure_agents:
-                key = (agent.subscription_id, agent.platform, agent.resource_id, agent.agent_id)
-                if key in agent_costs:
-                    agent.cost_30d = agent_costs[key]
-                    agent.currency = next(iter(currencies))
-                    agent.field_status.pop("cost_30d", None)
-                    agent.field_status.pop("currency", None)
-            facts["attributable_cost_ratio"] = allocated / amount
-            facts["monthly_cost_aggregation"] = all(row.usage_date is not None for row in data.costs)
-    if data.security and not any(item.collector == "security" for item in data.issues) and all(
-        row.severity in ("High", "Medium", "Low") and row.status in ("Healthy", "Unhealthy", "NotApplicable")
-        for row in data.security
-    ):
-        facts["high_risk_recommendations"] = sum(
-            row.severity == "High" and row.status == "Unhealthy" for row in data.security
-        )
-        unhealthy = [row for row in data.security if row.status == "Unhealthy"]
-        starts = [row.status_change_date or row.first_evaluation_date for row in unhealthy]
-        if all(start is not None for start in starts):
-            facts["recommendation_max_age_days"] = max(
-                ((data.collected_at - start).days for start in starts if start is not None), default=0,
-            )
-    approved = set(data.subscriptions)
-    scores = {row.subscription_id: row.percentage for row in data.secure_scores if row.percentage is not None}
-    if approved and approved <= set(data.facts.get("secure_score_complete_subscriptions", [])) and approved <= set(
-        scores,
-    ):
-        facts["security_score"] = min(scores[sid] for sid in approved) * 100
-    required_policies = [str(value).lower() for value in criteria.get("model_policy_definition_ids") or []]
-    if required_policies and approved and approved <= set(data.facts.get("policy_complete_subscriptions", [])):
-        enforced = {
-            (row.subscription_id, row.policy_definition_id.lower())
-            for row in data.policy_assignments if row.enforcement_mode == "Default"
-        }
-        facts["model_policy_assigned"] = all(
-            (sid, definition) in enforced for sid in approved for definition in required_policies
-        )
-    ai_subscriptions = {agent.subscription_id for agent in azure_agents if agent.subscription_id}
-    if ai_subscriptions and ai_subscriptions <= set(data.facts.get("budget_complete_subscriptions", [])):
-        facts["budget_alerts_configured"] = all(
-            any(row.enabled_alerts > 0 for row in data.budgets if row.subscription_id == sid)
-            for sid in ai_subscriptions
-        )
-    if azure_agents:
-        facts["cost_allocation_tagged"] = all(
-            bool(agent.tags.get(conventions["cost_center_key"])) for agent in azure_agents
-        )
-        if data.facts.get("agent_inventory_complete", data.facts.get("inventory_complete")):
-            facts["asset_tag_ratio"] = sum(
-                bool(agent.tags.get(conventions["owner_key"]) or agent.owner)
-                and bool(agent.tags.get(conventions["sponsor_key"]) or agent.sponsor)
-                and bool(agent.tags.get(conventions["environment_key"]))
-                and bool(agent.tags.get(conventions["cost_center_key"]))
-                for agent in azure_agents
-            ) / len(azure_agents)
-    facts.update(derive_entra_facts(data, azure_agents))
-    return facts
-
-
-def blueprint_tags(tags: list[str]) -> dict[str, str]:
-    return {
-        key.lower(): value.lower()
-        for key, _, value in (tag.partition(":") for tag in tags) if value
-    }
-
-
-def agent_has_entra_identity(agent: AgentEvidence, blueprints: list[Any]) -> bool:
-    if agent.platform != "foundry" or not agent.resource_id or not agent.subscription_id:
-        return False
-    parts = agent.resource_id.lower().split("/")
-    if "accounts" not in parts or "projects" not in parts:
-        return False
-    account, project = parts[parts.index("accounts") + 1], parts[parts.index("projects") + 1]
-    for blueprint in blueprints:
-        tags = blueprint_tags(blueprint.tags)
-        if (
-            tags.get("agentname") == agent.agent_name.lower() and tags.get("projectname") == project
-            and tags.get("accountname") == account and tags.get("subscriptionid") == agent.subscription_id.lower()
-        ):
-            return True
-    return False
-
-
-def derive_entra_facts(data: Collection, azure_agents: list[AgentEvidence]) -> dict[str, Any]:
-    facts: dict[str, Any] = {}
-    identities, blueprints = data.entra_agent_identities, data.entra_blueprints
-    identities_ready = bool(data.facts.get("entra_agents_complete"))
-    blueprints_ready = bool(data.facts.get("entra_blueprints_complete"))
-    if identities_ready:
-        facts["agent_identity_count"] = len(identities)
-    if blueprints_ready:
-        facts["blueprint_count"] = len(blueprints)
-    if identities_ready and blueprints_ready and identities:
-        known = {item.blueprint_id.lower() for item in blueprints}
-        facts["blueprint_based_ratio"] = sum(
-            bool(item.blueprint_id) and item.blueprint_id.lower() in known for item in identities
-        ) / len(identities)
-    if blueprints_ready and azure_agents:
-        facts["agent_id_ratio"] = sum(
-            agent_has_entra_identity(agent, blueprints) for agent in azure_agents
-        ) / len(azure_agents)
-    if identities_ready and identities:
-        facts["unassigned_ratio"] = sum(
-            not item.owner_count or not item.sponsor_count or item.owners_all_disabled is True
-            for item in identities
-        ) / len(identities)
-        facts["overprivileged_ratio"] = sum(bool(item.overprivileged_roles) for item in identities) / len(identities)
-    return facts
-
-
-def configuration_counts(data: Collection, conventions: dict[str, Any]) -> dict[str, int]:
-    """Count observed basic controls, never substitute for the primary maturity metric."""
-    metrics = {code: build(code, data, conventions)[0] for code in (
-        "DS-SY-07", "DS-SY-08", "DS-SY-09", "BI-SY-13", "BI-SY-14", "BI-SY-16",
-        "OE-SY-23", "OE-SY-24", "OE-SY-25", "OE-SY-26",
-    )}
-    projects = set(data.facts.get("foundry_project_ids", []))
-    complete_projects = set(data.facts.get("evaluation_complete_projects", []))
-    usage_resources = sum(
-        any(
-            type(value) in (int, float)
-            for metric in row.get("metrics") or [] for series in metric.get("timeseries") or []
-            for point in series.get("data") or [] for key, value in point.items() if key != "timeStamp"
-        ) for row in data.facts.get("resource_metrics", [])
-    )
-    network = metrics["DS-SY-07"]
-    versions = metrics["BI-SY-14"]
-    return {
-        "BI-SY-11": sum(
-            run.status is not None and run.status.lower() in ("completed", "succeeded")
-            for run in data.evaluations
-        )
-        if projects and projects <= complete_projects else 0,
-        "BI-SY-12": sum(
-            row.status in ("Healthy", "Unhealthy", "NotApplicable") for row in data.security
-        ) + sum(row.percentage is not None for row in data.secure_scores),
-        "OE-SY-22": sum(row.enabled for row in data.logs),
-        "OT-SY-28": usage_resources,
-        "DS-SY-05": len(data.entra_blueprints) if data.facts.get("entra_blueprints_complete") else 0,
-        "DS-SY-07": network["accounts_default_deny"] + network["accounts_private_endpoint"]
-        + network["hosts_https_only"] + network["hosts_ip_restricted"],
-        "DS-SY-08": metrics["DS-SY-08"]["agents_with_tools"],
-        "DS-SY-09": len(metrics["DS-SY-09"]["hosts"]),
-        "BI-SY-13": metrics["BI-SY-13"]["with_policy"],
-        "BI-SY-14": sum(bool(row.version) for row in data.deployments) + versions["hosts_with_runtime"],
-        "BI-SY-16": sum(metrics["BI-SY-16"]["resources_by_state"].values()),
-        "OE-SY-23": metrics["OE-SY-23"]["with_managed_identity"],
-        "OE-SY-24": sum(
-            row.values.get("enabled") is True and row.values.get("targets_ai") is True
-            for row in data.proposal_observations if row.code == "OE-SY-24"
-        ),
-        "OE-SY-25": sum(
-            row.values.get("enabled") is True and row.values.get("targets_ai") is True
-            and row.values.get("has_action_group") is True
-            for row in data.proposal_observations if row.code == "OE-SY-24"
-        ),
-        "OE-SY-26": len(metrics["OE-SY-26"]["regions"]) + len(metrics["OE-SY-26"]["retention_days"]),
-    }
+def readiness(data: Collection, config: dict[str, Any]) -> str | None:
+    for key in config.get("complete_flags", []):
+        if data.facts.get(key) is not True:
+            return f"API 목록 수집 완료 확인 없음: {key}"
+    for key in config.get("complete_subscriptions", []):
+        if set(data.subscriptions) - set(data.facts.get(key, [])):
+            return f"일부 구독의 API 목록 수집 미완료: {key}"
+    if config.get("requires") != "entra":
+        if not data.facts.get("inventory_complete"):
+            return "구독 인벤토리 수집 미완료"
+        if config.get("agent_denominator") and not data.facts.get("agent_inventory_complete"):
+            return "Agent 인벤토리 수집 미완료"
+    return None
 
 
 def evaluate(
@@ -299,133 +51,56 @@ def evaluate(
     conventions: dict[str, Any], policy_facts: dict[str, Any] | None = None,
     interviews: dict[str, float] | None = None,
 ) -> list[Finding]:
-    facts = derive_facts(data, criteria, allowed, conventions)
-    observed = configuration_counts(data, conventions)
-    refs = evidence_refs(data)
-    reserved = {entry["metric"] for entry in criteria["items"].values()}
-    reserved.update(("outside_ratio", "security_score_meets_internal"))
-    assessments = {
-        entry["assessment_key"]: entry["metric"]
-        for entry in criteria["items"].values() if "assessment_key" in entry
-    }
-    for name, entry in (policy_facts or {}).items():
-        if (
-            not isinstance(entry, dict) or "value" not in entry
-            or not isinstance(entry.get("evidence_refs"), list) or not entry["evidence_refs"]
-            or any(not isinstance(ref, str) or not ref.strip() for ref in entry["evidence_refs"])
-        ):
-            raise ValueError(f"Policy fact {name} requires value and evidence_refs")
-        if name in facts or name in reserved:
-            raise ValueError(f"Policy fact cannot override measured metric: {name}")
-        if name in assessments:
-            value = entry["value"]
-            if (
-                not isinstance(value, dict) or set(value) != {"total", "compliant"}
-                or any(type(value[key]) is not int for key in ("total", "compliant"))
-                or not 0 <= value["compliant"] <= value["total"]
-            ):
-                raise ValueError(f"Policy fact {name} requires integer counts: 0 <= compliant <= total")
-            metric = assessments[name]
-            if metric == "asset_tag_ratio" and metric in facts and value["total"] != len(
-                [agent for agent in data.agents if agent.platform in ("foundry", "langchain")],
-            ):
-                raise ValueError(f"Policy fact cannot override measured metric denominator: {metric}")
-            if value["total"]:
-                ratio = value["compliant"] / value["total"]
-                if metric in facts and facts[metric] != ratio:
-                    raise ValueError(f"Policy fact cannot override measured metric: {metric}")
-                facts[metric] = ratio
-        else:
-            facts[name] = entry["value"]
-        refs.extend(entry["evidence_refs"])
-    if facts.get("security_score") is not None and criteria.get("internal_security_score_min") is not None:
-        facts["security_score_meets_internal"] = facts["security_score"] >= criteria["internal_security_score_min"]
+    if criteria.get("grading_profile") != PROFILE:
+        raise ValueError(f"지원되지 않는 등급 기준입니다. grading_profile={PROFILE} 기준을 사용하세요.")
+    if policy_facts:
+        raise ValueError("policy_facts는 API 구성 등급의 입력으로 사용할 수 없습니다. API 조회값을 사용하세요.")
+    observed = measurements(data, criteria, conventions)
+    if observed.keys() != criteria["items"].keys():
+        raise ValueError("구현 API 지표와 criteria.yaml의 항목이 일치하지 않습니다.")
     findings = []
+    data.facts["grading_profile"] = PROFILE
     for code, config in criteria["items"].items():
-        related = {
-            "DS-SY-06": ("model_deployments", "policies"),
-            "BI-SY-11": ("foundry_agents", "foundry_evaluations"),
-            "BI-SY-12": ("security", "secure_score"), "OE-SY-22": ("logs", "agent_usage"),
-            "OT-SY-28": ("agent_usage", "metrics"), "OT-SY-29": ("cost", "budgets"),
-            "DS-SY-05": ("entra_blueprints",), "DP-SY-19": ("entra_blueprints", "foundry_agents"),
-            "OE-SY-20": ("entra_agents",), "OE-SY-21": ("entra_agents",),
-        }
-        issues = [
-            item for item in data.issues
-            if item.collector in related.get(code, ISSUE_COLLECTORS.get(code, ()))
-        ]
-        tenant_item = config.get("requires") == "entra" and code != "DP-SY-19"
-        value = facts.get(config["metric"])
-        matched = next((rule for rule in config["rules"] if matches(facts, rule["when"])), None)
-        if value is None and matched and matched["level"] != "L1":
-            matched = None
-        level = matched["level"] if matched else "N/A"
+        measurement: Measurement = observed[code]
+        issues = [row for row in data.issues if row.collector in config.get("collectors", [])]
+        incomplete = readiness(data, config)
         reason = None
-        rationale = "원문 기준에 해당하는 수치·정성 조건을 확인한 판정 초안"
-        basis = "criteria"
-        configuration_value = None
-        basic = criteria.get("configuration_grading", {})
-        description = basic.get("items", {}).get(code)
-        if not matched and description and not issues and observed.get(code, 0) >= basic["minimum_observations"]:
-            level = basic["level"]
-            basis = "configuration"
-            configuration_value = observed[code]
-            rationale = (
-                f"구성 기반 기본등급({level}): {description}. 관측 구성·기록 {configuration_value}건. "
-                "원래 심사 지표의 비율·기간·집행 효과를 추정하지 않으며 L3 이상 요건은 별도 검증"
-            )
-        if not tenant_item and not data.facts.get("inventory_complete"):
-            value = None
-            level, reason = "N/A", "permission_denied" if any(
-                issue.reason == "permission_denied" and issue.collector == "subscription" for issue in data.issues
-            ) else "error"
-            rationale = "구독 인벤토리 부분 실패로 전체 분모를 확정할 수 없음"
-        elif not matched and basis != "configuration":
+        ratio = measurement.ratio
+        if issues:
+            priority = {"permission_denied": 0, "error": 1, "license_missing": 2,
+                        "feature_unavailable": 3, "not_found": 4}
+            reason = min(issues, key=lambda row: priority[row.reason]).reason
+            incomplete = "; ".join(sorted({row.detail for row in issues}))
+        elif incomplete:
+            reason = "error"
+        elif measurement.unavailable:
             reason = "not_found"
-            rationale = (
-                "필요 증적·귀속·관측 기간이 부족하거나 원문에 정의되지 않은 수치 구간/정성 조건임"
-            )
-            if issues:
-                priority = {"permission_denied": 0, "error": 1, "license_missing": 2,
-                            "feature_unavailable": 3, "not_found": 4}
-                reason = min(issues, key=lambda item: priority[item.reason]).reason
-                rationale += "; " + "; ".join(sorted({item.detail for item in issues}))
-        if code in ("BI-SY-11", "OT-SY-28", "OT-SY-29", "DP-SY-19", "BI-SY-15") and not data.facts.get(
-            "agent_inventory_complete", data.facts.get("inventory_complete"),
-        ):
-            value, level = None, "N/A"
-            reason = "permission_denied" if any(
-                item.reason == "permission_denied" and item.collector in (
-                    "foundry_agents", "foundry_projects", "subscription",
-                ) for item in data.issues
-            ) else "error"
-            rationale = "Agent 목록의 일부를 수집하지 못해 전체 Agent 분모/귀속을 확정할 수 없음"
-        if config["scope"] == "partial":
-            rationale += "; Azure 부분 범위이며 원 제품/조직 전체 점수가 아님"
-        if code in LIMITS:
-            rationale += "; " + LIMITS[code]
-        if code == "DS-SY-06" and not allowed.get("models"):
-            rationale += "; 허용 모델 목록(custom-config.yaml allowed_models)이 입력되지 않아 허용 비율을 계산하지 않음"
-        if code == "DP-SY-19":
-            rationale += "; 분모는 Azure에서 수집한 Agent이며 Agent Registry 전체가 아님"
-        if code == "OE-SY-21" and criteria.get("overprivileged_permissions_sample"):
-            rationale += "; 샘플 과다 권한 패턴 사용, 고객 기준 승인 필요"
-        if level == "N/A":
-            basis, configuration_value = "criteria", None
-            next_step = "부족 증적을 확보한 뒤 목표 기준 확인: " + config["levels"]["L3"]
-        elif level == "L5":
-            next_step = "L5 운영 증적을 지속 확인"
+            incomplete = measurement.unavailable
+        if incomplete:
+            ratio = None
+        rule = next((rule for rule in config["rules"] if matches({"coverage": ratio}, rule["when"])), None)
+        level = rule["level"] if rule else "N/A"
+        if level == "N/A" and reason is None:
+            reason = "not_found"
+        rationale = measurement.detail
+        if ratio is not None:
+            rationale += f". API 충족 {measurement.compliant:g} / 대상 {measurement.total:g}, 비율 {ratio:.2%}"
         else:
-            next_step = "다음 단계 조건: " + config["levels"]["L" + str(int(level[1]) + 1)]
+            rationale += ". " + (incomplete or "충족률을 확정할 수 없음")
+        rationale += "; " + config["limit"]
+        if level == "L5":
+            next_step = "Level 5: 현재 API 구성 충족률 유지"
+        elif level == "N/A":
+            next_step = "조회 사유 확인 후 API 수집 재실행"
+        else:
+            next_level = f"L{int(level[1:]) + 1}"
+            next_step = f"다음 단계 조건: {config['levels'][next_level]}"
         interview = (interviews or {}).get(code)
-        gap = (
-            interview is not None and level != "N/A"
-            and interview - int(level[1]) >= criteria["interview_gap"]
-        )
         findings.append(Finding(
-            se_code=code, scope=config["scope"], metric_value=value,
-            assessment_basis=basis, configuration_value=configuration_value,
-            level=level, rationale=rationale, reason=reason, evidence_refs=sorted(set(refs)),
-            next_step=next_step, interview_level=interview, gap_flag=gap,
+            se_code=code, scope=config["scope"], metric_value=ratio, level=level,
+            level_criterion=config["levels"].get(level),
+            rationale=rationale, reason=reason, evidence_refs=measurement.refs,
+            next_step=next_step, interview_level=interview,
+            gap_flag=interview is not None and level != "N/A" and interview - int(level[1]) >= criteria["interview_gap"],
         ))
     return findings

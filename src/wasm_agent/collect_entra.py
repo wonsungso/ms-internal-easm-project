@@ -83,7 +83,8 @@ class EntraCollector:
                 created_at=try_timestamp(row.get("createdDateTime")), account_enabled=row.get("accountEnabled"),
                 owner_count=len(owners), sponsor_count=len(sponsors),
                 owners_all_disabled=(
-                    all(owner.get("accountEnabled") is False for owner in owners) if owners else None
+                    False if any(owner.get("accountEnabled") is True for owner in owners) else
+                    True if owners and all(owner.get("accountEnabled") is False for owner in owners) else None
                 ),
                 app_roles=roles,
                 overprivileged_roles=[

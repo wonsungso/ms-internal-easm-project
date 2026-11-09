@@ -91,6 +91,23 @@ def test_unknown_result_code_fails_explicitly_without_writing(tmp_path: Path) ->
     assert not path.exists()
 
 
+def test_historical_grade_is_not_described_with_new_api_thresholds(tmp_path: Path) -> None:
+    path = tmp_path / "historical.xlsx"
+    data = Collection(collected_at=datetime.now(UTC), facts={
+        "assessment_revision": 5, "entra_blueprints_complete": True,
+    })
+    finding = Finding(
+        se_code="DS-SY-05", scope="in_scope", level="L2", rationale="수집 당시 평가 근거",
+        next_step="수집 당시 다음 단계",
+    )
+    write_workbook(data, [finding], path)
+    sheet = load_workbook(path)[RESULT_SHEET]
+    row = next(row for row in range(5, sheet.max_row + 1) if sheet.cell(row, 2).value == "DS-SY-05")
+    assert "수집 당시 기준의 등급" in sheet.cell(row, 9).value
+    assert sheet.cell(row, 11).value == "수집 당시 다음 단계"
+    assert finding.level == "L2"
+
+
 def test_all_findings_link_to_the_matching_detail_row_and_preserve_existing_metrics(tmp_path: Path) -> None:
     fixture = Path(__file__).parent / "fixtures" / "three_subscriptions.json"
     data = Collection.model_validate_json(fixture.read_text(encoding="utf-8"))
