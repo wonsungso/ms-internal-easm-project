@@ -42,6 +42,7 @@ RBAC_REFERENCE = """# 읽기 권한 및 접근 확인
   - Foundry Agent·평가: 승인 구독의 사용자 지정 읽기 역할.
   - v2 DataActions: agents/read, evaluations/read, assets/read.
   - Entra Agent ID: AgentIdentity.Read.All, AgentIdentityBlueprint.Read.All, Application.Read.All과 관리자 동의.
+  - Agent 365 등록부 교차검증: CopilotPackages.Read.All과 관리자 동의·Agent 365 라이선스. 실제 조회 실패는 수집 결과에 별도 기록.
   - 승인 구독 밖 workspace·청구 범위 접근과 제품 기능·라이선스는 별도 확인.
 - 최소 권한의 한계
   - agents/read의 서비스 권한 단위에는 대화 읽기도 포함되지만 수집기는 대화 본문을 조회하지 않습니다.

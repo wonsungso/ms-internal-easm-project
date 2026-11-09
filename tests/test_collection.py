@@ -449,6 +449,7 @@ def test_auto_enumeration_handles_hundreds_and_filters_tenant_and_state(tmp_path
     http = Mock()
     http.list_arm.return_value = rows
     http.list_graph.return_value = []
+    http.store = None
 
     def per_subscription(sid, credential, resolved, store, instant, criteria, tags):
         assert set(resolved.subscriptions) == set(ids)
@@ -462,7 +463,7 @@ def test_auto_enumeration_handles_hundreds_and_filters_tenant_and_state(tmp_path
     assert set(result.completed_subscriptions) == set(ids)
     assert worker.call_count == 200
     assert result.facts["inventory_complete"] is True
-    assert http.close.call_count == 2
+    assert http.close.call_count == 3
     assert result.facts["entra_blueprints_complete"] and result.facts["entra_agents_complete"]
 
 

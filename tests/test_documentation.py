@@ -16,7 +16,7 @@ def test_screenshot_guide_references_registered_existing_images() -> None:
         for value in re.findall(r"!\[[^\]]*\]\(([^)]+\.png)\)", guide.read_text(encoding="utf-8"))
     }
     expected = {(docs / image["file"]).resolve() for image in manifest["images"]}
-    assert len(expected) == 16
+    assert len(expected) == 17
     assert references <= expected
     for path in references:
         assert path.is_file(), path
@@ -146,7 +146,7 @@ def test_summary_table_links_resolve_to_checklist_sections_with_images() -> None
     def anchor(heading: str) -> str:
         return re.sub(r"[^\w\- ]", "", heading.lower()).replace(" ", "-")
 
-    anchors = {anchor(h) for h in re.findall(r"^## (.+)$", detail, re.M)}
+    anchors = {anchor(h) for h in re.findall(r"^## ([A-Z]{2}-SY-\d+ .+)$", detail, re.M)}
     links = re.findall(r"^\| \[([A-Z]{2}-SY-[P\d]+)\]\(docs/checklist\.md#([^)]+)\)", readme, re.M)
     assert len(links) == 31
     assert {target for _, target in links} == anchors
@@ -154,6 +154,9 @@ def test_summary_table_links_resolve_to_checklist_sections_with_images() -> None
     assert len(implemented) == 22
     assert len(re.findall(r"^!\[[^\]]+\]\(portal/imgs/[^)]+\.png\)$", detail, re.M)) == 22
     assert "<img" not in readme and not re.search(r"^\|.*!\[", readme, re.M)
+    assert "## Agent 365 등록부 교차 확인" in detail
+    assert "(imgs/23-agent365-admin-details.png)" in detail
+    assert "7. 수집결과 근거 J~L열" in detail
 
 
 def test_summary_marks_added_items_only_in_the_rightmost_column() -> None:

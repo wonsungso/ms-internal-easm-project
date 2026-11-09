@@ -103,7 +103,7 @@
 | Azure 읽기 | 승인 구독마다 Reader·Cost Management Reader·Log Analytics Reader·Security Reader |
 | Foundry 읽기 | `WASMAgent Foundry Evidence Reader v2`를 승인 구독에 할당해 기존·이후 프로젝트에 상속. `--foundry-project-scopes`로 승인 프로젝트 제한 가능 |
 | Foundry DataActions | `agents/read·evaluations/read·assets/read` 3개만. 역할 생성·할당은 관리자 예외이며 수집기가 수행하지 않음 |
-| Graph 앱 읽기 | `AgentIdentity.Read.All`, `AgentIdentityBlueprint.Read.All`, `Application.Read.All` 및 테넌트 관리자 동의 |
+| Graph 앱 읽기 | `AgentIdentity.Read.All`, `AgentIdentityBlueprint.Read.All`, `Application.Read.All`, `CopilotPackages.Read.All` 및 테넌트 관리자 동의 |
 | 최소 권한 | 진단 SP에 Owner·Contributor·Foundry User 등 쓰기 역할 부여 금지. Graph 관리자 동의 권한은 구독 역할 할당 권한과 별개 |
 
 - Graph 읽기 권한은 앱의 `requiredResourceAccess`에도 추가한 뒤 동의해 Configured permissions와 실제 appRoleAssignments를 맞춥니다. 기존 다른 API 권한은 보존하고 필요한 `Role`만 추가·동의합니다. [Azure CLI API 권한 추가](https://learn.microsoft.com/en-us/cli/azure/ad/app/permission?view=azure-cli-latest#az-ad-app-permission-add).
@@ -225,3 +225,24 @@
 - `wasm-agent collect --manual-agents config/manual_agents.csv`는 manual/other 플랫폼의 직접 등록입니다. Google/AWS 자동 로그인 수집이 아닙니다. 최소 필드는 agent_id·agent_name·platform이며 날짜는 시간대 포함 ISO 8601, tags·tools·usage_30d·field_status는 JSON입니다.
 - 빈 CSV 값은 null + not_found이며 0으로 채우지 않습니다. 수동 Agent는 인벤토리·플랫폼 개수에만 포함하고 Azure 전용 SE 분모에 섞지 않으며 CSV 행 evidence_refs로 API 실측과 구분합니다.
 - 확장 Collector Protocol은 `discover(subscriptions)`와 `required_roles`를 사용합니다. 사례 커넥터 매핑·API Management AI Gateway·OpenTelemetry gen_ai 연계는 재사용 후보이며 구현·검증 완료로 표시하지 않습니다.
+
+## Agent 365 등록부 교차검증
+
+| 항목 | 계약 |
+| --- | --- |
+| 읽기 API | `GET https://graph.microsoft.com/v1.0/copilot/admin/catalog/packages`. 서버의 `@odata.nextLink`를 변경 없이 순회하며 동일 경로·신뢰 호스트·반복 링크 가드와 기존 재시도 적용 |
+| 권한·라이선스 | Application `CopilotPackages.Read.All`과 관리자 동의, Agent 365 라이선스 필요. 실제 테넌트의 사용 가능 여부는 수집 응답으로 확인 |
+| 데이터 최소화 | 문서에 없는 `$select`는 사용하지 않음. 응답은 메모리에서 `id`, `agentIdentityId`, `version`만 선별한 뒤 증적 저장. 이름·게시자·설명·패키지 본문 미저장 |
+| DS-SY-05 | 등록부의 명시적 `agentIdentityId`가 Graph Agent ID·Blueprint 참조로 연결되는지만 대조. 완전한 Graph 목록과 모순되는 참조는 불일치, 필수 필드 누락은 미확인 |
+| DP-SY-19 | 기존의 구독·계정·프로젝트·Agent 태그로 식별된 유일한 Graph ID와 등록부의 명시적 ID 대조. 미게시·동명이인·다중 연결은 이름으로 추정하지 않고 미확인 |
+| 나머지 20개 | 현재 공개 등록부에 독립 비교 필드가 없어 `비교 대상 아님`. 같은 Graph owners·앱 역할을 재사용해 독립 검증으로 세지 않음 |
+| 상태·등급 | 일부 일치 / 불일치 / 미확인 / 비교 대상 아님. 비교 범위·건수·사유·증적은 별도 표시하고 기존 22개 Level·점수는 변경하지 않음 |
+| 실패 | 권한·명시적 라이선스·기능·응답 오류는 원래 사유로 기록. 완전하지 않은 등록부를 빈 목록·0점·일치로 처리하지 않음 |
+| 출력 | 7번 J~L 교차검증 열, 8번 등록부·대조 Raw 테이블 추가. 기존 결과를 package로 재생성할 때는 교차검증을 실행하지 않으며 `미수행` 표시 |
+| SDK와의 구분 | 승인된 구현은 관리 API 읽기 방식. 런타임 Agent 365 SDK·OpenTelemetry 삽입, Agent 재배포·등록·알림·도구 실행은 수행하지 않음 |
+| 화면 확인 | 2026-11-09 M365 Admin Center에서 Foundry Agent의 Details·Entra agent ID 표시를 실제 확인. 화면 확인은 진단 SP의 공개 API 호출 성공 증거가 아님 |
+| 실수집 확인 | 2026-11-09 인증서 SP에 Graph 읽기 권한 4개 동의 확인 후 2회 조회. 최종 Azure 수집 이슈는 없고 등록부 API만 HTTP 403. 교차검증은 `permission_denied`·미확인으로 보존하며 라이선스 원인으로 단정하지 않음 |
+
+- [List packages](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/api/admin-settings/package/copilotpackages-list), [패키지 필드](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/api/admin-settings/package/resources/copilotpackage)
+- [Agent 365 SDK](https://learn.microsoft.com/en-us/microsoft-agent-365/developer/agent-365-sdk), [Foundry 연동](https://learn.microsoft.com/en-us/azure/foundry/agents/concepts/agent-365-integration)
+- 패키지 `version`은 Foundry Agent·호스트 런타임 버전과 다른 값입니다. UI의 Owner·활동 통계도 공개 등록부 API의 동일 필드 제공을 보장하지 않습니다.

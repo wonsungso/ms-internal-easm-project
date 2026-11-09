@@ -432,11 +432,13 @@ def test_entra_reader_assigns_only_missing_graph_application_roles_and_is_idempo
 
 
 def test_default_graph_roles_match_collector_and_do_not_include_retired_diagnostics() -> None:
+    from wasm_agent.collect_agent365 import Agent365Collector
     from wasm_agent.collect_entra import EntraCollector
 
-    assert setup.ENTRA_GRAPH_ROLES == EntraCollector.required_roles
+    assert setup.ENTRA_GRAPH_ROLES == EntraCollector.required_roles + Agent365Collector.required_roles
     assert set(setup.ENTRA_GRAPH_ROLES) == {
         "AgentIdentity.Read.All", "AgentIdentityBlueprint.Read.All", "Application.Read.All",
+        "CopilotPackages.Read.All",
     }
 
 

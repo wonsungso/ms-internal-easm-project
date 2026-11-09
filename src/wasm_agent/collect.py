@@ -15,6 +15,7 @@ from wasm_agent.azure import (
     issue,
     verify_identity,
 )
+from wasm_agent.collect_agent365 import Agent365Collector, crosscheck_agent365
 from wasm_agent.collect_entra import EntraCollector
 from wasm_agent.collect_foundry import FoundryCollector
 from wasm_agent.collect_inventory import (
@@ -31,6 +32,7 @@ def merge(destination: Collection, source: Collection) -> None:
     for field in (
         "agents", "deployments", "evaluations", "costs", "security", "secure_scores",
         "policy_assignments", "budgets", "entra_blueprints", "entra_agent_identities",
+        "agent365_packages", "agent365_crosschecks",
         "logs", "proposal_observations", "issues", "resources",
         "completed_subscriptions",
     ):
@@ -145,5 +147,11 @@ def collect(settings: Settings, credential: Credential, now: datetime | None = N
         result.facts["inventory_complete"]
         and not any(item.collector in ("foundry_agents", "foundry_projects") for item in result.issues)
     )
+    registry = ReaderHTTP(credential)
+    try:
+        merge(result, Agent365Collector(registry, instant, store).discover())
+    finally:
+        registry.close()
+    result.agent365_crosschecks = crosscheck_agent365(result, criteria)
     result.facts["evidence_directory"] = str(store.path.resolve())
     return result

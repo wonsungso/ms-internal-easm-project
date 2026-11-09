@@ -652,6 +652,23 @@
         },
         "deletion_executed": false,
         "verification_limit": "삭제 버튼 안내 화면이며 삭제 실행·완료를 입증하지 않음"
+      },
+      {
+        "file": "imgs/23-agent365-admin-details.png",
+        "captured_on": "2026-11-09",
+        "source": "실제 Microsoft 365 admin center - Agents > All agents > Foundry Agent > Details",
+        "action": "All agents·Details·Microsoft Foundry 플랫폼·Entra agent ID 확인 위치",
+        "size_px": [1000, 702],
+        "highlight_count": 4,
+        "highlight_color": "#E00000",
+        "account_identifiers_masked": true,
+        "tenant_name_masked": true,
+        "agent_name_masked": true,
+        "agent_identity_id_masked": true,
+        "owner_and_creator_masked": true,
+        "settings_modified": false,
+        "consent_or_license_modified": false,
+        "verification_limit": "등록부 UI의 실제 표시 확인. 진단 SP의 공개 Agent 365 API 호출 성공을 입증하지 않음"
       }
     ]
   },

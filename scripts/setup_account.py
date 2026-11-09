@@ -25,6 +25,7 @@ ROLES = {
 GRAPH_APP_ID = "00000003-0000-0000-c000-000000000000"
 ENTRA_GRAPH_ROLES = (
     "AgentIdentity.Read.All", "AgentIdentityBlueprint.Read.All", "Application.Read.All",
+    "CopilotPackages.Read.All",
 )
 DEFAULT_ROLES = ("Reader", "Cost Management Reader", "Log Analytics Reader", "Security Reader")
 PROJECT_SCOPE = re.compile(

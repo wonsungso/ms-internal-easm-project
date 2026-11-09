@@ -12,6 +12,7 @@ from azure.identity import DefaultAzureCredential
 
 from wasm_agent.azure import AccessError
 from wasm_agent.collect import collect
+from wasm_agent.collect_agent365 import Agent365Collector
 from wasm_agent.collect_entra import EntraCollector
 from wasm_agent.evaluation import evaluate
 from wasm_agent.models import (
@@ -105,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
                     "Reader", "Cost Management Reader", "Log Analytics Reader", "Security Reader",
                     "Foundry: agents/read, evaluations/read, assets/read",
                 ]
-                + ["Graph: " + ", ".join(EntraCollector.required_roles)],
+                + ["Graph: " + ", ".join(EntraCollector.required_roles + Agent365Collector.required_roles)],
                 "entra": True,
                 "azure_calls": False,
             }, ensure_ascii=False, indent=2))

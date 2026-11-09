@@ -20,7 +20,10 @@ from openpyxl.worksheet.worksheet import Worksheet
 from pydantic import BaseModel
 
 from wasm_agent.azure import redact
+from wasm_agent.collect_agent365 import STATUS_LABELS
 from wasm_agent.models import (
+    Agent365Crosscheck,
+    Agent365Package,
     AgentEvidence,
     Budget,
     Collection,
@@ -122,7 +125,7 @@ class ReviewLayout(TypedDict):
 
 REVIEW_LAYOUTS: dict[str, ReviewLayout] = {
     DETAILS_TITLE: {
-        "widths": (10.625, 14.875, 25.5, 14.875, 10.625, 90.375, 53.125, 90.375, 65.125),
+        "widths": (10.625, 14.875, 25.5, 14.875, 10.625, 90.375, 53.125, 90.375, 65.125, 18, 90, 65),
         "height": 60, "default_height": 60, "default_width": 109.625,
     },
 }
@@ -514,9 +517,21 @@ def write_workbook(
             "증적 ID": finding.evidence_refs,
         })
     details.sort(key=lambda item: result_rows.get(item["SE 코드"], float("inf")))
+    crosschecks = {item.se_code: item for item in data.agent365_crosschecks}
+    for detail in details:
+        check = crosschecks.get(detail["SE 코드"])
+        detail["Agent 365 교차검증"] = STATUS_LABELS[check.status] if check else "미수행"
+        detail["교차검증 범위·결과"] = (
+            f"{check.scope}\n{check.detail}"
+            + (f"\n비교 {check.compared}, 일치 {check.matched}, 불일치 {check.mismatched}, 미확인 {check.unverified}"
+               if check.compared is not None else "")
+            + (f"\n조회 사유: {readable(check.reason)}" if check.reason else "")
+        ) if check else "기존 수집 결과에 Agent 365 교차검증 기록 없음. 기존 등급 유지"
+        detail["교차검증 증적"] = check.evidence_refs if check else []
     proposals_sheet = _table(book, DETAILS_TITLE, [
         "SE 코드", "진단 영역", "점검 항목", "조회 상태", "조회 제한 사유",
         "수집 구성 요약", "구성 값·건수", "검증 한계", "증적 ID",
+        "Agent 365 교차검증", "교차검증 범위·결과", "교차검증 증적",
     ], details, start_row=3)
     for row, item in enumerate(details, 4):
         code = item["SE 코드"]
@@ -533,7 +548,7 @@ def write_workbook(
             display="수집결과", tooltip=f"{code} 수집결과 근거로 이동",
         )
     _cell(proposals_sheet, 1, 1, "수집된 설정·값·건수와 검증 한계. 다음조치는 6. 수집 결과의 L열 확인")
-    proposals_sheet.merge_cells("A1:I1")
+    proposals_sheet.merge_cells("A1:L1")
     proposals_sheet.row_dimensions[1].height = 30
     proposals_sheet.print_title_rows = "1:3"
     explanations = (
@@ -545,6 +560,9 @@ def write_workbook(
         "원본 키를 유지한 구성 값·건수. 승인 충족률이나 효과 검증 결과가 아님",
         "구성 조회만으로 입증할 수 없는 승인·집행 효과·운영 절차",
         "원본 JSON evidence에 첨부된 마스킹 증적 ID 또는 확인이 필요한 참조",
+        "독립 등록부의 일부 필드 대조 결과. 기존 등급과 별개",
+        "실제 비교 범위·불일치·미확인 사유. 패키지 버전을 런타임 버전과 비교하지 않음",
+        "교차검증에 사용한 최소 필드 등록부 및 기존 API 증적 ID",
     )
     for column, explanation in enumerate(explanations, 1):
         proposals_sheet.cell(3, column).comment = Comment(explanation, "WASM Agent")
@@ -561,6 +579,8 @@ def write_workbook(
         ("예산 Raw 데이터", Budget, data.budgets),
         ("Blueprint Raw 데이터", EntraBlueprint, data.entra_blueprints),
         ("AgentID Raw 데이터", EntraAgentIdentity, data.entra_agent_identities),
+        ("Agent365 등록 Raw 데이터", Agent365Package, data.agent365_packages),
+        ("Agent365 대조 Raw 데이터", Agent365Crosscheck, data.agent365_crosschecks),
     ]
     _raw_sheet(book, sections)
     issue_title = "수집이슈 Raw 데이터"

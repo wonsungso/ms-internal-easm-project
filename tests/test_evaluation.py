@@ -120,6 +120,20 @@ def test_complete_api_snapshot_grades_all_22_controls_without_qualitative_inputs
     assert data.facts["grading_profile"] == "api_configuration_v1"
 
 
+@pytest.mark.parametrize("reason", ["permission_denied", "license_missing", "error"])
+def test_agent365_crosscheck_failures_do_not_change_primary_grades(data: Collection, reason: str) -> None:
+    from wasm_agent.collect_agent365 import crosscheck_agent365
+    from wasm_agent.models import Issue
+
+    before = {code: row.model_dump() for code, row in grade(data).items()}
+    data.issues.append(Issue(
+        collector="agent365_registry", target="tenant", reason=reason, detail="crosscheck unavailable",
+    ))
+    data.facts["agent365_registry_complete"] = False
+    data.agent365_crosschecks = crosscheck_agent365(data, load_criteria())
+    assert {code: row.model_dump() for code, row in grade(data).items()} == before
+
+
 @pytest.mark.parametrize("good,level", [(0, "L1"), (1, "L2"), (8, "L3"), (9, "L4"), (10, "L5")])
 def test_real_api_field_combinations_reach_every_level_for_all22_controls(
     data: Collection, good: int, level: str,

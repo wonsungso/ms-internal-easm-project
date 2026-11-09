@@ -207,9 +207,12 @@ class ReaderHTTP:
         """Read every page of a Microsoft Graph collection; nextLink must stay on the same path."""
         values: list[dict[str, Any]] = []
         seen: set[str] = set()
-        origin_path = urlparse(url).path
+        origin = urlparse(url)
         while url:
-            if url in seen or urlparse(url).path != origin_path:
+            parsed = urlparse(url)
+            if url in seen or (parsed.scheme, parsed.netloc, parsed.path) != (
+                origin.scheme, origin.netloc, origin.path,
+            ) or parsed.fragment:
                 raise AccessError("error", "비정상 pagination 링크")
             seen.add(url)
             payload = self.request("GET", url, MSGRAPH_SCOPE)
@@ -217,7 +220,10 @@ class ReaderHTTP:
             if not isinstance(page, list) or not all(isinstance(item, dict) for item in page):
                 raise AccessError("error", "목록 응답에 value 배열이 없습니다.")
             values.extend(page)
-            url = payload.get("@odata.nextLink") or ""
+            next_link = payload.get("@odata.nextLink")
+            if next_link is not None and not isinstance(next_link, str):
+                raise AccessError("error", "비정상 pagination 링크 형식")
+            url = next_link or ""
         return values
 
 

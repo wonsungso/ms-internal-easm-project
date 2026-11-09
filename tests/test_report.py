@@ -489,7 +489,7 @@ def test_workbook_sheets_tables_borders_and_validation(tmp_path: Path) -> None:
             "A3" if sheet.title == TITLES["수집 Raw 데이터"] else
             "A4" if sheet.title == TITLES["수집결과 근거"] else "A2"
         )
-        assert len(sheet.tables) == (12 if sheet.title == TITLES["수집 Raw 데이터"] else 1)
+        assert len(sheet.tables) == (14 if sheet.title == TITLES["수집 Raw 데이터"] else 1)
         # Excel repairs a file that has both a table and a sheet-level autoFilter on one range.
         assert not sheet.auto_filter.ref
         assert all(

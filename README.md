@@ -66,6 +66,7 @@ printf '%s\n' "$cert_dir/diagnostic.pem" > .wasm-agent/certificate-path
 | Graph 애플리케이션 권한 | `AgentIdentity.Read.All` | 테넌트, 관리자 동의 필요 |
 | Graph 애플리케이션 권한 | `AgentIdentityBlueprint.Read.All` | 테넌트, 관리자 동의 필요 |
 | Graph 애플리케이션 권한 | `Application.Read.All` | 테넌트, 관리자 동의 필요 |
+| Graph 애플리케이션 권한 | `CopilotPackages.Read.All` | Agent 365 등록부 읽기, 관리자 동의 필요 |
 
 - **관리자 권한 확인:** 구독 역할 할당·사용자 지정 역할 생성 권한과 Entra 관리자 동의 권한이 필요합니다.
 - **최소 권한 유지:** 진단 앱에는 Owner·Contributor를 부여하지 않습니다.
@@ -104,11 +105,11 @@ bash setup.sh plan     # 부여할 권한 확인, Azure 변경 없음
 bash setup.sh apply    # 기본 읽기 권한 전체 부여 및 결과를 setup.json에 저장
 ```
 
-- **정상 완료 확인:** 승인 구독 3개 기준으로 Azure 역할 15건·Graph 권한 3건이 `확인됨`이고, 마지막에 `setup.json` 저장 메시지가 나오면 Step 3가 완료된 것입니다.
+- **정상 완료 확인:** 승인 구독 3개 기준으로 Azure 역할 15건·Graph 권한 4건이 `확인됨`이고, 마지막에 `setup.json` 저장 메시지가 나오면 Step 3가 완료된 것입니다.
 
 ![고객 VM 권한 설정 성공 결과 예시](docs/imgs/20-customer-setup-success.png)
 
-- **적용 범위:** `apply`는 목록의 모든 승인 구독에 기본 Azure 역할 4개·Foundry 사용자 지정 역할을 할당하고 Graph 권한 3개를 추가·동의합니다.
+- **적용 범위:** `apply`는 목록의 모든 승인 구독에 기본 Azure 역할 4개·Foundry 사용자 지정 역할을 할당하고 Graph 권한 4개를 추가·동의합니다.
 - **Graph 동의 단계에서 중단될 때:** 구독 역할 할당 권한과 Entra 동의 권한은 별개입니다. PIM에서 **Privileged Role Administrator 또는 Global Administrator**를 활성화한 관리자가 아래를 재실행합니다. Global Reader만으로는 동의할 수 없으며, 기존 Azure 역할은 중복 생성하지 않습니다.
 
 ```bash
@@ -139,7 +140,7 @@ bash setup.sh apply
 
 ### Graph 애플리케이션 권한 설정
 
-- **Graph 권한:** **Entra → 앱 등록 → 진단 앱 → API 사용 권한**에서 권한 3개를 확인하고 **관리자 동의**합니다.
+- **Graph 권한:** **Entra → 앱 등록 → 진단 앱 → API 사용 권한**에서 위 권한 4개를 확인하고 **관리자 동의**합니다. 아래 그림은 Entra 권한 3개의 예시이며 `CopilotPackages.Read.All`도 함께 확인합니다.
 
 ![Graph 읽기 권한 3개와 관리자 동의 위치](docs/imgs/12-entra-consent.png)
 
@@ -165,7 +166,7 @@ bash setup.sh apply
 
 ![Foundry JSON에서 읽기 DataActions 전체 이름 3개 확인](docs/imgs/18-foundry-permissions.png)
 
-- **Entra 승인 확인:** **앱 등록 → 진단 앱 → API 사용 권한**에서 Graph 권한 3개와 승인 상태를 확인합니다. 수동 동의는 **Global Administrator 또는 Privileged Role Administrator**가 수행하며, PIM을 사용하면 먼저 해당 역할을 활성화합니다.
+- **Entra 승인 확인:** **앱 등록 → 진단 앱 → API 사용 권한**에서 Graph 권한 4개와 승인 상태를 확인합니다. 수동 동의는 **Global Administrator 또는 Privileged Role Administrator**가 수행하며, PIM을 사용하면 먼저 해당 역할을 활성화합니다.
 
 ![관리자 동의 확인](docs/imgs/19-entra-confirm.png)
 
@@ -211,6 +212,7 @@ wasm-agent collect --setup-file .wasm-agent/setup.json --output-dir output
 - L열 **다음조치**에서 다음 등급에 필요한 조건을 확인합니다. 현재 Level 5인 항목은 빈칸입니다.
 - M열 **평가 점수 (1~5)**는 수집 항목의 Level에 해당하는 점수입니다. 판정이 없는 항목은 빈칸이며 N열 **검토메모**에 공동 검토 내용을 기록합니다.
 - **7. 수집결과 근거**와 **8. 수집 Raw 데이터**에서 상세 설정과 원본 값을 확인합니다.
+- **7번 J~L열**은 Agent 365 등록부의 교차검증 상태·범위·증적입니다. 명시적 ID 연결만 대조하며 기존 Level·점수는 유지합니다. 등록부 조회에는 Agent 365 라이선스가 필요하고 조회 실패는 사유와 함께 표시합니다.
 - **9. 수집이슈 Raw 데이터**와 **10. 필드누락사유**에서 조회 실패·자료 부족의 원인을 확인합니다.
 - 종료 후 고객은 진단 앱의 권한·인증서를 회수하고, MS는 개인키와 수집 데이터를 승인된 보관 기간에 맞춰 폐기합니다.
 

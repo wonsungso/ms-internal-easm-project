@@ -17,6 +17,20 @@
 
 조회 실패·필수 필드 미확인·분모 0은 `null`과 사유로 남기며 L1이나 0%로 바꾸지 않습니다. 구성·기록의 충족률은 조직 승인, 정책 실효성, 자동화 동작을 입증하지 않습니다. 고객의 정성 입력은 등급에 반영하지 않습니다.
 
+## Agent 365 등록부 교차 확인
+
+| 순서 | M365 Admin Center 확인 위치 |
+| --- | --- |
+| 1 | [Microsoft 365 관리 센터](https://admin.microsoft.com/) 로그인 - **Agents > All agents > Registry** |
+| 2 | 대상 Foundry Agent 선택 - **Details**에서 `Platform: Microsoft Foundry`, 패키지 버전·소유자·`Entra agent ID` 확인 |
+| 3 | Entra agent ID를 기존 수집 ID와 대조. 패키지 버전은 Agent 실행 버전과 별개 |
+
+![Agent 365 - 실제 Foundry Agent의 Details와 Entra agent ID 확인 위치](imgs/23-agent365-admin-details.png)
+
+- 실제 테스트 화면이며 이름·계정·ID는 마스킹했습니다. 빨간 네모는 메뉴와 확인 위치입니다. 차단·삭제·동의 설정은 변경하지 않았습니다.
+- 읽기 수집은 SDK 삽입 대신 공식 Graph 등록부 API를 사용합니다. DS-SY-05·DP-SY-19의 명시적 ID 연결만 일부 대조하며, 나머지는 독립 필드가 없어 비교 대상 아님으로 표시합니다.
+- 결과는 **7. 수집결과 근거 J~L열**과 **8. 수집 Raw 데이터**에 기록합니다. 일치 여부·라이선스·권한 실패는 기존 Level·점수를 변경하지 않습니다.
+
 ## DM-SY-01 Agent 제작 허용 사용자 범위 및 허용 Agent 유형 설정
 
 - **진단 영역:** 1. Demand

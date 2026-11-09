@@ -246,6 +246,26 @@ class Issue(EvidenceModel):
     evidence_refs: list[str] = Field(default_factory=list)
 
 
+class Agent365Package(EvidenceModel):
+    package_id: str
+    agent_identity_id: str | None = None
+    version: str | None = None
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class Agent365Crosscheck(EvidenceModel):
+    se_code: str
+    status: Literal["partial_match", "mismatch", "unavailable", "not_comparable"]
+    scope: str
+    detail: str
+    compared: int | None = Field(default=None, ge=0)
+    matched: int | None = Field(default=None, ge=0)
+    mismatched: int | None = Field(default=None, ge=0)
+    unverified: int | None = Field(default=None, ge=0)
+    reason: Reason | None = None
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
 class Collection(EvidenceModel):
     collected_at: AwareDatetime
     agents: list[AgentEvidence] = Field(default_factory=list)
@@ -258,6 +278,8 @@ class Collection(EvidenceModel):
     budgets: list[Budget] = Field(default_factory=list)
     entra_blueprints: list[EntraBlueprint] = Field(default_factory=list)
     entra_agent_identities: list[EntraAgentIdentity] = Field(default_factory=list)
+    agent365_packages: list[Agent365Package] = Field(default_factory=list)
+    agent365_crosschecks: list[Agent365Crosscheck] = Field(default_factory=list)
     # Legacy result input only; these diagnostics are no longer collected or exported.
     agent_ca_policies: list[AgentCaPolicy] = Field(default_factory=list, exclude=True)
     risky_agents: list[RiskyAgent] = Field(default_factory=list, exclude=True)
