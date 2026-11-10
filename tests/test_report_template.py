@@ -16,7 +16,12 @@ from wasm_agent import report_template
 from wasm_agent.models import DEFAULT_TAGS, Collection, Finding, load_criteria
 from wasm_agent.proposals import evaluate_proposals
 from wasm_agent.report_excel import _emphasize_evidence, _evidence_needs_expansion, write_workbook
-from wasm_agent.report_template import CRITERIA_SHEET, RESULT_SHEET, assessment_template_path
+from wasm_agent.report_template import (
+    COLLECTION_METHODS,
+    CRITERIA_SHEET,
+    RESULT_SHEET,
+    assessment_template_path,
+)
 
 
 @pytest.fixture
@@ -53,7 +58,7 @@ def test_original_sheets_metadata_and_cached_formulas_are_preserved(output: Path
                 ].value
 
 
-def test_result_copies_a_through_f_exactly_and_maps_by_code(output: Path) -> None:
+def test_result_preserves_source_columns_and_inserts_collection_methods(output: Path) -> None:
     book = load_workbook(output)
     source, result = book[CRITERIA_SHEET], book[RESULT_SHEET]
     assert book.active.title == RESULT_SHEET
@@ -66,7 +71,14 @@ def test_result_copies_a_through_f_exactly_and_maps_by_code(output: Path) -> Non
         )
         for column in range(1, 7):
             old, new = source.cell(row, column), result.cell(row, column)
-            assert old.value == new.value and old._style == new._style
+            code = source.cell(row, 2).value
+            if column == 6 and code in COLLECTION_METHODS:
+                lines = new.value.splitlines()
+                assert lines[1] == f"- [{COLLECTION_METHODS[code]}]"
+                assert "\n".join(lines[:1] + lines[2:]) == old.value
+            else:
+                assert old.value == new.value
+            assert old._style == new._style
             assert old.number_format == new.number_format
     for name in ("A", "B", "C", "D", "E", "F"):
         assert result.column_dimensions[name].width == source.column_dimensions[name].width
@@ -89,15 +101,33 @@ def test_result_preserves_bold_titles_and_regular_bullet_descriptions(output: Pa
     for row in range(5, book[RESULT_SHEET].max_row + 1):
         source = book[CRITERIA_SHEET].cell(row, 6).value
         result = book[RESULT_SHEET].cell(row, 6).value
-        assert result == source
-        if book[RESULT_SHEET].cell(row, 2).value not in implemented:
+        code = book[RESULT_SHEET].cell(row, 2).value
+        if code not in COLLECTION_METHODS:
+            assert result == source
+        else:
+            lines = str(result).splitlines()
+            assert lines[1] == f"- [{COLLECTION_METHODS[code]}]"
+            assert "\n".join(lines[:1] + lines[2:]) == str(source)
+        if code not in implemented:
             assert isinstance(result, str)
-            assert "\n- " not in result
             continue
         assert isinstance(result, CellRichText)
         assert result[0].font.b is True
         assert result[1].font.b is False
-        assert all(line.startswith("- ") for line in result[1].text.splitlines()[1:])
+        assert all(line.startswith("- ") for line in str(result).splitlines()[1:])
+        assert all(not block.font.b for block in result[1:] if isinstance(block, TextBlock))
+
+
+def test_collection_methods_match_all_readme_rows() -> None:
+    readme = (Path(__file__).parents[1] / "README.md").read_text(encoding="utf-8")
+    methods = {}
+    for line in readme.splitlines():
+        if re.match(r"\| \[[A-Z]{2}-SY-\d{2}\]", line):
+            fields = line.split("|")
+            code = re.search(r"\[([A-Z]{2}-SY-\d{2})\]", fields[1])[1]
+            methods[code] = fields[4].strip()
+    assert len(methods) == 31
+    assert COLLECTION_METHODS == methods
 
 
 @pytest.mark.parametrize(("text", "expanded"), [

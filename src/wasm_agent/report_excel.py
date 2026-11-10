@@ -47,6 +47,7 @@ from wasm_agent.models import (
 from wasm_agent.proposals import DOMAINS, TITLES, azure_agents
 from wasm_agent.report_resources import ResourceName, resource_names, resource_summary
 from wasm_agent.report_template import (
+    COLLECTION_METHODS,
     CRITERIA_SHEET,
     RESULT_SHEET,
     load_report_template,
@@ -409,6 +410,32 @@ def _missing_rows(data: Collection) -> Iterable[dict[str, Any]]:
             }
 
 
+def _with_collection_method(value: str | CellRichText, method: str) -> str | CellRichText:
+    bullet = f"- [{method}]"
+    if isinstance(value, str):
+        title, separator, body = value.partition("\n")
+        return title + "\n" + bullet + (separator + body if separator else "")
+    result = CellRichText()
+    inserted = False
+    for block in value:
+        text = block.text if isinstance(block, TextBlock) else block
+        if not inserted and "\n" in text:
+            title, _, body = text.partition("\n")
+            if title:
+                result.append(TextBlock(deepcopy(block.font), title) if isinstance(block, TextBlock) else title)
+            result.append(TextBlock(InlineFont(b=False), "\n" + bullet + ("" if body else "\n")))
+            if body:
+                result.append(
+                    TextBlock(deepcopy(block.font), "\n" + body) if isinstance(block, TextBlock) else "\n" + body,
+                )
+            inserted = True
+        else:
+            result.append(deepcopy(block))
+    if not inserted:
+        result.append(TextBlock(InlineFont(b=False), "\n" + bullet))
+    return result
+
+
 def _result_sheet(
     book: Workbook, data: Collection, findings: list[Finding], resources: dict[str, list[ResourceName]],
 ) -> dict[str, int]:
@@ -443,6 +470,11 @@ def _result_sheet(
             sheet.cell(number, column).value = None
         if not code:
             continue
+        if code in COLLECTION_METHODS:
+            description = source.cell(number, 6).value
+            if not isinstance(description, (str, CellRichText)):
+                raise ValueError(f"수집 방법을 표시할 점검 내용이 없습니다: {code}")
+            sheet.cell(number, 6).value = _with_collection_method(description, COLLECTION_METHODS[code])
         finding = by_code.get(str(code))
         if finding is None:
             values = (

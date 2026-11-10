@@ -205,15 +205,7 @@ wasm-agent collect --setup-file .wasm-agent/setup.json --output-dir output
 ## Step 5. <span style='background-color: #e5dcf7'>[고객/MS 공동]</span> 결과 확인과 종료
 
 - **6. 수집 결과** 시트의 G열 **확인상태**에서 수집 여부와 인터뷰 필요 항목을 확인합니다.
-- H열 **지표**에서 실제 확인한 수치·건수를 확인합니다.
-- I열 **판정**에서 등급과 해당 평가기준을 함께 읽습니다.
-- J열 **근거**의 수집 결과·관련 리소스·판정 근거 를 확인합니다.
-- K열 **수집결과** 링크로 해당 항목의 상세 근거로 이동합니다.
-- L열 **다음조치**에서 다음 등급에 필요한 조건을 확인합니다. 현재 Level 5인 항목은 빈칸입니다.
-- M열 **평가 점수 (1~5)** 는 수집 항목의 Level에 해당하는 점수입니다. 판정이 없는 항목은 빈칸이며 N열 **검토메모**에 공동 검토 내용을 기록합니다.
 - **7. 수집결과 근거**와 **8. 수집 Raw 데이터**에서 상세 설정과 원본 값을 확인합니다.
-- J열 **관련 리소스**에 주요 이름을 표시하고, **7. 수집결과 근거 하단**에서 항목별 전체 이름·구독·리소스 그룹·식별자를 함께 확인합니다.
-- **7번 J~L열**은 Agent 365 등록부의 교차검증 상태·범위·증적입니다. 명시적 ID 연결만 대조하며 기존 Level·점수는 유지합니다. 등록부 조회에는 Agent 365 라이선스가 필요하고 조회 실패는 사유와 함께 표시합니다.
 - **9. 수집이슈 Raw 데이터**와 **10. 필드누락사유**에서 조회 실패·자료 부족의 원인을 확인합니다.
 - 종료 후 고객은 진단 앱의 권한·인증서를 회수하고, MS는 개인키와 수집 데이터를 승인된 보관 기간에 맞춰 폐기합니다.
 
@@ -248,8 +240,6 @@ bash setup.sh cleanup-apply  # 진단 앱·SP·해당 역할 할당 삭제, 미�
 | 80% 이상~90% 미만 | L3 |
 | 90% 이상~100% 미만 | L4 |
 | 100% | L5 |
-
-`config/criteria.yaml`의 `grading_profile: api_configuration_v1`이 기준입니다. 전체 대상과 필수 필드의 조회가 완료된 경우에만 비율을 계산합니다. 권한 거부·조회 실패·필수 필드 미확인·분모 0은 `null`과 사유로 남기며 L1로 바꾸지 않습니다. 구성·기록은 조직 승인·정책 실효성·자동화 동작을 입증하지 않으며 고객 정성 입력은 등급에 반영하지 않습니다.
 
 수집 방법은 해당 설정의 플랫폼·메뉴입니다. 구현 여부는 수집 열을 따르며, 구현된 수집기는 공식 읽기 API를 사용합니다.
 
@@ -290,7 +280,7 @@ bash setup.sh cleanup-apply  # 진단 앱·SP·해당 역할 할당 삭제, 미�
 ## 개발 참고
 
 - [config/criteria.yaml](config/criteria.yaml): API 지표·분모·증거·한계와 Level 1~5 규칙. 기본 기준을 조정할 때 수정
-- [config/custom-config.yaml](config/custom-config.yaml): workers·tags·projects 등 수집 기술 설정. 없어도 기본 수집 가능. 과거 Settings의 허용 모델·내부 기준·`policy_facts`는 로딩 호환용이며 등급에 사용하지 않음
+- [config/custom-config.yaml](config/custom-config.yaml): workers·tags·projects 등 수집 기술 설정. 없어도 기본 수집 가능.
 - [고객 권한 설정 ZIP](docs/downloads/customer-setup.zip): 권한 설정·정리용 파일 4개. 스크립트 변경 후 `python -m scripts.package_customer_setup`으로 갱신
 
 두 파일은 저장소의 `config/` 폴더에서 관리합니다. 별도 기준 파일은 `wasm-agent collect --criteria <기준.yaml> --config <고객설정.yaml>`로 지정합니다. 수집 기본값은 `config/criteria.yaml`과 `config/custom-config.yaml`이며, 기준 파일이 없는 설치 환경은 배포 패키지에 포함한 기본 기준을 사용합니다. 명시한 기준 파일이 없거나 YAML이 잘못되면 오류로 종료합니다.

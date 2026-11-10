@@ -15,6 +15,39 @@ from openpyxl.workbook.workbook import Workbook
 TEMPLATE_NAME = "assessment-result-template.xlsx"
 CRITERIA_SHEET = "4. 질문별 평가 기준"
 RESULT_SHEET = "6. 수집 결과"
+COLLECTION_METHODS = {
+    "DM-SY-01": "M365 Admin Center → Agents → Settings",
+    "DM-SY-02": "Power Platform Admin Center → Environments → 권한",
+    "DM-SY-03": "M365 Admin Center → Agents → All agents",
+    "DS-SY-04": "Power Platform Admin Center → Policies → Data policies",
+    "DS-SY-05": "Entra → Agents → Agent identities / Blueprints",
+    "DS-SY-06": "Azure → Microsoft Foundry → Model deployments",
+    "DS-SY-07": "Azure → Foundry / App Service → Networking",
+    "DS-SY-08": "Microsoft Foundry → Agents → Tools",
+    "DS-SY-09": "Microsoft Foundry → Agents → Tools",
+    "BI-SY-10": "Power Platform Admin Center → Environments",
+    "BI-SY-11": "Microsoft Foundry → Evaluation",
+    "BI-SY-12": "Azure → Defender for Cloud → Recommendations",
+    "BI-SY-13": "Azure → Microsoft Foundry → Content filters",
+    "BI-SY-14": "Foundry → Agent versions / App Service → Configuration",
+    "BI-SY-15": "Foundry → Agent metadata / Azure → Tags",
+    "BI-SY-16": "Azure → Policy → Compliance",
+    "DP-SY-17": "M365 Admin Center → Agents → All agents (Agent 365)",
+    "DP-SY-18": "M365 Admin Center → Agents → Details / Users",
+    "DP-SY-19": "Entra → Agents → Blueprints / Foundry → Agents",
+    "OE-SY-20": "Entra → Agents → Owners / Sponsors",
+    "OE-SY-21": "Entra → Agents → Permissions",
+    "OE-SY-22": "Azure → Monitor → Diagnostic settings",
+    "OE-SY-23": "Azure → Foundry / App Service → Identity / IAM",
+    "OE-SY-24": "Azure → Monitor → Alerts",
+    "OE-SY-25": "Azure → Monitor → Action groups",
+    "OE-SY-26": "Azure → Resource overview / Log Analytics → Retention",
+    "OT-SY-27": "Agent 365 → Shadow AI Detection",
+    "OT-SY-28": "Azure → Monitor → Metrics",
+    "OT-SY-29": "Azure → Cost Management → Cost analysis",
+    "OT-SY-30": "Microsoft Purview → DSPM for AI / Activity explorer",
+    "OT-SY-31": "Azure → Cost Management → Budgets",
+}
 _MAIN = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 _DOC_REL = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 
