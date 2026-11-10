@@ -200,18 +200,19 @@ wasm-agent collect --setup-file .wasm-agent/setup.json --output-dir output
 - 결과는 실행별 `output/<실행시각-UTC>/`에 저장됩니다.
 - `NOT_CHECKED`는 대상 없음·프로젝트 미지정으로 미점검이며 수집은 계속 진행됩니다.
 - 권한·인증 점검이 실패하면 고객 관리자에게 보완을 요청합니다.
+- Power Platform·Purview 보조 증거는 별도 관리자의 [읽기 내보내기](docs/api-notes.md#관리자-읽기-내보내기)로 반영합니다. 진단 앱에 관리자 권한을 추가하지 않습니다.
 
 ## Step 5. <span style='background-color: #e5dcf7'>[고객/MS 공동]</span> 결과 확인과 종료
 
-- **6. 수집 결과**의 G열 **확인상태**에서 수집 여부와 인터뷰 필요 항목을 확인합니다.
-- F열 **질문 / 수집 항목**에서 수집 대상 22개의 제목과 글머리표 설명을 확인합니다.
+- **6. 수집 결과** 시트의 G열 **확인상태**에서 수집 여부와 인터뷰 필요 항목을 확인합니다.
 - H열 **지표**에서 실제 확인한 수치·건수를 확인합니다.
 - I열 **판정**에서 등급과 해당 평가기준을 함께 읽습니다.
-- J열 **근거**에서 수집된 사실과 등급 산정 이유를 확인합니다. 건수·비율·금액 등 핵심 수치는 굵게 표시합니다.
+- J열 **근거**의 수집 결과·관련 리소스·판정 근거 를 확인합니다.
 - K열 **수집결과** 링크로 해당 항목의 상세 근거로 이동합니다.
 - L열 **다음조치**에서 다음 등급에 필요한 조건을 확인합니다. 현재 Level 5인 항목은 빈칸입니다.
-- M열 **평가 점수 (1~5)**는 수집 항목의 Level에 해당하는 점수입니다. 판정이 없는 항목은 빈칸이며 N열 **검토메모**에 공동 검토 내용을 기록합니다.
+- M열 **평가 점수 (1~5)** 는 수집 항목의 Level에 해당하는 점수입니다. 판정이 없는 항목은 빈칸이며 N열 **검토메모**에 공동 검토 내용을 기록합니다.
 - **7. 수집결과 근거**와 **8. 수집 Raw 데이터**에서 상세 설정과 원본 값을 확인합니다.
+- J열 **관련 리소스**에 주요 이름을 표시하고, **7. 수집결과 근거 하단**에서 항목별 전체 이름·구독·리소스 그룹·식별자를 함께 확인합니다.
 - **7번 J~L열**은 Agent 365 등록부의 교차검증 상태·범위·증적입니다. 명시적 ID 연결만 대조하며 기존 Level·점수는 유지합니다. 등록부 조회에는 Agent 365 라이선스가 필요하고 조회 실패는 사유와 함께 표시합니다.
 - **9. 수집이슈 Raw 데이터**와 **10. 필드누락사유**에서 조회 실패·자료 부족의 원인을 확인합니다.
 - 종료 후 고객은 진단 앱의 권한·인증서를 회수하고, MS는 개인키와 수집 데이터를 승인된 보관 기간에 맞춰 폐기합니다.
@@ -238,7 +239,7 @@ bash setup.sh cleanup-apply  # 진단 앱·SP·해당 역할 할당 삭제, 미�
 
 ## 점검 항목 (System Evidence 31개)
 
-✅ 수집 구현 / ⚠️ 일부 조회 또는 읽기 권한 제한 / ❌ 현재 수집 범위 밖입니다. 22개 수집 항목의 API 지표는 [점검 항목 상세](docs/checklist.md)와 [평가 기준](docs/api-notes.md#심사기준-검토와-점수-반영-2026-11-05)을 따릅니다. 범위 밖 9개는 수집·채점하지 않습니다.
+✅ 수집 구현 / ⚠️ 일부 증거만 수집·점수 보류 / ❌ 미구현입니다. 22개 등급 산정 항목은 [평가 기준](docs/api-notes.md#심사기준-검토와-점수-반영-2026-11-05)을 따릅니다. DM-SY-02·DS-SY-04·BI-SY-10·DP-SY-17·18·OT-SY-30은 보조 증거만 수집하며, 나머지 3개는 수집·채점하지 않습니다. 실제 조회 실패는 사유와 함께 표시합니다.
 
 | API 구성·기록 충족률 | Level |
 | --- | --- |
@@ -250,39 +251,41 @@ bash setup.sh cleanup-apply  # 진단 앱·SP·해당 역할 할당 삭제, 미�
 
 `config/criteria.yaml`의 `grading_profile: api_configuration_v1`이 기준입니다. 전체 대상과 필수 필드의 조회가 완료된 경우에만 비율을 계산합니다. 권한 거부·조회 실패·필수 필드 미확인·분모 0은 `null`과 사유로 남기며 L1로 바꾸지 않습니다. 구성·기록은 조직 승인·정책 실효성·자동화 동작을 입증하지 않으며 고객 정성 입력은 등급에 반영하지 않습니다.
 
-| 코드 | 영역 | 점검 내용 | 수집 | 신규 추가 |
-| --- | --- | --- | --- | --- |
-| [DM-SY-01](docs/checklist.md#dm-sy-01-agent-제작-허용-사용자-범위-및-허용-agent-유형-설정) | 1. Demand | Agent 제작 허용 범위 | ❌ | |
-| [DM-SY-02](docs/checklist.md#dm-sy-02-copilot-studio-제작-권한-보유자-수-및-환경-현황) | 1. Demand | 제작 권한과 환경 | ❌ | |
-| [DM-SY-03](docs/checklist.md#dm-sy-03-최근-6개월-신규-생성-agent-수-추이) | 1. Demand | 신규 Agent 생성 추이 | ❌ | |
-| [DS-SY-04](docs/checklist.md#ds-sy-04-커넥터-분류차단-정책데이터-정책-적용-현황) | 2. Design | 커넥터·데이터 정책 | ❌ | |
-| [DS-SY-05](docs/checklist.md#ds-sy-05-agent-id의-blueprint-연결) | 2. Design | Agent ID의 Blueprint 연결 | ✅ | |
-| [DS-SY-06](docs/checklist.md#ds-sy-06-모델-배포-버전업데이트-구성) | 2. Design | 모델 배포 버전·업데이트 구성 | ✅ | |
-| [DS-SY-07](docs/checklist.md#ds-sy-07-ai-리소스-인바운드-경계-구성) | 2. Design | AI 리소스 인바운드 경계 구성 | ✅ | ✓ |
-| [DS-SY-08](docs/checklist.md#ds-sy-08-mcp-도구-필수-승인-모드) | 2. Design | MCP 도구 필수 승인 모드 | ✅ | ✓ |
-| [DS-SY-09](docs/checklist.md#ds-sy-09-외부-도구-https-연결-구성) | 2. Design | 외부 도구 HTTPS 연결 구성 | ✅ | ✓ |
-| [BI-SY-10](docs/checklist.md#bi-sy-10-환경-분리-및-관리형-환경-적용-여부) | 3. Build | 개발·운영 환경 분리 | ❌ | |
-| [BI-SY-11](docs/checklist.md#bi-sy-11-foundry-프로젝트-평가-실행-이력) | 3. Build | Foundry 프로젝트 평가 실행 이력 | ✅ | |
-| [BI-SY-12](docs/checklist.md#bi-sy-12-ai-리소스-보안-권고-상태) | 3. Build | AI 리소스 보안 권고 상태 | ✅ | |
-| [BI-SY-13](docs/checklist.md#bi-sy-13-콘텐츠-필터-정책-연결) | 3. Build | 콘텐츠 필터 정책 연결 | ✅ | ✓ |
-| [BI-SY-14](docs/checklist.md#bi-sy-14-agent-버전호스트-런타임-식별) | 3. Build | Agent 버전·호스트 런타임 식별 | ✅ | ✓ |
-| [BI-SY-15](docs/checklist.md#bi-sy-15-agent-책임환경비용-메타데이터) | 3. Build | Agent 책임·환경·비용 메타데이터 | ✅ | ✓ |
-| [BI-SY-16](docs/checklist.md#bi-sy-16-ai-리소스-정책-평가-준수) | 3. Build | AI 리소스 정책 평가 준수 | ✅ | ✓ |
-| [DP-SY-17](docs/checklist.md#dp-sy-17-전체-agent-목록과-배포-범위게시-상태소유자) | 4. Deploy | Agent 등록·배포 현황 | ❌ | |
-| [DP-SY-18](docs/checklist.md#dp-sy-18-agent-공유-허용-범위-및-사용자-설치-허용-설정) | 4. Deploy | 공유·설치 허용 범위 | ❌ | |
-| [DP-SY-19](docs/checklist.md#dp-sy-19-azure-agent의-entra-blueprint-귀속) | 4. Deploy | Azure Agent의 Entra Blueprint 귀속 | ⚠️ | |
-| [OE-SY-20](docs/checklist.md#oe-sy-20-agent-id-소유자후원자-연결) | 5. Operate | Agent ID 소유자·후원자 연결 | ✅ | |
-| [OE-SY-21](docs/checklist.md#oe-sy-21-agent-id-앱-역할-읽기-범위) | 5. Operate | Agent ID 앱 역할 읽기 범위 | ✅ | |
-| [OE-SY-22](docs/checklist.md#oe-sy-22-agent-리소스-실행-로그-연결) | 5. Operate | Agent 리소스 실행 로그 연결 | ✅ | |
-| [OE-SY-23](docs/checklist.md#oe-sy-23-관리-id키-인증직접-arm-역할-구성) | 5. Operate | 관리 ID·키 인증·직접 ARM 역할 구성 | ✅ | ✓ |
-| [OE-SY-24](docs/checklist.md#oe-sy-24-ai-리소스-활성-경보-범위) | 5. Operate | AI 리소스 활성 경보 범위 | ✅ | ✓ |
-| [OE-SY-25](docs/checklist.md#oe-sy-25-ai-경보의-작업-그룹수신자-연결) | 5. Operate | AI 경보의 작업 그룹·수신자 연결 | ✅ | ✓ |
-| [OE-SY-26](docs/checklist.md#oe-sy-26-리소스-지역workspace-보존-구성) | 5. Operate | 리소스 지역·workspace 보존 구성 | ⚠️ | ✓ |
-| [OT-SY-27](docs/checklist.md#ot-sy-27-승인되지-않은-agentshadow-ai-탐지-결과) | 6. Optimize | 미승인 Agent 탐지 | ❌ | |
-| [OT-SY-28](docs/checklist.md#ot-sy-28-ai-리소스-사용량-관측-범위) | 6. Optimize | AI 리소스 사용량 관측 범위 | ✅ | |
-| [OT-SY-29](docs/checklist.md#ot-sy-29-ai-비용의-단일-agent-귀속) | 6. Optimize | AI 비용의 단일 Agent 귀속 | ✅ | |
-| [OT-SY-30](docs/checklist.md#ot-sy-30-agent가-접근하는-민감-데이터-노출-현황) | 6. Optimize | 민감 데이터 노출 | ❌ | |
-| [OT-SY-31](docs/checklist.md#ot-sy-31-구독-예산실제예측-경보-구성) | 6. Optimize | 구독 예산·실제·예측 경보 구성 | ✅ | ✓ |
+수집 방법은 해당 설정의 플랫폼·메뉴입니다. 구현 여부는 수집 열을 따르며, 구현된 수집기는 공식 읽기 API를 사용합니다.
+
+| 코드 | 영역 | 점검 내용 | 수집 방법 | 수집 | 신규 추가 |
+| --- | --- | --- | --- | --- | --- |
+| [DM-SY-01](docs/checklist.md#dm-sy-01-agent-제작-허용-사용자-범위-및-허용-agent-유형-설정) | 1. Demand | Agent 제작 허용 범위 | M365 Admin Center → Agents → Settings | ❌ | |
+| [DM-SY-02](docs/checklist.md#dm-sy-02-copilot-studio-제작-권한-보유자-수-및-환경-현황) | 1. Demand | 제작 권한과 환경 | Power Platform Admin Center → Environments → 권한 | ⚠️ | |
+| [DM-SY-03](docs/checklist.md#dm-sy-03-최근-6개월-신규-생성-agent-수-추이) | 1. Demand | 신규 Agent 생성 추이 | M365 Admin Center → Agents → All agents | ❌ | |
+| [DS-SY-04](docs/checklist.md#ds-sy-04-커넥터-분류차단-정책데이터-정책-적용-현황) | 2. Design | 커넥터·데이터 정책 | Power Platform Admin Center → Policies → Data policies | ⚠️ | |
+| [DS-SY-05](docs/checklist.md#ds-sy-05-agent-id의-blueprint-연결) | 2. Design | Agent ID의 Blueprint 연결 | Entra → Agents → Agent identities / Blueprints | ✅ | |
+| [DS-SY-06](docs/checklist.md#ds-sy-06-모델-배포-버전업데이트-구성) | 2. Design | 모델 배포 버전·업데이트 구성 | Azure → Microsoft Foundry → Model deployments | ✅ | |
+| [DS-SY-07](docs/checklist.md#ds-sy-07-ai-리소스-인바운드-경계-구성) | 2. Design | AI 리소스 인바운드 경계 구성 | Azure → Foundry / App Service → Networking | ✅ | ✓ |
+| [DS-SY-08](docs/checklist.md#ds-sy-08-mcp-도구-필수-승인-모드) | 2. Design | MCP 도구 필수 승인 모드 | Microsoft Foundry → Agents → Tools | ✅ | ✓ |
+| [DS-SY-09](docs/checklist.md#ds-sy-09-외부-도구-https-연결-구성) | 2. Design | 외부 도구 HTTPS 연결 구성 | Microsoft Foundry → Agents → Tools | ✅ | ✓ |
+| [BI-SY-10](docs/checklist.md#bi-sy-10-환경-분리-및-관리형-환경-적용-여부) | 3. Build | 개발·운영 환경 분리 | Power Platform Admin Center → Environments | ⚠️ | |
+| [BI-SY-11](docs/checklist.md#bi-sy-11-foundry-프로젝트-평가-실행-이력) | 3. Build | Foundry 프로젝트 평가 실행 이력 | Microsoft Foundry → Evaluation | ✅ | |
+| [BI-SY-12](docs/checklist.md#bi-sy-12-ai-리소스-보안-권고-상태) | 3. Build | AI 리소스 보안 권고 상태 | Azure → Defender for Cloud → Recommendations | ✅ | |
+| [BI-SY-13](docs/checklist.md#bi-sy-13-콘텐츠-필터-정책-연결) | 3. Build | 콘텐츠 필터 정책 연결 | Azure → Microsoft Foundry → Content filters | ✅ | ✓ |
+| [BI-SY-14](docs/checklist.md#bi-sy-14-agent-버전호스트-런타임-식별) | 3. Build | Agent 버전·호스트 런타임 식별 | Foundry → Agent versions / App Service → Configuration | ✅ | ✓ |
+| [BI-SY-15](docs/checklist.md#bi-sy-15-agent-책임환경비용-메타데이터) | 3. Build | Agent 책임·환경·비용 메타데이터 | Foundry → Agent metadata / Azure → Tags | ✅ | ✓ |
+| [BI-SY-16](docs/checklist.md#bi-sy-16-ai-리소스-정책-평가-준수) | 3. Build | AI 리소스 정책 평가 준수 | Azure → Policy → Compliance | ✅ | ✓ |
+| [DP-SY-17](docs/checklist.md#dp-sy-17-전체-agent-목록과-배포-범위게시-상태소유자) | 4. Deploy | Agent 등록·배포 현황 | M365 Admin Center → Agents → All agents (Agent 365) | ⚠️ | |
+| [DP-SY-18](docs/checklist.md#dp-sy-18-agent-공유-허용-범위-및-사용자-설치-허용-설정) | 4. Deploy | 공유·설치 허용 범위 | M365 Admin Center → Agents → Details / Users | ⚠️ | |
+| [DP-SY-19](docs/checklist.md#dp-sy-19-azure-agent의-entra-blueprint-귀속) | 4. Deploy | Azure Agent의 Entra Blueprint 귀속 | Entra → Agents → Blueprints / Foundry → Agents | ✅ | |
+| [OE-SY-20](docs/checklist.md#oe-sy-20-agent-id-소유자스폰서-연결) | 5. Operate | Agent ID 소유자·스폰서 연결 | Entra → Agents → Owners / Sponsors | ✅ | |
+| [OE-SY-21](docs/checklist.md#oe-sy-21-agent-id-앱-역할-읽기-범위) | 5. Operate | Agent ID 앱 역할 읽기 범위 | Entra → Agents → Permissions | ✅ | |
+| [OE-SY-22](docs/checklist.md#oe-sy-22-agent-리소스-실행-로그-연결) | 5. Operate | Agent 리소스 실행 로그 연결 | Azure → Monitor → Diagnostic settings | ✅ | |
+| [OE-SY-23](docs/checklist.md#oe-sy-23-관리-id키-인증직접-arm-역할-구성) | 5. Operate | 관리 ID·키 인증·직접 ARM 역할 구성 | Azure → Foundry / App Service → Identity / IAM | ✅ | ✓ |
+| [OE-SY-24](docs/checklist.md#oe-sy-24-ai-리소스-활성-경보-범위) | 5. Operate | AI 리소스 활성 경보 범위 | Azure → Monitor → Alerts | ✅ | ✓ |
+| [OE-SY-25](docs/checklist.md#oe-sy-25-ai-경보의-작업-그룹수신자-연결) | 5. Operate | AI 경보의 작업 그룹·수신자 연결 | Azure → Monitor → Action groups | ✅ | ✓ |
+| [OE-SY-26](docs/checklist.md#oe-sy-26-리소스-지역workspace-보존-구성) | 5. Operate | 리소스 지역·workspace 보존 구성 | Azure → Resource overview / Log Analytics → Retention | ✅ | ✓ |
+| [OT-SY-27](docs/checklist.md#ot-sy-27-승인되지-않은-agentshadow-ai-탐지-결과) | 6. Optimize | 미승인 Agent 탐지 | Agent 365 → Shadow AI Detection | ❌ | |
+| [OT-SY-28](docs/checklist.md#ot-sy-28-ai-리소스-사용량-관측-범위) | 6. Optimize | AI 리소스 사용량 관측 범위 | Azure → Monitor → Metrics | ✅ | |
+| [OT-SY-29](docs/checklist.md#ot-sy-29-ai-비용의-단일-agent-귀속) | 6. Optimize | AI 비용의 단일 Agent 귀속 | Azure → Cost Management → Cost analysis | ✅ | |
+| [OT-SY-30](docs/checklist.md#ot-sy-30-agent가-접근하는-민감-데이터-노출-현황) | 6. Optimize | 민감 데이터 노출 | Microsoft Purview → DSPM for AI / Activity explorer | ⚠️ | |
+| [OT-SY-31](docs/checklist.md#ot-sy-31-구독-예산실제예측-경보-구성) | 6. Optimize | 구독 예산·실제·예측 경보 구성 | Azure → Cost Management → Budgets | ✅ | ✓ |
 
 ## 개발 참고
 

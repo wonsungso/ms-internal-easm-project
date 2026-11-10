@@ -6,11 +6,16 @@
 
 ## 범위 원칙
 
+한글 용어는 MS Learn 한국어 문서를 기준으로 합니다. `Owner`는 **소유자**, `Sponsor`는 **스폰서**, 관리 관계의 `Manager`는 **관리자**, `agent identity blueprint`는 **에이전트 ID 청사진**, `sensitivity label`은 **민감도 레이블**입니다. API 키와 실제 화면의 영문 메뉴·리소스 이름은 유지합니다.
+
+- [에이전트 소유자·스폰서·관리자](https://learn.microsoft.com/ko-kr/entra/agent-id/agent-owners-sponsors-managers), [민감도 레이블](https://learn.microsoft.com/ko-kr/purview/sensitivity-labels)
+
 | 구분 | 범위·처리 |
 | --- | --- |
 | 수집·평가 | Microsoft Foundry, Azure 자체 호스팅 Agent, Azure Monitor·Log Analytics, 비용·보안 권고, Entra Agent ID의 22개 항목 |
 | Entra 필수 조회 | DS-SY-05, DP-SY-19, OE-SY-20~21. 생략 옵션 없이 권한 부족은 항목을 유지하고 `null`과 사유 기록 |
-| 범위 밖 9개 | DM-SY-01~03, DS-SY-04, BI-SY-10, DP-SY-17~18, OT-SY-27, OT-SY-30. M365·Power Platform·Agent 365·Purview 통제는 수집·채점하지 않음 |
+| 부분 수집 6개 | DM-SY-02·DS-SY-04·BI-SY-10·DP-SY-17~18·OT-SY-30. 관리자 읽기 내보내기·등록부 메타데이터는 보조 증거이며 원래 기준·자동 점수를 변경하지 않음 |
+| 미구현 3개 | DM-SY-01·03·OT-SY-27. 공식 읽기 API·필수 필드·최소 권한이 충분히 검증되지 않은 통제는 임의 구현하지 않음 |
 | 범위 구분 | Azure 인벤토리는 Agent Registry·인사 대사를 대체하지 않으며 Azure 로그는 Purview Audit 증거가 아님 |
 | 승인 경계 | 지정 테넌트의 접근 가능한 구독을 기본 열거하고 CLI·설정의 승인 범위를 적용. 외부 workspace·청구 범위 접근을 자동 확대하지 않음 |
 | 실행 신원 | 진단 SP의 DefaultAzureCredential. Reader 중심 GET 및 Resource Graph·비용·로그의 읽기 query POST만 허용 |
@@ -58,7 +63,7 @@
 | BI-SY-15 Agent 책임·환경·비용 메타데이터 | Azure Agent 수 | 같은 Agent의 태그 또는 API metadata에 owner·sponsor·env·cost-center 모두 존재 | 값의 업무 승인·인사 상태 아님 |
 | BI-SY-16 AI 리소스 정책 평가 준수 | 정책 평가가 있는 AI 관련 리소스 수 | `PolicyResources` policyStates를 리소스별 대조해 모든 평가가 `Compliant` | `Exempt·Unknown`·평가 없음은 준수 아님. 자동 교정 효과 아님 |
 | DP-SY-19 Azure Agent의 Entra Blueprint 귀속 | Azure Agent 수 | Entra Agent ID·Blueprint 전체 조회 완료 후 Blueprint tags의 subscriptionId·accountName·projectName·agentName을 Foundry Agent와 정확 대조하고 실제 Agent ID의 해당 Blueprint 참조 확인 | Blueprint 태그만으로 충족하지 않으며 LangChain 관리 ID를 Entra Agent ID로 대신 간주하지 않음 |
-| OE-SY-20 Agent ID 소유자·후원자 연결 | Graph Agent ID 수 | 실제 `owners` 수 > 0 및 `sponsors` 수 > 0 | 기본 Graph 읽기 권한의 사용자 속성 제한 때문에 accountEnabled는 조건에서 제외. 계정 활성 상태·퇴사자 판정·인사 대사 아님. 이름·UPN 미저장 |
+| OE-SY-20 Agent ID 소유자·스폰서 연결 | Graph Agent ID 수 | 실제 `owners` 수 > 0 및 `sponsors` 수 > 0 | 기본 Graph 읽기 권한의 사용자 속성 제한 때문에 accountEnabled는 조건에서 제외. 계정 활성 상태·퇴사자 판정·인사 대사 아님. 이름·UPN 미저장 |
 | OE-SY-21 Agent ID 앱 역할 읽기 범위 | Graph Agent ID 수 | `appRoleAssignments`와 대상 SP의 `appRoles.value`를 해석해 기준의 쓰기·전체제어 패턴 앱 역할 없음 | ARM·위임·앱 내부 권한 제외 |
 | OE-SY-22 Agent 리소스 실행 로그 연결 | AI 계정·자체 Agent 호스트 수 | `diagnosticSettings.logs.enabled`와 `workspaceId` 연결 | 구독 공통 Activity Log 제외. 이벤트 유입·테이블 유효 보존기간 아님 |
 | OE-SY-23 관리 ID·키 인증·직접 ARM 역할 구성 | AI 계정·자체 Agent 호스트 수 | `identity.principalId·type` 존재, 동일 구독의 광범위 직접 역할 없음, AI 계정 `disableLocalAuth=true` | 타 구독·상속·데이터 평면 역할과 실제 인증 사용 제외 |
@@ -80,10 +85,11 @@
 | --- | --- |
 | 출력 | 실행별 `output/<실행시각-UTC>/`에 `report-<타임스탬프>.xlsx`, `raw-data-<타임스탬프>.json` 2개. JSON은 raw + evidence + meta 통합 |
 | 실행 시각 | 마이크로초 포함 UTC·충돌 접미사를 폴더와 새 파일명에 동일 적용. 실제 수집 시각은 `collection.collected_at` 유지 |
-| 시트 1~5 | 평가 템플릿의 기존 수식 캐시·메타데이터·사용자 강조·스타일·입력 점수·메모·민감도 라벨 보존. 시트 4 점수 자동 덮어쓰기 안 함 |
+| 시트 1~5 | 평가 템플릿의 기존 수식 캐시·메타데이터·사용자 강조·스타일·입력 점수·메모·민감도 레이블 보존. 시트 4 점수 자동 덮어쓰기 안 함 |
 | 6. 수집 결과 | 시트 4의 A~F·서식·행 순서를 복사. G 수집 상태, I Level·평가기준, J 수집 내용·판정 근거, K 수집결과 링크, L 다음조치, M 평가 점수(1~5), N 검토메모. 판정 불가는 M 빈칸 |
 | 근거 이동 | 6번 K의 수집결과는 같은 SE 코드의 7번 행으로 이동하는 통합 문서 내부 링크. 외부 URL·파일·사용자 입력을 링크 대상으로 쓰지 않음 |
 | 원본·실패 | 7. 수집결과 근거, 8. 수집 Raw 데이터, 9. 수집이슈 Raw 데이터, 10. 필드누락사유. 원래 숫자·불리언·null·JSON 및 evidence_refs 보존 |
+| 리소스 이름 | 6번 J와 7번 요약에 주요 이름 최대 3개와 나머지 건수 표시. 7. 수집결과 근거 하단의 두 번째 표에 관련 이름·분류·구독·리소스 그룹·식별자를 전체 행으로 기록. 별도 리소스 시트 없이 통합하며, 중복 이름은 식별자로 구분. 목록은 준수 여부를 뜻하지 않음 |
 | 집계 | 인터뷰 54개·SE 31개 구조 유지. 시트 5 실제 집계는 시트 4 입력 기준이며 빈칸·N/A 제외. 4개 인터뷰 관점·SE 확보 시 영역, 6개 영역 확보 시 종합 산정 |
 | 괴리 보정 | 인터뷰 평균 - SE 평균 >= 1.5이면 SE 평균 + 1.0으로 하향 보정, 소수 첫째 자리 반올림. 미확보를 0으로 보간하지 않음 |
 | 템플릿 갱신 | `python -m scripts.merge_assessment --source <검토할-xlsx> --output <다른-경로.xlsx>`. 검토 후 사용하며 원본 덮어쓰기 금지. 패키지에도 템플릿 포함, 누락 시 오류 |
@@ -170,7 +176,7 @@
 | --- | --- |
 | Blueprint | GET `/applications/microsoft.graph.agentIdentityBlueprint`, `AgentIdentityBlueprint.Read.All`. [공식 목록](https://learn.microsoft.com/graph/api/agentidentityblueprint-list) |
 | Agent ID | GET `/servicePrincipals/microsoft.graph.agentIdentity`, `AgentIdentity.Read.All`. [공식 목록](https://learn.microsoft.com/graph/api/agentidentity-list) |
-| 소유자·후원자 | GET `/servicePrincipals/{id}/microsoft.graph.agentIdentity/owners` 또는 `/sponsors`, `$select=id,accountEnabled`. 사람 이름·UPN 없이 관계 수를 보관. accountEnabled는 기본 권한에서 제한될 수 있는 참고 속성이며 OE-SY-20 충족 조건에 미사용 |
+| 소유자·스폰서 | GET `/servicePrincipals/{id}/microsoft.graph.agentIdentity/owners` 또는 `/sponsors`, `$select=id,accountEnabled`. 사람 이름·UPN 없이 관계 수를 보관. accountEnabled는 기본 권한에서 제한될 수 있는 참고 속성이며 OE-SY-20 충족 조건에 미사용 |
 | 앱 역할 | GET `/servicePrincipals/{id}/appRoleAssignments`, `Application.Read.All`. 대상 리소스 SP의 `appRoles`로 역할 이름 해석 |
 | 제외 | 위임 동의는 Directory.Read.All로 범위를 넓혀야 하므로 수집 안 함. ARM 관리 ID를 Graph Agent Identity로 간주하지 않음 |
 
@@ -232,11 +238,11 @@
 | --- | --- |
 | 읽기 API | `GET https://graph.microsoft.com/v1.0/copilot/admin/catalog/packages`. 서버의 `@odata.nextLink`를 변경 없이 순회하며 동일 경로·신뢰 호스트·반복 링크 가드와 기존 재시도 적용 |
 | 권한·라이선스 | Application `CopilotPackages.Read.All`과 관리자 동의, Agent 365 라이선스 필요. 실제 테넌트의 사용 가능 여부는 수집 응답으로 확인 |
-| 데이터 최소화 | 문서에 없는 `$select`는 사용하지 않음. 응답은 메모리에서 `id`, `agentIdentityId`, `version`만 선별한 뒤 증적 저장. 이름·게시자·설명·패키지 본문 미저장 |
+| 데이터 최소화 | 문서에 없는 `$select`는 사용하지 않음. 메모리에서 패키지 `id`, `agentIdentityId`, `version`, `displayName`, `platform`, `availableTo`, `deployedTo`, `isBlocked`만 선별. displayName은 리소스 이름으로 보관하며 사람 정보·게시자·설명·사용자/그룹 ID 목록·본문은 미저장 |
 | DS-SY-05 | 등록부의 명시적 `agentIdentityId`가 Graph Agent ID·Blueprint 참조로 연결되는지만 대조. 완전한 Graph 목록과 모순되는 참조는 불일치, 필수 필드 누락은 미확인 |
 | DP-SY-19 | 기존의 구독·계정·프로젝트·Agent 태그로 식별된 유일한 Graph ID와 등록부의 명시적 ID 대조. 미게시·동명이인·다중 연결은 이름으로 추정하지 않고 미확인 |
-| 나머지 20개 | 현재 공개 등록부에 독립 비교 필드가 없어 `비교 대상 아님`. 같은 Graph owners·앱 역할을 재사용해 독립 검증으로 세지 않음 |
-| 상태·등급 | 일부 일치 / 불일치 / 미확인 / 비교 대상 아님. 비교 범위·건수·사유·증적은 별도 표시하고 기존 22개 Level·점수는 변경하지 않음 |
+| 나머지 20개 | `동일 정보 미제공`: 기존 Azure/Graph API로 평가하되 Agent 365 등록부에 같은 판정 정보가 없어 추가 대조하지 않음. 평가 제외를 뜻하지 않음 |
+| 상태·등급 | 일부 일치 / 불일치 / 미확인 / 동일 정보 미제공. 비교 범위·건수·사유·증적은 별도 표시하고 기존 22개 Level·점수는 변경하지 않음 |
 | 실패 | 권한·명시적 라이선스·기능·응답 오류는 원래 사유로 기록. 완전하지 않은 등록부를 빈 목록·0점·일치로 처리하지 않음 |
 | 출력 | 7번 J~L 교차검증 열, 8번 등록부·대조 Raw 테이블 추가. 기존 결과를 package로 재생성할 때는 교차검증을 실행하지 않으며 `미수행` 표시 |
 | SDK와의 구분 | 승인된 구현은 관리 API 읽기 방식. 런타임 Agent 365 SDK·OpenTelemetry 삽입, Agent 재배포·등록·알림·도구 실행은 수행하지 않음 |
@@ -246,3 +252,53 @@
 - [List packages](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/api/admin-settings/package/copilotpackages-list), [패키지 필드](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/api/admin-settings/package/resources/copilotpackage)
 - [Agent 365 SDK](https://learn.microsoft.com/en-us/microsoft-agent-365/developer/agent-365-sdk), [Foundry 연동](https://learn.microsoft.com/en-us/azure/foundry/agents/concepts/agent-365-integration)
 - 패키지 `version`은 Foundry Agent·호스트 런타임 버전과 다른 값입니다. UI의 Owner·활동 통계도 공개 등록부 API의 동일 필드 제공을 보장하지 않습니다.
+
+## 미수집 9개 항목의 추가 검토
+
+| 코드 | 구현·보류 근거 |
+| --- | --- |
+| DM-SY-01 | 포털의 제작 허용 주체·유형 설정과 같은 의미의 공식 읽기 필드·진단 SP 권한 계약 미확정 |
+| DM-SY-02 | 환경 목록·비 Dataverse 환경 역할 할당 건수의 별도 관리자 내보내기 구현. 고유 Maker 수·테넌트 전체 유효 권한은 미입증 |
+| DM-SY-03 | 패키지 createdDateTime을 실제 Agent 생성일이나 승인 요청 대사로 대신하지 않음 |
+| DS-SY-04 | 공식 Get-AdminDlpPolicy 객체 건수 내보내기 구현. 분류·차단·환경별 준수는 미입증 |
+| BI-SY-10 | 공식 환경 목록의 type·protectionLevel 원문 수집. 개발/테스트/운영 분리·관리형 운영 준수는 미입증 |
+| DP-SY-17 | 등록 패키지 메타데이터 부분 수집 구현. 운영 소유자·미등록 자산·승인 등록부 정합성은 미입증, 점수 보류 |
+| DP-SY-18 | 패키지별 접근·배포 범위 부분 수집 구현. 테넌트 설치 정책·승인 범위 일치는 미입증, 점수 보류 |
+| OT-SY-27 | 등록 목록에 없다는 이유로 Shadow AI로 단정하지 않음. 탐지 결과·관측 범위·후속 조치의 공식 읽기 계약 미확정 |
+| OT-SY-30 | 공식 Export-ActivityExplorerData 집계 내보내기 구현. Agent별 노출·조치 결과와 DSPM 리포트 전체를 대체하지 않음 |
+
+- 부분 수집 6개는 원래 질문·Level 기준을 변경하지 않습니다. API 성공 시에도 **일부 수집 / 판정 보류 / 점수 빈칸**이며, 조회 실패는 원래 사유로 남깁니다.
+- [Power Platform 환경 목록 API 2024-10-01](https://learn.microsoft.com/en-us/rest/api/power-platform/environmentmanagement/environments/list-environments-for-user), [Agent 설정 화면](https://learn.microsoft.com/en-us/microsoft-agent-365/admin/agent-settings)
+
+## 관리자 읽기 내보내기
+
+진단 SP 대신 승인된 관리자가 별도로 실행하는 읽기 전용 도구입니다. 모듈 설치·역할 부여·정책 변경은 수행하지 않습니다. Power Platform 관리 SP 등록은 테넌트 관리자 수준 권한을 부여하므로 진단 SP에 적용하지 않습니다.
+
+| 원천·계약 | 보관 값·한계 |
+| --- | --- |
+| 환경 GET, API 2024-10-01 | Azure CLI 관리자 사용자 로그인. 관리자 접근 가능 환경의 id·displayName·type·protectionLevel·azureRegion만 저장. 누락 필드는 `null`, `@odata.nextlink` 전체 페이지 확인 |
+| Microsoft.PowerApps.Administration.PowerShell 2.0.220 이상 | Add-PowerAppsAccount 후 Get-AdminPowerAppEnvironmentRoleAssignment·Get-AdminDlpPolicy. 비 Dataverse 역할 할당·정책 객체의 건수만 저장 |
+| ExchangeOnlineManagement 3.9.0 이상 | Connect-IPPSSession의 테넌트 확인 후 Export-ActivityExplorerData. 기본 7일·최대 30일, LastPage·WaterMark로 전체 페이지 확인 |
+| Purview 집계 | AIAppInteraction·CopilotInteraction·DLPRuleMatch·DLPRuleEnforce 건수. SensitiveInfoTypeCount·SensitivityLabel은 실제 반환 시에만 집계. 사용자·프롬프트·응답·파일 경로 원문은 저장하지 않음 |
+| 실패·출처 | 모듈 부재는 feature_unavailable, 조회 실패·불완전 페이지는 건수 `null`. JSON의 테넌트·시간·명령·모듈 버전·범위를 확인하고 마스킹된 증적과 SHA256 보관. 해시는 원천 인증 서명이 아님 |
+
+저장소를 준비한 별도 관리자 터미널에서 실행합니다. 환경 내보내기는 `az login --tenant <테넌트-ID>`로 로그인한 사용자만 사용하며, PowerShell 도구는 공식 모듈이 미리 설치되어 있어야 합니다.
+
+```powershell
+python scripts\export_admin_environments.py --tenant-id <테넌트-ID> --output .wasm-agent\admin-exports\environments.json
+.\scripts\export_admin_evidence.ps1 -TenantId <테넌트-ID> -Service PowerPlatform -OutputPath .wasm-agent\admin-exports\powerplatform.json
+.\scripts\export_admin_evidence.ps1 -TenantId <테넌트-ID> -Service Purview -OutputPath .wasm-agent\admin-exports\purview.json
+```
+
+관리자 JSON만 전달하고 기존 결과에 반영합니다. 원래 Azure 수집 시각은 유지되며 각 관리자 조회 시각을 별도로 기록합니다. 원본 증적이 내장된 이식형 결과에는 해당 실행 폴더의 `evidence/<내보내기반영시각>/`에 새 증적을 보관합니다. 새 수집에서도 같은 `--admin-evidence-file`을 반복 지정할 수 있습니다.
+
+```powershell
+wasm-agent package --output-dir output\<실행폴더> --tenant-id <테넌트-ID> `
+  --admin-evidence-file .wasm-agent\admin-exports\environments.json `
+  --admin-evidence-file .wasm-agent\admin-exports\powerplatform.json `
+  --admin-evidence-file .wasm-agent\admin-exports\purview.json
+```
+
+- 2026-11-10 실측: 환경 API 200·접근 가능 환경 1개. 로컬 PowerApps·Exchange Online 모듈 부재로 역할·정책·Purview 활동은 미수집이며, 완료했다고 표시하지 않습니다. 공식 모듈 다운로드는 CDN TLS 연결 문제로 중단했고 검증을 우회하지 않았습니다.
+- Microsoft/Foundry 앱의 감사는 Audit Standard 범위와 구분해 확인합니다. 비 Microsoft AI 감사에는 종량제 조건이 있을 수 있으므로 Purview 전체를 Agent 365 유료 라이선스 필수로 단정하지 않습니다.
+- 공식 근거: [역할 할당 조회](https://learn.microsoft.com/en-us/powershell/module/microsoft.powerapps.administration.powershell/get-adminpowerappenvironmentroleassignment), [DLP 정책 조회](https://learn.microsoft.com/en-us/powershell/module/microsoft.powerapps.administration.powershell/get-admindlppolicy), [활동 내보내기](https://learn.microsoft.com/en-us/powershell/module/exchangepowershell/export-activityexplorerdata?view=exchange-ps), [연결 정보](https://learn.microsoft.com/en-us/powershell/module/exchangepowershell/get-connectioninformation?view=exchange-ps), [Copilot 감사](https://learn.microsoft.com/en-us/purview/audit-copilot), [관리 SP 권한 한계](https://learn.microsoft.com/en-us/power-platform/admin/powershell-create-service-principal).

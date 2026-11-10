@@ -173,7 +173,7 @@ def measurements(
             row.owner_count > 0 if row.owner_count is not None else None,
             row.sponsor_count > 0 if row.sponsor_count is not None else None,
         ) for row in identities
-    ], "Agent ID 중 소유자와 후원자가 모두 연결된 비율")
+    ], "Agent ID 중 소유자와 스폰서가 모두 연결된 비율")
     result["OE-SY-21"] = measured([
         not row.overprivileged_roles if not any(role.startswith("unresolved:") for role in row.app_roles) else None
         for row in identities

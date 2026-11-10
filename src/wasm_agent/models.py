@@ -8,7 +8,15 @@ from pathlib import Path
 from typing import Any, Literal, Protocol
 
 import yaml
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictInt,
+    model_validator,
+)
 
 Reason = Literal["permission_denied", "feature_unavailable", "license_missing", "not_found", "error"]
 Platform = Literal["foundry", "langchain", "other", "manual"]
@@ -234,6 +242,7 @@ class ProposalFinding(EvidenceModel):
     limit: str
     reason: Reason | None = None
     evidence_refs: list[str] = Field(default_factory=list)
+    evidence_only: bool = False
 
 
 class Issue(EvidenceModel):
@@ -250,6 +259,12 @@ class Agent365Package(EvidenceModel):
     package_id: str
     agent_identity_id: str | None = None
     version: str | None = None
+    display_name: str | None = None
+    platform: str | None = None
+    available_to: str | None = None
+    deployed_to: str | None = None
+    is_blocked: bool | None = None
+    field_status: dict[str, FieldStatus] = Field(default_factory=dict)
     evidence_refs: list[str] = Field(default_factory=list)
 
 
@@ -266,6 +281,76 @@ class Agent365Crosscheck(EvidenceModel):
     evidence_refs: list[str] = Field(default_factory=list)
 
 
+class AdminEnvironment(EvidenceModel):
+    environment_id: str
+    display_name: str | None = None
+    environment_type: str | None = None
+    protection_level: str | None = None
+    region: str | None = None
+    field_status: dict[str, FieldStatus] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def mark_missing(self) -> AdminEnvironment:
+        for field in ("display_name", "environment_type", "protection_level", "region"):
+            if getattr(self, field) is None:
+                self.field_status.setdefault(
+                    field, FieldStatus(reason="not_found", detail="공식 환경 응답에서 값 미확인"),
+                )
+        return self
+
+
+class AdminReadResult(EvidenceModel):
+    source: Literal[
+        "powerplatform.environments", "powerplatform.environment_roles",
+        "powerplatform.dlp_policies", "purview.activity_explorer",
+    ]
+    command: str
+    module_version: str
+    scope: str
+    completed: StrictBool
+    observed_at: AwareDatetime
+    window_start: AwareDatetime | None = None
+    window_end: AwareDatetime | None = None
+    object_count: StrictInt | None = Field(default=None, ge=0)
+    counts: dict[str, StrictInt] = Field(default_factory=dict)
+    environments: list[AdminEnvironment] = Field(default_factory=list)
+    reason: Reason | None = None
+    detail: str
+    evidence_refs: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_read(self) -> AdminReadResult:
+        if self.completed and (self.object_count is None or self.reason is not None):
+            raise ValueError("완료된 관리자 조회에는 확인된 건수와 오류 없음이 필요합니다.")
+        if not self.completed and (self.reason is None or self.object_count is not None):
+            raise ValueError("실패한 관리자 조회는 사유와 null 건수를 유지해야 합니다.")
+        if any(value < 0 for value in self.counts.values()):
+            raise ValueError("관측 건수는 음수일 수 없습니다.")
+        if set(self.counts) - {
+            "AIAppInteraction", "CopilotInteraction", "DLPRuleMatch", "DLPRuleEnforce",
+            "unclassified", "sensitive_type_observed", "sensitivity_label_observed",
+        }:
+            raise ValueError("허용되지 않은 관리자 집계 필드입니다.")
+        if self.source != "purview.activity_explorer" and self.counts:
+            raise ValueError("Purview 활동 집계를 다른 명령 결과로 사용할 수 없습니다.")
+        if not self.completed and (self.environments or self.counts):
+            raise ValueError("미완료 조회를 완전한 집계나 목록으로 사용할 수 없습니다.")
+        if (self.window_start is None) != (self.window_end is None):
+            raise ValueError("조회 기간의 시작과 끝이 모두 필요합니다.")
+        if self.window_start and self.window_end and self.window_start > self.window_end:
+            raise ValueError("관리자 조회 기간이 역전되었습니다.")
+        return self
+
+
+class AdminEvidenceExport(EvidenceModel):
+    schema_version: Literal[1]
+    source_type: Literal["official_admin_read"]
+    tenant_id: str
+    tenant_verified: StrictBool
+    exported_at: AwareDatetime
+    reads: list[AdminReadResult] = Field(min_length=1, max_length=4)
+
+
 class Collection(EvidenceModel):
     collected_at: AwareDatetime
     agents: list[AgentEvidence] = Field(default_factory=list)
@@ -280,6 +365,7 @@ class Collection(EvidenceModel):
     entra_agent_identities: list[EntraAgentIdentity] = Field(default_factory=list)
     agent365_packages: list[Agent365Package] = Field(default_factory=list)
     agent365_crosschecks: list[Agent365Crosscheck] = Field(default_factory=list)
+    admin_evidence: list[AdminReadResult] = Field(default_factory=list)
     # Legacy result input only; these diagnostics are no longer collected or exported.
     agent_ca_policies: list[AgentCaPolicy] = Field(default_factory=list, exclude=True)
     risky_agents: list[RiskyAgent] = Field(default_factory=list, exclude=True)
@@ -374,6 +460,7 @@ class Settings(BaseModel):
     foundry_profile: Literal["agents_v1", "classic_v1"] = "agents_v1"
     projects: list[ProjectSettings] = Field(default_factory=list)
     manual_agents: Path | None = None
+    admin_evidence_files: list[Path] = Field(default_factory=list)
     allowed_models: list[AllowedModel] = Field(default_factory=list)
     tags: dict[str, Any] = Field(default_factory=dict)
     model_policy_definition_ids: list[str] = Field(default_factory=list)

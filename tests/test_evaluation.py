@@ -134,6 +134,20 @@ def test_agent365_crosscheck_failures_do_not_change_primary_grades(data: Collect
     assert {code: row.model_dump() for code, row in grade(data).items()} == before
 
 
+def test_administrator_evidence_never_changes_primary_grades(data: Collection) -> None:
+    from wasm_agent.collect_admin_evidence import admin_observations
+    from wasm_agent.models import AdminReadResult
+
+    before = {code: row.model_dump() for code, row in grade(data).items()}
+    data.admin_evidence = [AdminReadResult(
+        source="purview.activity_explorer", command="Export-ActivityExplorerData",
+        module_version="3.9.0", scope="tenant activity aggregates, not Agent exposure",
+        completed=True, observed_at=data.collected_at, object_count=0, detail="completed empty query",
+    )]
+    data.proposals.extend(admin_observations(data))
+    assert {code: row.model_dump() for code, row in grade(data).items()} == before
+
+
 @pytest.mark.parametrize("good,level", [(0, "L1"), (1, "L2"), (8, "L3"), (9, "L4"), (10, "L5")])
 def test_real_api_field_combinations_reach_every_level_for_all22_controls(
     data: Collection, good: int, level: str,

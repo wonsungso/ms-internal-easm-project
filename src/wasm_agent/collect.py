@@ -15,6 +15,7 @@ from wasm_agent.azure import (
     issue,
     verify_identity,
 )
+from wasm_agent.collect_admin_evidence import read_admin_evidence
 from wasm_agent.collect_agent365 import Agent365Collector, crosscheck_agent365
 from wasm_agent.collect_entra import EntraCollector
 from wasm_agent.collect_foundry import FoundryCollector
@@ -33,6 +34,7 @@ def merge(destination: Collection, source: Collection) -> None:
         "agents", "deployments", "evaluations", "costs", "security", "secure_scores",
         "policy_assignments", "budgets", "entra_blueprints", "entra_agent_identities",
         "agent365_packages", "agent365_crosschecks",
+        "admin_evidence",
         "logs", "proposal_observations", "issues", "resources",
         "completed_subscriptions",
     ):
@@ -153,5 +155,11 @@ def collect(settings: Settings, credential: Credential, now: datetime | None = N
     finally:
         registry.close()
     result.agent365_crosschecks = crosscheck_agent365(result, criteria)
+    result.facts["admin_evidence_requested"] = bool(settings.admin_evidence_files)
+    for path in settings.admin_evidence_files:
+        incoming = read_admin_evidence(path, settings.tenant_id, instant, store)
+        if {read.source for read in result.admin_evidence} & {read.source for read in incoming.admin_evidence}:
+            raise ValueError("같은 관리자 조회 원천을 중복 반영할 수 없습니다.")
+        merge(result, incoming)
     result.facts["evidence_directory"] = str(store.path.resolve())
     return result

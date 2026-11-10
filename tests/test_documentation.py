@@ -22,6 +22,15 @@ def test_screenshot_guide_references_registered_existing_images() -> None:
         assert path.is_file(), path
 
 
+def test_korean_terms_follow_microsoft_learn() -> None:
+    root = Path(__file__).parents[1]
+    for path in [root / "README.md", *(root / "docs").glob("*.md"), *(root / "demo").glob("*.md")]:
+        text = path.read_text(encoding="utf-8")
+        assert "후원자" not in text, path
+        assert "민감도 라벨" not in text, path
+    assert "스폰서" in (root / "docs" / "checklist.md").read_text(encoding="utf-8")
+
+
 def test_captured_images_are_real_pngs_with_highlight_metadata() -> None:
     directory = Path(__file__).parents[1] / "docs"
     manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))["authentication"]
@@ -151,18 +160,27 @@ def test_summary_table_links_resolve_to_checklist_sections_with_images() -> None
     assert len(links) == 31
     assert {target for _, target in links} == anchors
     implemented = re.findall(r"^- \*\*구현:\*\* (?!❌)", detail, re.M)
-    assert len(implemented) == 22
+    assert len(implemented) == 28
     assert len(re.findall(r"^!\[[^\]]+\]\(portal/imgs/[^)]+\.png\)$", detail, re.M)) == 22
     assert "<img" not in readme and not re.search(r"^\|.*!\[", readme, re.M)
     assert "## Agent 365 등록부 교차 확인" in detail
     assert "(imgs/23-agent365-admin-details.png)" in detail
     assert "7. 수집결과 근거 J~L열" in detail
+    for code in ("DP-SY-19", "OE-SY-26"):
+        section = re.search(rf"^## {code} .+?(?=^## |\Z)", detail, re.M | re.S)
+        assert section and "- **구현:** ✅ 구현 - 현재 API 기준 완료" in section[0]
 
 
 def test_summary_marks_added_items_only_in_the_rightmost_column() -> None:
     from wasm_agent.proposals import TITLES
 
     readme = (Path(__file__).parents[1] / "README.md").read_text(encoding="utf-8")
+    assert "| 점검 내용 | 수집 방법 | 수집 | 신규 추가 |" in readme
+    methods = [
+        line.split("|")[4].strip() for line in readme.splitlines()
+        if re.match(r"^\| \[[A-Z]{2}-SY-\d+\]", line)
+    ]
+    assert len(methods) == 31 and all("→" in method for method in methods)
     assert "| 수집 | 신규 추가 |" in readme
     rows = re.findall(r"^\| \[([A-Z]{2}-SY-\d+)\].+$", readme, re.M)
     assert len(rows) == 31

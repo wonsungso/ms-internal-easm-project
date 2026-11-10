@@ -10,11 +10,12 @@ from zipfile import ZipFile
 import pytest
 from openpyxl import load_workbook
 from openpyxl.cell.rich_text import CellRichText, TextBlock
+from openpyxl.utils import range_boundaries
 
 from wasm_agent import report_template
 from wasm_agent.models import DEFAULT_TAGS, Collection, Finding, load_criteria
 from wasm_agent.proposals import evaluate_proposals
-from wasm_agent.report_excel import _emphasize_numbers, write_workbook
+from wasm_agent.report_excel import _emphasize_evidence, _evidence_needs_expansion, write_workbook
 from wasm_agent.report_template import CRITERIA_SHEET, RESULT_SHEET, assessment_template_path
 
 
@@ -61,7 +62,7 @@ def test_result_copies_a_through_f_exactly_and_maps_by_code(output: Path) -> Non
         assert sheet.title.startswith(f"{index}. ")
     for row in range(1, source.max_row + 1):
         assert result.row_dimensions[row].height == (
-            110 if result.cell(row, 7).value == "수집됨" else source.row_dimensions[row].height
+            120 if result.cell(row, 7).value == "수집됨" else source.row_dimensions[row].height
         )
         for column in range(1, 7):
             old, new = source.cell(row, column), result.cell(row, column)
@@ -99,6 +100,30 @@ def test_result_preserves_bold_titles_and_regular_bullet_descriptions(output: Pa
         assert all(line.startswith("- ") for line in result[1].text.splitlines()[1:])
 
 
+@pytest.mark.parametrize(("text", "expanded"), [
+    ("짧은 근거", False), ("a" * 180, False), ("a" * 181, True),
+    ("가" * 90, False), ("가" * 91, True), ("첫 줄\n둘째 줄\n셋째 줄", True),
+])
+def test_long_evidence_uses_wrapping_and_explicit_newlines(text: str, expanded: bool) -> None:
+    assert _evidence_needs_expansion(text, 90, 33.75, 10) is expanded
+
+
+def test_uncollected_long_evidence_is_height120_without_changing_short_rows(tmp_path: Path) -> None:
+    path = tmp_path / "long-uncollected.xlsx"
+    write_workbook(Collection(collected_at=datetime.now(UTC)), [Finding(
+        se_code="DS-SY-06", scope="partial", level="N/A", reason="permission_denied",
+        rationale="조회 실패의 상세 근거입니다. " * 20,
+    )], path)
+    sheet = load_workbook(path)[RESULT_SHEET]
+    rows = {sheet.cell(row, 2).value: row for row in range(5, 90)}
+    row = rows["DS-SY-06"]
+    assert sheet.cell(row, 7).value == "수집하지 않음"
+    assert sheet.row_dimensions[row].height == 120
+    source = load_workbook(assessment_template_path())[CRITERIA_SHEET]
+    short = rows["DM-SY-01"]
+    assert sheet.row_dimensions[short].height == source.row_dimensions[short].height
+
+
 def test_unknown_result_code_fails_explicitly_without_writing(tmp_path: Path) -> None:
     path = tmp_path / "invalid.xlsx"
     with pytest.raises(ValueError, match="템플릿에 없는 SE 코드"):
@@ -125,6 +150,21 @@ def test_historical_grade_is_not_described_with_new_api_thresholds(tmp_path: Pat
     assert finding.level == "L2"
 
 
+def test_historical_terms_are_localized_without_rewriting_original_evidence(tmp_path: Path) -> None:
+    finding = Finding(
+        se_code="OE-SY-20", scope="in_scope", level="L3", metric_value=0.8,
+        level_criterion="소유자·후원자 모두 연결 비율 80% 이상",
+        rationale="소유자와 후원자가 연결됨",
+    )
+    path = tmp_path / "localized.xlsx"
+    write_workbook(Collection(collected_at=datetime.now(UTC)), [finding], path)
+    sheet = load_workbook(path)[RESULT_SHEET]
+    row = next(row for row in range(5, 90) if sheet.cell(row, 2).value == "OE-SY-20")
+    assert "스폰서" in sheet.cell(row, 9).value and "후원자" not in sheet.cell(row, 9).value
+    assert "스폰서" in sheet.cell(row, 10).value and "후원자" not in sheet.cell(row, 10).value
+    assert finding.rationale == "소유자와 후원자가 연결됨"
+
+
 def test_all_findings_link_to_the_matching_detail_row_and_preserve_existing_metrics(tmp_path: Path) -> None:
     fixture = Path(__file__).parent / "fixtures" / "three_subscriptions.json"
     data = Collection.model_validate_json(fixture.read_text(encoding="utf-8"))
@@ -137,7 +177,9 @@ def test_all_findings_link_to_the_matching_detail_row_and_preserve_existing_metr
     write_workbook(data, findings, path)
     book = load_workbook(path, rich_text=True)
     results, details = book[RESULT_SHEET], book["7. 수집결과 근거"]
-    detail_rows = {details.cell(row, 1).value: row for row in range(4, details.max_row + 1)}
+    table = next(table for table in details.tables.values() if table.ref.startswith("A3:"))
+    last_detail = range_boundaries(table.ref)[3]
+    detail_rows = {details.cell(row, 1).value: row for row in range(4, last_detail + 1)}
     assert len(detail_rows) == len(findings) == 22
     expected_metrics = {item.code: item.metrics for item in data.proposals}
     for code, row in detail_rows.items():
@@ -214,9 +256,12 @@ def test_result_level_display_preserves_machine_grade(tmp_path: Path, level: str
     ("westus2, DS-SY-07, L4, /subscriptions/123, 2026-11-09", []),
     ("수집 결과 없음", []),
     (" 1\n2 ", ["1", "2"]),
+    ("수집 결과: 1개\n관련리소스: resource\n판정 근거: 100%",
+     ["수집 결과:", "1", "관련리소스:", "판정 근거:", "100%"]),
+    ("일반 설명의 수집 결과: 문구는 그대로", []),
 ])
-def test_evidence_emphasizes_numbers_without_changing_text(text: str, bold: list[str]) -> None:
-    content = _emphasize_numbers(text)
+def test_evidence_emphasizes_labels_and_numbers_without_changing_text(text: str, bold: list[str]) -> None:
+    content = _emphasize_evidence(text)
     assert str(content) == text
     assert [
         part.text.strip() for part in content if isinstance(part, TextBlock) and part.font.b
@@ -224,7 +269,7 @@ def test_evidence_emphasizes_numbers_without_changing_text(text: str, bold: list
     assert not any(isinstance(part, str) and part.isspace() for part in content)
 
 
-def test_only_evidence_numbers_are_bold_and_cause_column_is_removed(tmp_path: Path) -> None:
+def test_evidence_labels_and_numbers_are_bold_and_cause_column_is_removed(tmp_path: Path) -> None:
     path = tmp_path / "rich.xlsx"
     data = Collection(collected_at=datetime.now(UTC), facts={"deployment_inventory_complete": True})
     write_workbook(data, [Finding(
@@ -240,8 +285,9 @@ def test_only_evidence_numbers_are_bold_and_cause_column_is_removed(tmp_path: Pa
     evidence = sheet.cell(row, 10).value
     assert isinstance(evidence, CellRichText)
     bold = [part for part in evidence if isinstance(part, TextBlock) and part.font.b]
-    assert {"1", "3", "33.33%"} <= {part.text for part in bold}
-    assert all(re.fullmatch(r"[0-9.,%/ +\-]+", part.text) for part in bold)
+    labels = {"수집 결과:", "관련 리소스:", "판정 근거:"}
+    assert labels | {"1", "3", "33.33%"} <= {part.text for part in bold}
+    assert all(part.text in labels or re.fullmatch(r"[0-9.,%/ +\-]+", part.text) for part in bold)
     assert sheet.cell(row, 10).font.bold is False
     assert "평가 범위:" not in str(evidence) and "세부 조회 상태:" not in str(evidence)
     assert "조회 권한 부족" in str(evidence)

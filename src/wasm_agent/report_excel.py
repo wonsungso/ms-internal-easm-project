@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import math
 import re
+import unicodedata
 from collections.abc import Iterable, Sequence
 from copy import copy, deepcopy
 from pathlib import Path
@@ -20,8 +22,10 @@ from openpyxl.worksheet.worksheet import Worksheet
 from pydantic import BaseModel
 
 from wasm_agent.azure import redact
-from wasm_agent.collect_agent365 import STATUS_LABELS
+from wasm_agent.collect_admin_evidence import admin_observations
+from wasm_agent.collect_agent365 import OBSERVATION_ONLY, STATUS_LABELS, agent365_observations
 from wasm_agent.models import (
+    AdminReadResult,
     Agent365Crosscheck,
     Agent365Package,
     AgentEvidence,
@@ -41,6 +45,7 @@ from wasm_agent.models import (
     SecurityRecommendation,
 )
 from wasm_agent.proposals import DOMAINS, TITLES, azure_agents
+from wasm_agent.report_resources import ResourceName, resource_names, resource_summary
 from wasm_agent.report_template import (
     CRITERIA_SHEET,
     RESULT_SHEET,
@@ -79,7 +84,7 @@ SE_NAMES = {
     "OT-SY-29": "AI 비용의 단일 Agent 귀속",
     "DS-SY-05": "Agent ID의 Blueprint 연결",
     "DP-SY-19": "Agent ID 부여율(Azure Agent 기준)",
-    "OE-SY-20": "소유자·후원자 미지정 Agent",
+    "OE-SY-20": "소유자·스폰서 미지정 Agent",
     "OE-SY-21": "Agent 부여 권한·과다 권한",
     **TITLES,
 }
@@ -110,6 +115,7 @@ COLUMN_WIDTHS = {
     "근거": 27, "다음조치": 19, "수동검토상태": 10, "검토메모": 15,
     "수집 요약": 42, "한계": 38, "설명": 60, "detail": 40,
     "evidence_refs": 32, ORIGINAL: 48,
+    "리소스 유형": 22, "리소스 이름": 42, "구독 ID": 40, "리소스 그룹": 34, "식별자": 75,
 }
 CENTERED = {"SE코드", "코드", "진단 영역", "확인상태", "수집 상태", "지표", "판정", "수동검토상태"}
 DETAILS_TITLE = "수집결과 근거"
@@ -137,6 +143,7 @@ def readable(value: Any) -> str:
     if isinstance(value, bool):
         return "확인됨" if value else "해당하지 않음"
     text = str(redact(value)).replace("\u2014", "-").replace("\u2013", "-")
+    text = text.replace("후원자", "스폰서").replace("민감도 라벨", "민감도 레이블")
     for key, label in LABELS.items():
         text = re.sub(r"(?<![\w/-])" + re.escape(key) + r"(?![\w/-])", label, text)
     return text
@@ -161,12 +168,15 @@ def _value(value: Any) -> Any:
     return value
 
 
-def _emphasize_numbers(text: str) -> CellRichText:
+def _emphasize_evidence(text: str) -> CellRichText:
     number = r"[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?"
-    pattern = rf"(?<![A-Za-z0-9_./:-]){number}(?:\s*/\s*{number})?%?(?![A-Za-z0-9_./:%-])"
+    pattern = (
+        r"^(?:수집[ \t]*결과|관련[ \t]*리소스|판정[ \t]*근거):"
+        rf"|(?<![A-Za-z0-9_./:-]){number}(?:\s*/\s*{number})?%?(?![A-Za-z0-9_./:%-])"
+    )
     content = CellRichText()
     position = 0
-    for match in re.finditer(pattern, text):
+    for match in re.finditer(pattern, text, re.MULTILINE):
         prefix = text[position:match.start()]
         if prefix:
             if prefix.isspace() and content:
@@ -187,6 +197,17 @@ def _emphasize_numbers(text: str) -> CellRichText:
         else:
             content.append(suffix)
     return content
+
+
+def _evidence_needs_expansion(text: str, width: float, original_height: float, font_size: float) -> bool:
+    lines = sum(
+        max(1, math.ceil(sum(
+            2 if unicodedata.east_asian_width(character) in ("W", "F") else 1
+            for character in line.expandtabs(4)
+        ) / width))
+        for line in text.splitlines()
+    )
+    return lines * font_size * 1.35 > original_height
 
 
 def _cell(sheet: Worksheet, row: int, column: int, value: Any) -> None:
@@ -310,7 +331,28 @@ def collection_summary(data: Collection, finding: Finding) -> tuple[str, str | N
         summary = f"비용 행 {len(data.costs)}건, 예산 {len(data.budgets)}개"
     elif code == "DS-SY-05" and data.facts.get("entra_blueprints_complete"):
         summary = f"Blueprint {len(data.entra_blueprints)}개"
-    elif code in ("DP-SY-19", "OE-SY-20", "OE-SY-21") and (
+    elif code == "OE-SY-21" and (
+        data.entra_agent_identities or data.facts.get("entra_agents_complete")
+    ):
+        identities = data.entra_agent_identities
+        summary = (
+            f"Entra Agent ID {len(identities)}개, 수집 앱 역할 이름 {sum(len(row.app_roles) for row in identities)}건, "
+            f"쓰기·전체제어 패턴 해당 {sum(len(row.overprivileged_roles) for row in identities)}건"
+        )
+    elif code == "OE-SY-20" and (
+        data.entra_agent_identities or data.facts.get("entra_agents_complete")
+    ):
+        identities = data.entra_agent_identities
+        summary = (
+            f"Entra Agent ID {len(identities)}개, 소유자 연결 {sum(bool(row.owner_count) for row in identities)}개, "
+            f"스폰서 연결 {sum(bool(row.sponsor_count) for row in identities)}개"
+        )
+        if any(row.owner_count is None or row.sponsor_count is None for row in identities):
+            summary += (
+                f" (소유자 수 미확인 {sum(row.owner_count is None for row in identities)}개, "
+                f"스폰서 수 미확인 {sum(row.sponsor_count is None for row in identities)}개)"
+            )
+    elif code == "DP-SY-19" and (
         data.entra_agent_identities or data.facts.get("entra_agents_complete")
     ):
         summary = f"Graph Agent ID {len(data.entra_agent_identities)}개, Azure Agent {len(agents)}개"
@@ -367,8 +409,11 @@ def _missing_rows(data: Collection) -> Iterable[dict[str, Any]]:
             }
 
 
-def _result_sheet(book: Workbook, data: Collection, findings: list[Finding]) -> dict[str, int]:
+def _result_sheet(
+    book: Workbook, data: Collection, findings: list[Finding], resources: dict[str, list[ResourceName]],
+) -> dict[str, int]:
     source = book[CRITERIA_SHEET]
+    evidence_only_codes = {proposal.code for proposal in data.proposals if proposal.evidence_only} | OBSERVATION_ONLY.keys()
     sheet = book.copy_worksheet(source)
     sheet.title = RESULT_SHEET
     sheet.delete_cols(10)
@@ -386,6 +431,8 @@ def _result_sheet(book: Workbook, data: Collection, findings: list[Finding]) -> 
     header_font = copy(sheet.cell(4, 9).font)
     header_font.bold = True
     sheet.cell(4, 9).font = header_font
+    for column, width in enumerate((16, 25, 55, 90, 14, 60, 18, 30), 7):
+        sheet.column_dimensions[get_column_letter(column)].width = width
     by_code = {finding.se_code: finding for finding in findings}
     if len(by_code) != len(findings):
         raise ValueError("수집 결과의 SE 코드가 중복되었습니다.")
@@ -417,14 +464,16 @@ def _result_sheet(book: Workbook, data: Collection, findings: list[Finding]) -> 
                 )
                 if not isinstance(criterion, str) or not criterion.strip():
                     raise ValueError(f"{finding.se_code}: {finding.level} 평가기준 문장이 없습니다.")
-                level_text = f"Level {finding.level[1:]} ({criterion})"
+                level_text = f"Level {finding.level[1:]} ({readable(criterion)})"
             values = (
+                "일부 수집" if finding.se_code in evidence_only_codes and status == "일부 수집" else
                 "수집됨" if status in ("수집됨", "일부 수집", "증적 확인")
                 else "수집하지 않음",
                 metric(finding) if finding.assessment_basis == "configuration" or finding.metric_value is not None
-                or not summary else "실측 구성 - 근거 참조",
+                or not summary or status == "수집 불가" else "실측 구성 - 근거 참조",
                 level_text,
                 ("수집 결과: " + readable(summary) + "\n" if summary else "")
+                + "관련 리소스: " + str(redact(resource_summary(resources[finding.se_code]))) + "\n"
                 + ("조회 제한: " + readable(finding.reason) + " (" + status + ")\n" if finding.reason else "")
                 + "판정 근거: " + readable(finding.rationale),
                 None,
@@ -454,20 +503,28 @@ def _result_sheet(book: Workbook, data: Collection, findings: list[Finding]) -> 
                 )
         evidence = sheet.cell(number, 10)
         if finding is not None and isinstance(evidence.value, str):
-            evidence.value = _emphasize_numbers(evidence.value)
+            evidence.value = _emphasize_evidence(evidence.value)
             font = copy(evidence.font)
             font.bold = False
             evidence.font = font
         sheet.cell(number, 11).alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         sheet.cell(number, 13).alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         if sheet.cell(number, 7).value == "수집됨":
+            sheet.row_dimensions[number].height = 120
+        elif sheet.cell(number, 7).value == "수집하지 않음" and _evidence_needs_expansion(
+            str(evidence.value or ""), sheet.column_dimensions["J"].width,
+            source.row_dimensions[number].height or source.sheet_format.defaultRowHeight or 15,
+            evidence.font.sz or FONT_SIZE,
+        ):
+            sheet.row_dimensions[number].height = 120
+        elif sheet.cell(number, 7).value == "일부 수집" or (
+            finding is not None and finding.se_code in evidence_only_codes
+        ):
             sheet.row_dimensions[number].height = 110
     sheet.cell(4, 11).alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
     sheet.cell(4, 13).alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
     if rows.keys() != by_code.keys():
         raise ValueError("평가 결과 템플릿에 없는 SE 코드가 수집 결과에 포함되었습니다.")
-    for column, width in enumerate((16, 25, 55, 90, 14, 60, 18, 30), 7):
-        sheet.column_dimensions[get_column_letter(column)].width = width
     validation = DataValidation(
         type="whole", operator="between", formula1="1", formula2="5", allow_blank=True,
     )
@@ -486,8 +543,26 @@ def write_workbook(
     references: list[dict[str, Any]] | None = None,
 ) -> None:
     """Extend the assessment template with a masked collected-evidence snapshot."""
+    proposals = {proposal.code: proposal for proposal in data.proposals}
+    for proposal in [*agent365_observations(data), *admin_observations(data)]:
+        proposals.setdefault(proposal.code, proposal)
+    data = data.model_copy(update={"proposals": list(proposals.values())})
+    original_codes = {finding.se_code for finding in findings}
+    findings = [*findings, *[
+        Finding(
+            se_code=code, scope="partial", level="N/A", reason=proposal.reason or "not_found",
+            rationale=proposal.limit, evidence_refs=proposal.evidence_refs,
+            next_step="원래 평가 기준을 충족할 증거가 부족해 점수 보류",
+        )
+        for code, proposal in proposals.items()
+        if (code in OBSERVATION_ONLY or proposal.evidence_only) and code not in original_codes
+    ]]
     book, template = load_report_template()
-    result_rows = _result_sheet(book, data, findings)
+    resources = {
+        code: resource_names(data, code)
+        for code in {finding.se_code for finding in findings} | {proposal.code for proposal in data.proposals}
+    }
+    result_rows = _result_sheet(book, data, findings, resources)
     details = [
         {
             "SE 코드": item.code, "진단 영역": item.area or DOMAINS.get(item.code, ("",))[0],
@@ -519,6 +594,9 @@ def write_workbook(
     details.sort(key=lambda item: result_rows.get(item["SE 코드"], float("inf")))
     crosschecks = {item.se_code: item for item in data.agent365_crosschecks}
     for detail in details:
+        detail["수집 구성 요약"] = (
+            str(detail["수집 구성 요약"] or "") + "\n관련 리소스: " + resource_summary(resources[detail["SE 코드"]])
+        )
         check = crosschecks.get(detail["SE 코드"])
         detail["Agent 365 교차검증"] = STATUS_LABELS[check.status] if check else "미수행"
         detail["교차검증 범위·결과"] = (
@@ -527,6 +605,18 @@ def write_workbook(
                if check.compared is not None else "")
             + (f"\n조회 사유: {readable(check.reason)}" if check.reason else "")
         ) if check else "기존 수집 결과에 Agent 365 교차검증 기록 없음. 기존 등급 유지"
+        if check and check.status == "not_comparable":
+            detail["교차검증 범위·결과"] = (
+                "기존 Azure/Graph API로 평가하는 항목 - 평가 제외 아님\n"
+                "Agent 365 등록부에 같은 판정 정보 미제공\n" + check.detail
+            )
+        if detail["SE 코드"] in OBSERVATION_ONLY:
+            proposal = proposals[detail["SE 코드"]]
+            detail["Agent 365 교차검증"] = (
+                "원천 일부 수집" if proposal.status == "일부 수집" else "원천 조회 미확인"
+            )
+            detail["교차검증 범위·결과"] = "추가 대조가 아닌 등록부 원천 자료 수집. " + proposal.limit
+            detail["교차검증 증적"] = proposal.evidence_refs
         detail["교차검증 증적"] = check.evidence_refs if check else []
     proposals_sheet = _table(book, DETAILS_TITLE, [
         "SE 코드", "진단 영역", "점검 항목", "조회 상태", "조회 제한 사유",
@@ -547,7 +637,7 @@ def write_workbook(
             ref=cell.coordinate, location=f"'{proposals_sheet.title}'!A{row}",
             display="수집결과", tooltip=f"{code} 수집결과 근거로 이동",
         )
-    _cell(proposals_sheet, 1, 1, "수집된 설정·값·건수와 검증 한계. 다음조치는 6. 수집 결과의 L열 확인")
+    _cell(proposals_sheet, 1, 1, "수집된 설정·값·건수와 검증 한계. 하단에 항목별 리소스 전체 목록 포함. 다음조치는 6. 수집 결과의 L열 확인")
     proposals_sheet.merge_cells("A1:L1")
     proposals_sheet.row_dimensions[1].height = 30
     proposals_sheet.print_title_rows = "1:3"
@@ -581,6 +671,7 @@ def write_workbook(
         ("AgentID Raw 데이터", EntraAgentIdentity, data.entra_agent_identities),
         ("Agent365 등록 Raw 데이터", Agent365Package, data.agent365_packages),
         ("Agent365 대조 Raw 데이터", Agent365Crosscheck, data.agent365_crosschecks),
+        ("관리자 읽기 Raw 데이터", AdminReadResult, data.admin_evidence),
     ]
     _raw_sheet(book, sections)
     issue_title = "수집이슈 Raw 데이터"
@@ -588,5 +679,24 @@ def write_workbook(
     _table(book, "필드누락사유", [
         "agent_id", "subscription_id", "필드명", "field", "reason", "설명", ORIGINAL,
     ], _missing_rows(data))
+    resource_rows = []
+    for code in sorted(resources, key=lambda value: (result_rows.get(value, float("inf")), value)):
+        names = resources[code]
+        for resource in names:
+            resource_rows.append({
+                "SE 코드": code, "리소스 유형": resource.category, "리소스 이름": resource.name,
+                "구독 ID": resource.subscription_id, "리소스 그룹": resource.resource_group,
+                "식별자": resource.identifier,
+            })
+        if not names:
+            resource_rows.append({"SE 코드": code})
+    resource_header = proposals_sheet.max_row + 4
+    _cell(proposals_sheet, resource_header - 1, 1, "항목별 관련 리소스 전체 목록")
+    proposals_sheet.merge_cells(
+        start_row=resource_header - 1, end_row=resource_header - 1, start_column=1, end_column=12,
+    )
+    _table(book, DETAILS_TITLE, [
+        "SE 코드", "리소스 유형", "리소스 이름", "구독 ID", "리소스 그룹", "식별자",
+    ], resource_rows, sheet=proposals_sheet, start_row=resource_header)
     book.save(path)
     preserve_template_parts(path, template)

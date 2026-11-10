@@ -2,10 +2,10 @@
 
 항목별 점검 내용, Azure Portal 기준 확인 경로, 확인 화면입니다. 요약표는 [README](../README.md#점검-항목-system-evidence-31개)에 있습니다.
 
-- 구현 표기: ✅ 구현 / ⚠️ 일부 구현 / ⚠️ 읽기 전용 불가(구현했으나 읽기 전용 역할로는 조회 불가) / ❌ 미구현 (M365·Agent 365·Purview·Power Platform 영역)
+- 구현 표기: ✅ 구현 / ⚠️ 보조 증거 부분 수집·점수 보류 / ❌ 미구현
 - Azure Portal 기준(참고): 같은 값을 사람이 포털에서 확인하는 경로와 캡처이며 수집기 동작에는 영향이 없습니다
 - 캡처의 빨간 네모는 확인 위치이고 식별자는 마스킹했습니다. 표시 값은 데모 환경 기준이며 고객 환경과 다를 수 있습니다
-- 22개 수집 항목의 명칭·분모·증거·한계는 [API 평가 기준](api-notes.md#심사기준-검토와-점수-반영-2026-11-05)과 `config/criteria.yaml`의 `api_configuration_v1`을 따릅니다. 범위 밖 9개는 수집·채점하지 않습니다
+- 22개 등급 산정 항목은 [API 평가 기준](api-notes.md#심사기준-검토와-점수-반영-2026-11-05)을 따릅니다. 6개는 보조 증거만 수집하며, DM-SY-01·03·OT-SY-27은 미구현입니다. [관리자 읽기 내보내기](api-notes.md#관리자-읽기-내보내기)는 진단 앱 권한을 확대하지 않습니다.
 
 | API 충족률 | Level |
 | --- | --- |
@@ -28,7 +28,7 @@
 ![Agent 365 - 실제 Foundry Agent의 Details와 Entra agent ID 확인 위치](imgs/23-agent365-admin-details.png)
 
 - 실제 테스트 화면이며 이름·계정·ID는 마스킹했습니다. 빨간 네모는 메뉴와 확인 위치입니다. 차단·삭제·동의 설정은 변경하지 않았습니다.
-- 읽기 수집은 SDK 삽입 대신 공식 Graph 등록부 API를 사용합니다. DS-SY-05·DP-SY-19의 명시적 ID 연결만 일부 대조하며, 나머지는 독립 필드가 없어 비교 대상 아님으로 표시합니다.
+- 읽기 수집은 SDK 삽입 대신 공식 Graph 등록부 API를 사용합니다. DS-SY-05·DP-SY-19의 명시적 ID 연결만 일부 대조합니다. 나머지의 **동일 정보 미제공**은 Agent 365 등록부에 같은 판정 정보가 없다는 뜻이며, 기존 Azure/Graph API 평가는 그대로 수행합니다.
 - 결과는 **7. 수집결과 근거 J~L열**과 **8. 수집 Raw 데이터**에 기록합니다. 일치 여부·라이선스·권한 실패는 기존 Level·점수를 변경하지 않습니다.
 
 ## DM-SY-01 Agent 제작 허용 사용자 범위 및 허용 Agent 유형 설정
@@ -43,8 +43,8 @@
 
 - **진단 영역:** 1. Demand
 - **제품/메뉴:** Power Platform Admin Center
-- **구현:** ❌ 미구현
-- **점검 내용:** 환경 목록과 환경별 Maker 권한 보유자 수, 권한 부여 방식 확인
+- **구현:** ⚠️ 일부 구현
+- **점검 내용:** 관리자 접근 가능 환경과 비 Dataverse 환경의 역할 할당 건수만 수집. 역할 할당 건수는 고유 Maker 수가 아니며 테넌트 전체 유효 권한은 미확인
 - **Azure Portal 기준(참고):** 해당 없음 - Power Platform 관리 센터 > 환경
 
 ## DM-SY-03 최근 6개월 신규 생성 Agent 수 추이
@@ -59,8 +59,8 @@
 
 - **진단 영역:** 2. Design
 - **제품/메뉴:** Power Platform Admin Center - Data policies
-- **구현:** ❌ 미구현
-- **점검 내용:** 커넥터 분류(업무/비업무/차단) 정책 목록과 정책별 적용 환경 범위
+- **구현:** ⚠️ 일부 구현
+- **점검 내용:** 공식 Get-AdminDlpPolicy의 정책 객체 건수만 수집. 커넥터 분류·차단 및 환경별 준수 여부는 미확인
 - **Azure Portal 기준(참고):** 해당 없음 - Power Platform 관리 센터 > 정책 > 데이터 정책
 
 ## DS-SY-05 Agent ID의 Blueprint 연결
@@ -117,8 +117,8 @@
 
 - **진단 영역:** 3. Build
 - **제품/메뉴:** Power Platform Admin Center
-- **구현:** ❌ 미구현
-- **점검 내용:** 개발·운영 환경 분리, 관리형 환경 적용 여부, 파이프라인 이력 확인
+- **구현:** ⚠️ 일부 구현
+- **점검 내용:** 환경 type·protectionLevel 원문만 수집. 개발·테스트·운영 분리와 관리형 운영 준수·파이프라인 이력은 미확인
 - **Azure Portal 기준(참고):** 해당 없음 - Power Platform 관리 센터 > 환경 > 관리형 환경
 
 ## BI-SY-11 Foundry 프로젝트 평가 실행 이력
@@ -185,29 +185,29 @@
 
 - **진단 영역:** 4. Deploy
 - **제품/메뉴:** M365 Admin Center - Agent Registry
-- **구현:** ❌ 미구현
-- **점검 내용:** Registry 전체 Agent 목록과 배포 범위·게시 상태·소유자, 등록부 대사 (Azure 수집 Agent는 보조 정보일 뿐 대신하지 않음)
+- **구현:** ⚠️ 일부 구현 - 등록부 정보만 부분 수집, 점수 보류
+- **점검 내용:** 공식 등록부 API의 패키지 이름·플랫폼·버전·배포 범위·차단 상태 수집. 미등록 Agent 탐지·운영 소유자·승인 등록부 정합성은 입증하지 않음. [실제 확인 화면](#agent-365-등록부-교차-확인)
 - **Azure Portal 기준(참고):** 해당 없음 - Microsoft 365 관리 센터 > 에이전트 > 레지스트리
 
 ## DP-SY-18 Agent 공유 허용 범위 및 사용자 설치 허용 설정
 
 - **진단 영역:** 4. Deploy
 - **제품/메뉴:** M365 Admin Center - Copilot > Agents 설정
-- **구현:** ❌ 미구현
-- **점검 내용:** Agent 공유 허용 범위와 사용자 직접 설치 허용 여부 설정값
+- **구현:** ⚠️ 일부 구현 - 패키지 접근·배포 상태만 부분 수집, 점수 보류
+- **점검 내용:** 공식 등록부 API의 availableTo·deployedTo·isBlocked 수집. 테넌트 제작·직접 설치 정책 또는 승인된 사용자 범위와의 일치는 입증하지 않음. [실제 확인 화면](#agent-365-등록부-교차-확인)
 - **Azure Portal 기준(참고):** 해당 없음 - Microsoft 365 관리 센터 > Copilot > 에이전트 설정
 
 ## DP-SY-19 Azure Agent의 Entra Blueprint 귀속
 
 - **진단 영역:** 4. Deploy
 - **제품/메뉴:** Microsoft Entra Agent ID
-- **구현:** ⚠️ 일부 구현
+- **구현:** ✅ 구현 - 현재 API 기준 완료, 연결 충족률과 구현 여부는 별개
 - **점검 내용:** Azure Agent를 분모로 Blueprint 태그의 subscriptionId·accountName·projectName·agentName을 Foundry Agent와 정확 대조하고 실제 Agent ID가 해당 Blueprint를 참조하는 귀속 비율. Entra Agent ID·Blueprint 전체 조회 완료 필요. LangChain 관리 ID를 Entra Agent ID로 대신 간주하지 않으며 Registry 전체를 분모로 쓰지 않음
 - **Azure Portal 기준(참고):** Azure Portal > Microsoft Entra ID > Agent ID > 에이전트 ID 목록. 포털은 Foundry 프로젝트 관리 ID(`.../projects/<프로젝트>`)도 목록에 함께 표시하므로 수집 개수(Agent ID 9)보다 1개 많게(10) 보임
 
 ![DP-SY-19 확인 화면](portal/imgs/DP-SY-19.png)
 
-## OE-SY-20 Agent ID 소유자·후원자 연결
+## OE-SY-20 Agent ID 소유자·스폰서 연결
 
 - **진단 영역:** 5. Operate
 - **제품/메뉴:** Microsoft Entra Agent ID
@@ -271,7 +271,7 @@
 
 - **진단 영역:** 5. Operate
 - **제품/메뉴:** Azure 리소스 위치, Log Analytics
-- **구현:** ⚠️ 일부 구현
+- **구현:** ✅ 구현 - 현재 API 기준 완료, 보존 기준 충족률과 구현 여부는 별개
 - **점검 내용:** AI 계정·자체 Agent 호스트를 분모로 지역 식별·활성 로그 연결 workspace의 보존 기준 충족 비율. 기본 기준은 `workspace_retention_target_days=90`. 실제 모델 처리 지역·테이블별 유효 보존·법적 삭제는 입증하지 않음
 - **Azure Portal 기준(참고):** Azure Portal > Microsoft Foundry > (계정) > Overview(Location), Log Analytics workspaces > (workspace) > Tables(보존 기간)
 
@@ -309,8 +309,8 @@
 
 - **진단 영역:** 6. Optimize
 - **제품/메뉴:** Microsoft Purview - DSPM for AI
-- **구현:** ❌ 미구현
-- **점검 내용:** DSPM for AI 리포트의 민감 데이터 노출 목록 (읽기 공식 API 미확인)
+- **구현:** ⚠️ 일부 구현
+- **점검 내용:** Purview 활동 탐색기의 AI 상호 작용·DLP 이벤트를 개인정보 없이 집계. 민감 정보·민감도 레이블은 실제 반환된 필드만 집계하며, 접근을 유출로 해석하거나 Agent별 노출·조치 완료로 판정하지 않음
 - **Azure Portal 기준(참고):** 해당 없음 - Microsoft Purview 포털 > DSPM for AI
 
 ## OT-SY-31 구독 예산·실제·예측 경보 구성

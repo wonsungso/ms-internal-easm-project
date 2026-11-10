@@ -1,19 +1,30 @@
 from __future__ import annotations
 
 import uuid
+from collections import Counter
 from datetime import datetime
 from typing import Any
 
 from wasm_agent.api_grading import agent_has_entra_identity
 from wasm_agent.azure import MSGRAPH, AccessError, EvidenceStore, ReaderHTTP, issue
-from wasm_agent.models import Agent365Crosscheck, Agent365Package, Collection
+from wasm_agent.models import (
+    Agent365Crosscheck,
+    Agent365Package,
+    Collection,
+    FieldStatus,
+    ProposalFinding,
+)
 
 REGISTRY_URL = MSGRAPH + "/v1.0/copilot/admin/catalog/packages"
+OBSERVATION_ONLY = {
+    "DP-SY-17": "등록 Agent 패키지 목록·게시·배포 상태",
+    "DP-SY-18": "등록 Agent 패키지 접근·배포 허용 범위",
+}
 STATUS_LABELS = {
     "partial_match": "일부 일치",
     "mismatch": "불일치",
     "unavailable": "미확인",
-    "not_comparable": "비교 대상 아님",
+    "not_comparable": "동일 정보 미제공",
 }
 LIMITS = {
     "DS-SY-06": "호출 모델 정보와 Azure 배포 버전·업데이트 옵션은 다른 필드",
@@ -73,18 +84,39 @@ class Agent365Collector:
                 version = row.get("version")
                 if version is not None and not isinstance(version, str):
                     raise AccessError("error", "Agent 365 패키지 version 형식 오류")
-                packages.append(Agent365Package(
+                text_fields = {
+                    "display_name": "displayName", "platform": "platform",
+                    "available_to": "availableTo", "deployed_to": "deployedTo",
+                }
+                for source in text_fields.values():
+                    if row.get(source) is not None and not isinstance(row[source], str):
+                        raise AccessError("error", f"Agent 365 {source} 형식 오류")
+                if row.get("isBlocked") is not None and type(row["isBlocked"]) is not bool:
+                    raise AccessError("error", "Agent 365 isBlocked 형식 오류")
+                package = Agent365Package(
                     package_id=identifier, agent_identity_id=identity, version=version,
-                ))
+                    display_name=row.get("displayName"), platform=row.get("platform"),
+                    available_to=row.get("availableTo"), deployed_to=row.get("deployedTo"),
+                    is_blocked=row.get("isBlocked"),
+                )
+                for field in ("agent_identity_id", "version", *text_fields, "is_blocked"):
+                    if getattr(package, field) is None:
+                        package.field_status[field] = FieldStatus(reason="not_found", detail="등록부 응답에 필드 없음")
+                packages.append(package)
             refs = []
             if self.store:
                 refs = [self.store.save(REGISTRY_URL, {
                     "value": [
-                        {"id": p.package_id, "agentIdentityId": p.agent_identity_id, "version": p.version}
+                        {
+                            "id": p.package_id, "agentIdentityId": p.agent_identity_id, "version": p.version,
+                            "displayName": p.display_name, "platform": p.platform, "availableTo": p.available_to,
+                            "deployedTo": p.deployed_to, "isBlocked": p.is_blocked,
+                        }
                         for p in packages
                     ],
                     "pagination_complete": True,
-                    "projection": "id, agentIdentityId, version only; personal names and agent content omitted",
+                    "projection": "package identity/name/version/platform/access/deployment/block state only; "
+                    "people, publisher, descriptions, member IDs and agent content omitted",
                 })]
             for package in packages:
                 package.evidence_refs = refs
@@ -100,6 +132,48 @@ class Agent365Collector:
                 self.http, "agent365_registry", REGISTRY_URL, exc, self.required_roles,
             ))
         return result
+
+
+def agent365_observations(data: Collection) -> list[ProposalFinding]:
+    if not data.facts.get("agent365_requested") and not data.agent365_packages:
+        return []
+    packages = data.agent365_packages
+    complete = data.facts.get("agent365_registry_complete") is True
+    failure = next((item for item in data.issues if item.collector == "agent365_registry"), None)
+    reason = failure.reason if failure else "not_found"
+    refs = sorted({
+        *data.facts.get("agent365_registry_refs", []),
+        *(ref for package in packages for ref in package.evidence_refs),
+        *(failure.evidence_refs if failure else []),
+    })
+    available = dict(Counter(package.available_to or "미확인" for package in packages))
+    deployed = dict(Counter(package.deployed_to or "미확인" for package in packages))
+    limits = {
+        "DP-SY-17": "등록 패키지 목록이며 미등록 Agent 탐지·승인 등록부 정합성·운영 소유자 검증은 아님",
+        "DP-SY-18": "패키지 접근·배포 상태이며 테넌트 제작·설치 정책이나 승인 대상과의 일치를 입증하지 않음",
+    }
+    results = []
+    for code, title in OBSERVATION_ONLY.items():
+        results.append(ProposalFinding(
+            code=code, title=title, area="4. Deploy",
+            status="일부 수집" if complete and packages else "수집 불가",
+            metrics={
+                "packages": len(packages) if complete else None,
+                "available_to": available if complete else None,
+                "deployed_to": deployed if complete else None,
+                "blocked": sum(package.is_blocked is True for package in packages) if complete else None,
+                "unknown_blocked": sum(package.is_blocked is None for package in packages) if complete else None,
+            },
+            observation=(
+                f"등록 패키지 {len(packages)}개; 접근 범위 {available}; 배포 범위 {deployed}"
+                if complete and packages else "등록부 조회 미완료 또는 등록 패키지 없음"
+            ),
+            limit=limits[code] + ". 기존 평가 기준은 유지하며 점수 보류",
+            reason=None if complete and packages else reason,
+            evidence_refs=refs,
+            evidence_only=True,
+        ))
+    return results
 
 
 def crosscheck_agent365(data: Collection, criteria: dict[str, Any]) -> list[Agent365Crosscheck]:

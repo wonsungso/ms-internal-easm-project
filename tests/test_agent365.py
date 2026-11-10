@@ -7,9 +7,15 @@ from unittest.mock import Mock, patch
 
 import pytest
 from openpyxl import load_workbook
+from openpyxl.utils import range_boundaries
 
 from wasm_agent.azure import AccessError, EvidenceStore, ReaderHTTP
-from wasm_agent.collect_agent365 import REGISTRY_URL, Agent365Collector, crosscheck_agent365
+from wasm_agent.collect_agent365 import (
+    REGISTRY_URL,
+    Agent365Collector,
+    agent365_observations,
+    crosscheck_agent365,
+)
 from wasm_agent.models import (
     Agent365Package,
     AgentEvidence,
@@ -62,7 +68,7 @@ def checks(data: Collection) -> dict:
 def test_registry_uses_documented_get_and_saves_only_minimal_fields(tmp_path: Path) -> None:
     source = http([{
         "id": "package", "agentIdentityId": IDENTITY, "version": "99",
-        "displayName": "Personal Name", "publisher": "Personal Publisher",
+        "displayName": "resource-agent", "publisher": "Personal Publisher",
         "zipFile": "secret package content", "shortDescription": "private text",
     }])
     store = EvidenceStore(tmp_path, NOW)
@@ -72,8 +78,13 @@ def test_registry_uses_documented_get_and_saves_only_minimal_fields(tmp_path: Pa
     package = result.agent365_packages[0]
     assert package.agent_identity_id == IDENTITY
     text = Path(package.evidence_refs[0]).read_text(encoding="utf-8")
-    assert not any(word in text for word in ("Personal Name", "Personal Publisher", "secret package", "private text"))
-    assert json.loads(text)["response"]["value"] == [{"id": "package", "agentIdentityId": IDENTITY, "version": "99"}]
+    assert not any(word in text for word in ("Personal Publisher", "secret package", "private text"))
+    assert json.loads(text)["response"]["value"] == [{
+        "id": "package", "agentIdentityId": IDENTITY, "version": "99",
+        "displayName": "resource-agent", "platform": None, "availableTo": None,
+        "deployedTo": None, "isBlocked": None,
+    }]
+    assert package.field_status["available_to"].reason == "not_found"
 
 
 @pytest.mark.parametrize("reason", [
@@ -96,6 +107,7 @@ def test_registry_failure_is_explicit_and_never_complete(reason: str, tmp_path: 
     [{"version": "1"}], [{"id": ""}], [{"id": 123}],
     [{"id": "p"}, {"id": "p"}], [{"id": "p", "agentIdentityId": 123}],
     [{"id": "p", "agentIdentityId": "invalid"}], [{"id": "p", "version": 1}],
+    [{"id": "p", "isBlocked": 1}], [{"id": "p", "availableTo": []}],
 ])
 def test_malformed_registry_never_becomes_a_match(rows: list[dict]) -> None:
     result = Agent365Collector(http(rows), NOW).discover()
@@ -215,11 +227,55 @@ def test_report_keeps_grades_and_separates_crosscheck_details(tmp_path: Path) ->
     data.agent365_crosschecks = list(checks(data).values())
     finding = Finding(se_code="DS-SY-05", scope="in_scope", level="L5", metric_value=1, rationale="primary grade")
     path = tmp_path / "report.xlsx"
-    write_workbook(data, [finding], path)
+    write_workbook(data, [
+        finding,
+        Finding(se_code="OE-SY-21", scope="in_scope", level="L5", metric_value=1, rationale="primary role grade"),
+    ], path)
     book = load_workbook(path)
     details = book["7. 수집결과 근거"]
-    rows = {details.cell(row, 1).value: row for row in range(4, details.max_row + 1)}
+    table = next(table for table in details.tables.values() if table.ref.startswith("A3:"))
+    rows = {details.cell(row, 1).value: row for row in range(4, range_boundaries(table.ref)[3] + 1)}
     assert details.cell(rows["DS-SY-05"], 10).value == "일부 일치"
     assert "기존 등급 유지" in details.cell(rows["DS-SY-05"], 11).value
-    assert len(book["8. 수집 Raw 데이터"].tables) == 14
+    assert details.cell(rows["OE-SY-21"], 10).value == "동일 정보 미제공"
+    assert "기존 Azure/Graph API로 평가" in details.cell(rows["OE-SY-21"], 11).value
+    assert "평가 제외 아님" in details.cell(rows["OE-SY-21"], 11).value
+    assert len(book["8. 수집 Raw 데이터"].tables) == 15
     assert finding.level == "L5"
+
+
+def test_package_metadata_is_partial_evidence_not_automatic_scoring(tmp_path: Path) -> None:
+    data = snapshot()
+    data.agent365_packages[0].display_name = "registered-agent"
+    data.agent365_packages[0].available_to = "allowedForAll"
+    data.agent365_packages[0].deployed_to = "acquiredForSome"
+    data.agent365_packages[0].is_blocked = False
+    records = agent365_observations(data)
+    assert {row.code for row in records} == {"DP-SY-17", "DP-SY-18"}
+    assert all(row.status == "일부 수집" for row in records)
+    assert records[1].metrics["available_to"] == {"allowedForAll": 1}
+    path = tmp_path / "partial.xlsx"
+    write_workbook(data, [], path)
+    sheet = load_workbook(path)["6. 수집 결과"]
+    rows = {sheet.cell(row, 2).value: row for row in range(5, 90)}
+    for code in ("DP-SY-17", "DP-SY-18"):
+        assert sheet.cell(rows[code], 7).value == "일부 수집"
+        assert sheet.cell(rows[code], 9).value == "판정 보류"
+        assert sheet.cell(rows[code], 13).value is None
+    assert data.proposals == []
+    assert not {"DP-SY-17", "DP-SY-18"} & load_criteria()["items"].keys()
+
+
+def test_package_metadata_failure_cannot_be_reported_as_partial_success(tmp_path: Path) -> None:
+    source = http()
+    source.list_graph.side_effect = AccessError("permission_denied", "HTTP 403")
+    data = Agent365Collector(source, NOW).discover()
+    records = agent365_observations(data)
+    assert all(row.status == "수집 불가" and row.reason == "permission_denied" for row in records)
+    assert all(row.metrics["packages"] is None for row in records)
+    path = tmp_path / "denied.xlsx"
+    write_workbook(data, [], path)
+    sheet = load_workbook(path)["6. 수집 결과"]
+    rows = {sheet.cell(row, 2).value: row for row in range(5, 90)}
+    for code in ("DP-SY-17", "DP-SY-18"):
+        assert sheet.cell(rows[code], 8).value == "확인 자료 없음"

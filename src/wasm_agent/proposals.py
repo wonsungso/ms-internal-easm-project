@@ -94,7 +94,7 @@ def build(code: str, data: Collection, tags: dict[str, Any]) -> tuple[dict[str, 
                 if agent.tags.get(key) or (name == "owner" and agent.owner) or (name == "sponsor" and agent.sponsor)
             )
         return metrics, (
-            f"Azure Agent {len(agents)}개 중 소유자 {metrics['with_owner']}, 후원자 {metrics['with_sponsor']}, "
+            f"Azure Agent {len(agents)}개 중 소유자 {metrics['with_owner']}, 스폰서 {metrics['with_sponsor']}, "
             f"환경 {metrics['with_env']}, 비용센터 {metrics['with_cost_center']}개에 태그가 있음"
         ), bool(agents)
     if code == "OE-SY-23":

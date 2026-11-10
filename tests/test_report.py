@@ -489,7 +489,10 @@ def test_workbook_sheets_tables_borders_and_validation(tmp_path: Path) -> None:
             "A3" if sheet.title == TITLES["수집 Raw 데이터"] else
             "A4" if sheet.title == TITLES["수집결과 근거"] else "A2"
         )
-        assert len(sheet.tables) == (14 if sheet.title == TITLES["수집 Raw 데이터"] else 1)
+        assert len(sheet.tables) == (
+            15 if sheet.title == TITLES["수집 Raw 데이터"] else
+            2 if sheet.title == TITLES["수집결과 근거"] else 1
+        )
         # Excel repairs a file that has both a table and a sheet-level autoFilter on one range.
         assert not sheet.auto_filter.ref
         assert all(
@@ -529,7 +532,7 @@ def test_workbook_sheets_tables_borders_and_validation(tmp_path: Path) -> None:
     assert all(checklist.cell(row, 13).alignment.horizontal == "center" for row in range(4, 90))
     for row in range(5, checklist.max_row + 1):
         if checklist.cell(row, 7).value == "수집됨":
-            assert checklist.row_dimensions[row].height == 110
+            assert checklist.row_dimensions[row].height == 120
     proposals = book[TITLES["수집결과 근거"]]
     assert proposals.row_dimensions[4].height == 60 and proposals["F4"].fill.patternType is None
     assert "수집된 설정·값·건수" in proposals["A1"].value

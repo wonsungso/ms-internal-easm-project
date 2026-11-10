@@ -536,7 +536,7 @@ items:
           eq: 0
     agent_denominator: true
   OE-SY-20:
-    title: Agent ID 소유자·후원자 연결
+    title: Agent ID 소유자·스폰서 연결
     scope: in_scope
     metric: ownership_ratio
     denominator: Graph Agent ID 수
@@ -548,11 +548,11 @@ items:
     - entra_agents_complete
     complete_subscriptions: []
     levels:
-      L1: 소유자·후원자 모두 연결 비율 0%
-      L2: 소유자·후원자 모두 연결 비율 0% 초과~80% 미만
-      L3: 소유자·후원자 모두 연결 비율 80% 이상~90% 미만
-      L4: 소유자·후원자 모두 연결 비율 90% 이상~100% 미만
-      L5: 소유자·후원자 모두 연결 비율 100%
+      L1: 소유자·스폰서 모두 연결 비율 0%
+      L2: 소유자·스폰서 모두 연결 비율 0% 초과~80% 미만
+      L3: 소유자·스폰서 모두 연결 비율 80% 이상~90% 미만
+      L4: 소유자·스폰서 모두 연결 비율 90% 이상~100% 미만
+      L5: 소유자·스폰서 모두 연결 비율 100%
     rules:
     - level: L5
       when:

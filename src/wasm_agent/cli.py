@@ -5,14 +5,17 @@ import json
 import logging
 import re
 import sys
+import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 from azure.core.exceptions import ClientAuthenticationError
 from azure.identity import DefaultAzureCredential
 
-from wasm_agent.azure import AccessError
+from wasm_agent.azure import AccessError, EvidenceStore
 from wasm_agent.collect import collect
-from wasm_agent.collect_agent365 import Agent365Collector
+from wasm_agent.collect_admin_evidence import admin_observations, read_admin_evidence
+from wasm_agent.collect_agent365 import Agent365Collector, agent365_observations
 from wasm_agent.collect_entra import EntraCollector
 from wasm_agent.evaluation import evaluate
 from wasm_agent.models import (
@@ -44,12 +47,15 @@ def main(argv: list[str] | None = None) -> int:
     command.add_argument("--tenant-id")
     command.add_argument("--expected-principal-id")
     command.add_argument("--manual-agents", type=Path)
+    command.add_argument("--admin-evidence-file", action="append", type=Path, default=[])
     command.add_argument("--output-dir", type=Path, default=Path("output"))
     command.add_argument("--fixture", type=Path)
     command.add_argument("--dry-run", action="store_true")
     package = subparsers.add_parser("package", help="raw-data-<타임스탬프>.json을 읽어 Excel 보고서 재생성")
     package.add_argument("--output-dir", type=Path, default=Path("output"))
     package.add_argument("--mode", choices=["live", "fixture"])
+    package.add_argument("--admin-evidence-file", action="append", type=Path, default=[])
+    package.add_argument("--tenant-id")
     args = parser.parse_args(argv)
     logging.getLogger("azure").setLevel(logging.WARNING)
     logging.getLogger("azure.identity").setLevel(logging.ERROR)
@@ -67,10 +73,45 @@ def main(argv: list[str] | None = None) -> int:
             mode = recorded_mode or args.mode
             if mode not in ("live", "fixture"):
                 raise ValueError("기존 파일의 데이터 구분이 없습니다. --mode live 또는 --mode fixture를 명시하세요.")
+            if args.admin_evidence_file:
+                if mode != "live":
+                    raise ValueError("실제 관리자 증적은 fixture 결과에 혼합하지 않습니다.")
+                tenants = {str(uuid.UUID(agent.tenant_id)) for agent in data.agents if agent.tenant_id}
+                if args.tenant_id:
+                    tenants.add(str(uuid.UUID(args.tenant_id)))
+                if len(tenants) != 1:
+                    raise ValueError("관리자 증적 반영에는 단일 수집 테넌트 확인이 필요합니다.")
+                tenant = tenants.pop()
+                recorded_directory = data.facts["evidence_directory"]
+                if recorded_directory == "embedded:evidence":
+                    directory = source.parent / "evidence"
+                else:
+                    directory = Path(recorded_directory)
+                    if not directory.is_dir():
+                        raise FileNotFoundError("기존 증적 보관 경로가 없어 관리자 내보내기를 첨부할 수 없습니다.")
+                store = EvidenceStore(directory)
+                data.facts["evidence_directory"] = str(directory.resolve())
+                seen_sources: set[str] = set()
+                for path in args.admin_evidence_file:
+                    incoming = read_admin_evidence(path, tenant, datetime.now(UTC), store)
+                    sources = {read.source for read in incoming.admin_evidence}
+                    if seen_sources & sources:
+                        raise ValueError("같은 관리자 조회 원천을 중복 반영할 수 없습니다.")
+                    seen_sources.update(sources)
+                    data.admin_evidence = [read for read in data.admin_evidence if read.source not in sources]
+                    data.admin_evidence.extend(incoming.admin_evidence)
+                data.proposals = [
+                    proposal for proposal in data.proposals
+                    if proposal.code not in {item.code for item in admin_observations(data)}
+                ] + admin_observations(data)
             data.facts["data_mode"] = mode
             write_reports(data, findings, source.parent, mode, new_run=False)
             return 0
         settings = load_settings(args.config)
+        if args.admin_evidence_file:
+            settings.admin_evidence_files = args.admin_evidence_file
+        if args.fixture and settings.admin_evidence_files:
+            raise ValueError("실제 관리자 증적은 fixture 수집에 혼합하지 않습니다.")
         if args.config != Path("config") / "custom-config.yaml" and not args.config.is_file():
             raise FileNotFoundError(f"선택 설정 파일을 찾을 수 없습니다: {args.config}")
         if args.criteria:
@@ -123,6 +164,8 @@ def main(argv: list[str] | None = None) -> int:
             )
         data.facts["data_mode"] = "fixture" if args.fixture else "live"
         data.proposals = evaluate_proposals(data, load_conventions(settings))
+        data.proposals.extend(agent365_observations(data))
+        data.proposals.extend(admin_observations(data))
         findings = evaluate(
             data, criteria, allowed_models(settings),
             load_conventions(settings), settings.policy_facts, settings.interview_levels,

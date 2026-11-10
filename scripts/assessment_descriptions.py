@@ -13,7 +13,7 @@ ITEM_DETAILS = {
     "BI-SY-15": "동일 Agent의 owner·sponsor·env·cost-center 태그·메타데이터 확인\n책임자·환경·비용 분류 4개 항목을 모두 갖춘 Agent 비율 산출",
     "BI-SY-16": "AI 계정·프로젝트·자체 호스트의 Azure Policy 평가 조회\n모든 평가가 Compliant인 리소스 비율 산출\n면제·미확인 상태는 준수 처리 제외",
     "DP-SY-19": "Azure Agent의 구독·계정·프로젝트·이름과 Blueprint 태그 대조\n해당 Blueprint를 참조하는 실제 Entra Agent ID 존재 확인",
-    "OE-SY-20": "Entra Agent ID별 owners·sponsors 연결 개체 수 조회\n소유자·후원자가 모두 연결된 Agent ID 비율 산출\n연결된 사람의 재직 상태 판정 제외",
+    "OE-SY-20": "Entra Agent ID별 owners·sponsors 연결 개체 수 조회\n소유자·스폰서가 모두 연결된 Agent ID 비율 산출\n연결된 사람의 재직 상태 판정 제외",
     "OE-SY-21": "Entra Agent ID에 할당된 앱 역할 이름 조회\n기준 파일의 쓰기·전체제어 패턴에 해당하는 역할이 없는 비율 산출\nARM·위임 권한 제외",
     "OE-SY-22": "AI 계정·자체 호스트의 진단 설정 조회\n활성 로그와 Log Analytics workspace 연결 여부 확인\n구독 공통 Activity Log·실제 이벤트 유입 검증 제외",
     "OE-SY-23": "AI 계정·호스트의 관리 ID 연결 및 동일 구독 직접 ARM 역할 조회\nAI 계정의 키 인증 비활성화 확인\n관리 ID 연결·광범위 직접 역할 없음·계정 키 인증 비활성 충족 비율 산출",
