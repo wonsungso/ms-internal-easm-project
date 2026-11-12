@@ -285,6 +285,25 @@ bash setup.sh cleanup-apply  # 진단 앱·SP·해당 역할 할당 삭제, 미�
 
 두 파일은 저장소의 `config/` 폴더에서 관리합니다. 별도 기준 파일은 `wasm-agent collect --criteria <기준.yaml> --config <고객설정.yaml>`로 지정합니다. 수집 기본값은 `config/criteria.yaml`과 `config/custom-config.yaml`이며, 기준 파일이 없는 설치 환경은 배포 패키지에 포함한 기본 기준을 사용합니다. 명시한 기준 파일이 없거나 YAML이 잘못되면 오류로 종료합니다.
 
+기본 LangChain 탐지(`agent-type: langchain` 또는 이름의 `langchain`·`lc-agent`)는 유지됩니다. `tags`에는 추가로 찾을 **Azure 리소스 태그의 key: value**를 한 개만 입력해도 됩니다.
+
+```yaml
+# agent-type=custom-agent인 호스트를 기본 탐지 대상에 추가
+tags:
+  agent-type: custom-agent
+# 다른 태그도 추가 가능: workload: customer-support
+```
+
+| 설정·범위 | 동작 |
+| --- | --- |
+| `tags: {}` 또는 생략 | 기본 LangChain 탐지만 적용 |
+| 여러 key: value | 하나라도 일치하면 추가 탐지(OR). 키는 대소문자 무시, 값은 정확히 일치 |
+| 사용자 태그만 일치 | `custom` 플랫폼의 자체 Agent 후보로 분류하고 기존 호스트 점검에 포함 |
+| 기본 LangChain 조건도 일치 | 중복 없이 기존 LangChain 분류 유지 |
+| 지원 대상 | 승인 구독의 App Service·Container Apps·AKS. 임의 Azure 리소스나 실행 중인 Agent 코드를 검증하는 기능은 아님 |
+
+`owner`·`sponsor`·`env`·`cost-center`는 메타데이터 태그의 기본 이름입니다. 이 이름을 변경하려면 탐지 조건인 `tags`와 별도로 `tag_conventions: {owner_key: service-owner}`를 사용합니다. 과거 `tags` 규약의 문자열 매핑은 `tag_conventions`로 옮깁니다. 목록형 선택자가 있는 과거 규약은 로딩 호환을 유지합니다.
+
 Level 문장과 규칙을 변경한 경우 평가 템플릿도 함께 갱신합니다: `python -m scripts.merge_assessment --source docs/assessment-result-template.xlsx --output <갱신할-템플릿.xlsx>`. 검토 후 갱신 파일을 기존 템플릿 대신 사용하세요. 기존 결과의 `package`는 점수를 다시 계산하지 않습니다.
 - [docs/api-notes.md](docs/api-notes.md): 권한·API·심사 근거와 기술적 한계
 - 검사: `python -m pytest -q`, `python -m ruff check src scripts demo tests`

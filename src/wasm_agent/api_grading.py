@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from wasm_agent.models import Collection
+from wasm_agent.models import AZURE_AGENT_PLATFORMS, HOSTED_AGENT_PLATFORMS, Collection
 
 PROFILE = "api_configuration_v1"
 
@@ -49,7 +49,7 @@ def targets(data: Collection) -> set[str]:
     }
     found.update(
         agent.resource_id.lower() for agent in data.agents
-        if agent.platform == "langchain" and agent.resource_id
+        if agent.platform in HOSTED_AGENT_PLATFORMS and agent.resource_id
     )
     return found
 
@@ -66,7 +66,7 @@ def measurements(
     data: Collection, criteria: dict[str, Any], tags: dict[str, Any],
 ) -> dict[str, Measurement]:
     result: dict[str, Measurement] = {}
-    agents = [agent for agent in data.agents if agent.platform in ("foundry", "langchain")]
+    agents = [agent for agent in data.agents if agent.platform in AZURE_AGENT_PLATFORMS]
     identities, blueprints = data.entra_agent_identities, data.entra_blueprints
     blueprint_ids = {row.blueprint_id.lower() for row in blueprints}
     result["DS-SY-05"] = measured([
@@ -253,7 +253,7 @@ def measurements(
         if subjects != targets(data):
             result[code].unavailable = "대상 AI 리소스의 구성 응답이 일부 누락됨"
     expected_hosts = {agent.resource_id.lower() for agent in agents
-                      if agent.platform == "langchain" and agent.resource_id}
+                      if agent.platform in HOSTED_AGENT_PLATFORMS and agent.resource_id}
     if {row.subject.lower() for row in versions} != expected_hosts:
         result["BI-SY-14"].unavailable = "자체 호스트 런타임 응답이 일부 누락됨"
     if not data.facts.get("deployment_inventory_complete"):

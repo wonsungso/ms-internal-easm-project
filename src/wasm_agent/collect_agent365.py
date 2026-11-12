@@ -8,6 +8,7 @@ from typing import Any
 from wasm_agent.api_grading import agent_has_entra_identity
 from wasm_agent.azure import MSGRAPH, AccessError, EvidenceStore, ReaderHTTP, issue
 from wasm_agent.models import (
+    AZURE_AGENT_PLATFORMS,
     Agent365Crosscheck,
     Agent365Package,
     Collection,
@@ -242,7 +243,7 @@ def crosscheck_agent365(data: Collection, criteria: dict[str, Any]) -> list[Agen
                 record.reason = "not_found"
                 record.detail += " - Azure Agent 전체 조회 미완료"
             else:
-                agents = [a for a in data.agents if a.platform in ("foundry", "langchain")]
+                agents = [a for a in data.agents if a.platform in AZURE_AGENT_PLATFORMS]
                 matched = 0
                 for agent in agents:
                     matches = [

@@ -4,7 +4,7 @@ from collections import Counter
 from dataclasses import dataclass
 
 from wasm_agent.api_grading import targets
-from wasm_agent.models import AgentEvidence, Collection
+from wasm_agent.models import AZURE_AGENT_PLATFORMS, AgentEvidence, Collection
 
 
 @dataclass(frozen=True)
@@ -35,12 +35,12 @@ def resource_names(data: Collection, code: str) -> list[ResourceName]:
         found[(category, sid or "", identifier.lower())] = ResourceName(category, name, identifier, sid, group)
 
     def agent(row: AgentEvidence) -> None:
-        category = "Foundry Agent" if row.platform == "foundry" else "LangChain Agent"
+        category = {"foundry": "Foundry Agent", "langchain": "LangChain Agent", "custom": "자체 Agent"}[row.platform]
         # A Foundry project resource ID can be shared by multiple agents.
         identifier = (row.resource_id or "") + "#" + row.agent_id
         add(category, identifier, row.agent_name, row.subscription_id)
 
-    agents = [row for row in data.agents if row.platform in ("foundry", "langchain")]
+    agents = [row for row in data.agents if row.platform in AZURE_AGENT_PLATFORMS]
     if code in ("DM-SY-02", "BI-SY-10"):
         for read in data.admin_evidence:
             if read.source == "powerplatform.environments" and read.completed:

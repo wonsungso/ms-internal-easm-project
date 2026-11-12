@@ -26,7 +26,14 @@ from wasm_agent.collect_inventory import (
 )
 from wasm_agent.collect_proposals import ProposalCollector
 from wasm_agent.collect_signals import SignalCollector
-from wasm_agent.models import Collection, Issue, Settings, load_conventions, load_criteria
+from wasm_agent.models import (
+    HOSTED_AGENT_PLATFORMS,
+    Collection,
+    Issue,
+    Settings,
+    load_conventions,
+    load_criteria,
+)
 
 
 def merge(destination: Collection, source: Collection) -> None:
@@ -123,7 +130,7 @@ def collect(settings: Settings, credential: Credential, now: datetime | None = N
     if settings.manual_agents:
         merge(result, ManualCollector(settings.manual_agents, instant).discover([]))
     for agent in result.agents:
-        if agent.platform != "langchain":
+        if agent.platform not in HOSTED_AGENT_PLATFORMS:
             continue
         linked = [
             deployment for deployment in result.deployments

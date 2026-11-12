@@ -3,7 +3,14 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
-from wasm_agent.models import Collection, Issue, ProposalFinding, ProposalObservation, Reason
+from wasm_agent.models import (
+    AZURE_AGENT_PLATFORMS,
+    Collection,
+    Issue,
+    ProposalFinding,
+    ProposalObservation,
+    Reason,
+)
 
 TITLES = {
     "BI-SY-15": "Agent 책임·환경·비용 메타데이터",
@@ -76,7 +83,7 @@ def count(values: list[Any]) -> int:
 
 
 def azure_agents(data: Collection) -> list[Any]:
-    return [agent for agent in data.agents if agent.platform in ("foundry", "langchain")]
+    return [agent for agent in data.agents if agent.platform in AZURE_AGENT_PLATFORMS]
 
 
 def build(code: str, data: Collection, tags: dict[str, Any]) -> tuple[dict[str, Any], str, bool]:

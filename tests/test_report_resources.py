@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from openpyxl import Workbook, load_workbook
 from openpyxl.utils import range_boundaries
 from openpyxl.worksheet.worksheet import Worksheet
@@ -21,6 +22,20 @@ from wasm_agent.report_resources import resource_names, resource_summary
 NOW = datetime(2026, 11, 9, tzinfo=UTC)
 SID = "11111111-1111-4111-8111-111111111111"
 ACCOUNT = f"/subscriptions/{SID}/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/account"
+
+
+@pytest.mark.parametrize(("platform", "category"), [("custom", "자체 Agent"), ("langchain", "LangChain Agent")])
+def test_host_names_keep_custom_classification(platform: str, category: str) -> None:
+    host = AgentEvidence(
+        collected_at=NOW, platform=platform, agent_id="support", agent_name="support-host",
+        subscription_id=SID, resource_id=f"/subscriptions/{SID}/resourceGroups/rg/providers/Microsoft.Web/sites/support",
+        detection_confidence="tag",
+    )
+    data = Collection(collected_at=NOW, agents=[host])
+    resources = resource_names(data, "BI-SY-15")
+    assert len(resources) == 1 and resources[0].category == category
+    assert resources[0].name == "support-host"
+    assert [row.identifier for row in resource_names(data, "OT-SY-28")] == [host.resource_id.lower()]
 
 
 def resource_rows(book: Workbook) -> tuple[Worksheet, range]:

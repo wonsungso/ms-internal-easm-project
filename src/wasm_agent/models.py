@@ -15,11 +15,14 @@ from pydantic import (
     Field,
     StrictBool,
     StrictInt,
+    StrictStr,
     model_validator,
 )
 
 Reason = Literal["permission_denied", "feature_unavailable", "license_missing", "not_found", "error"]
-Platform = Literal["foundry", "langchain", "other", "manual"]
+Platform = Literal["foundry", "langchain", "custom", "other", "manual"]
+HOSTED_AGENT_PLATFORMS = ("langchain", "custom")
+AZURE_AGENT_PLATFORMS = ("foundry", *HOSTED_AGENT_PLATFORMS)
 
 
 class EvidenceModel(BaseModel):
@@ -462,7 +465,8 @@ class Settings(BaseModel):
     manual_agents: Path | None = None
     admin_evidence_files: list[Path] = Field(default_factory=list)
     allowed_models: list[AllowedModel] = Field(default_factory=list)
-    tags: dict[str, Any] = Field(default_factory=dict)
+    tags: dict[str, StrictStr] = Field(default_factory=dict)
+    tag_conventions: dict[str, Any] = Field(default_factory=dict)
     model_policy_definition_ids: list[str] = Field(default_factory=list)
     required_retention_days: int | None = None
     internal_security_score_min: float | None = None
@@ -478,6 +482,16 @@ class Settings(BaseModel):
 
     @model_validator(mode="after")
     def validate_ids(self) -> Settings:
+        if any(not key.strip() or not value.strip() for key, value in self.tags.items()):
+            raise ValueError("탐지 태그의 key와 value는 비어 있을 수 없습니다.")
+        if self.tag_conventions.keys() - DEFAULT_TAGS.keys():
+            raise ValueError("지원하지 않는 태그 규약 설정입니다.")
+        for key, value in self.tag_conventions.items():
+            if isinstance(DEFAULT_TAGS[key], list):
+                if not isinstance(value, list) or not all(isinstance(item, str) and item.strip() for item in value):
+                    raise ValueError("태그 규약의 목록에는 비어 있지 않은 문자열이 필요합니다.")
+            elif not isinstance(value, str) or not value.strip():
+                raise ValueError("태그 규약에는 비어 있지 않은 문자열이 필요합니다.")
         for field in ("tenant_id", "expected_principal_id"):
             if value := getattr(self, field):
                 setattr(self, field, str(uuid.UUID(value)))
@@ -500,7 +514,13 @@ def load_yaml(path: Path) -> dict[str, Any]:
 def load_settings(path: Path) -> Settings:
     if not path.is_file():
         return Settings()
-    return Settings.model_validate(load_yaml(path))
+    values = load_yaml(path)
+    tags = values.get("tags")
+    # List-valued selectors distinguish the former convention format from tag filters.
+    if isinstance(tags, dict) and tags and tags.keys() <= DEFAULT_TAGS.keys():
+        if "tag_conventions" not in values and any(isinstance(value, list) for value in tags.values()):
+            values["tag_conventions"] = values.pop("tags")
+    return Settings.model_validate(values)
 
 
 def load_criteria(settings: Settings | None = None) -> dict[str, Any]:
@@ -529,7 +549,7 @@ def load_criteria(settings: Settings | None = None) -> dict[str, Any]:
 
 
 def load_conventions(settings: Settings) -> dict[str, Any]:
-    return {**DEFAULT_TAGS, **settings.tags}
+    return {**DEFAULT_TAGS, **settings.tag_conventions, "custom_tag_filters": settings.tags}
 
 
 def allowed_models(settings: Settings) -> dict[str, Any]:

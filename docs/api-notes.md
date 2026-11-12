@@ -17,6 +17,7 @@
 | 부분 수집 6개 | DM-SY-02·DS-SY-04·BI-SY-10·DP-SY-17~18·OT-SY-30. 관리자 읽기 내보내기·등록부 메타데이터는 보조 증거이며 원래 기준·자동 점수를 변경하지 않음 |
 | 미구현 3개 | DM-SY-01·03·OT-SY-27. 공식 읽기 API·필수 필드·최소 권한이 충분히 검증되지 않은 통제는 임의 구현하지 않음 |
 | 범위 구분 | Azure 인벤토리는 Agent Registry·인사 대사를 대체하지 않으며 Azure 로그는 Purview Audit 증거가 아님 |
+| 자체 Agent 탐지 | 기본 LangChain 조건에 `tags`의 임의 key:value OR 조건을 추가. 승인 구독의 App Service·Container Apps·AKS만 대상. 사용자 태그만 일치하면 `custom` 후보로 분류하고 기존 호스트 점검 적용. 태그는 실제 Agent·프레임워크 실행 증명이 아님 |
 | 승인 경계 | 지정 테넌트의 접근 가능한 구독을 기본 열거하고 CLI·설정의 승인 범위를 적용. 외부 workspace·청구 범위 접근을 자동 확대하지 않음 |
 | 실행 신원 | 진단 SP의 DefaultAzureCredential. Reader 중심 GET 및 Resource Graph·비용·로그의 읽기 query POST만 허용 |
 | 관리자 예외 | `scripts/setup.sh`, `setup_account.py`, 정리 스크립트와 demo만 승인된 배포·역할·일회성 인증 준비 수행. 수집기에서 import 금지 |

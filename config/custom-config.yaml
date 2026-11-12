@@ -2,8 +2,19 @@
 # API 지표·등급 임계값·규칙은 같은 폴더의 criteria.yaml에서 수정합니다.
 workers: 3
 
-# LangChain 등 자체 Agent 식별용 태그 규약 (기본값: agent-type, owner, sponsor, env, cost-center)
-# tags: {agent_type_key: agent-type, owner_key: owner}
+# 기본 LangChain 탐지(agent-type: langchain 또는 이름의 langchain/lc-agent)는 항상 유지됩니다.
+# 추가로 찾을 Azure 리소스 태그를 key: value로 입력합니다. {}이면 추가 조건이 없습니다.
+# 예: tags: {agent-type: custom-agent} - 이 태그가 있는 호스트를 자체 Agent 후보로 추가합니다.
+# 여러 조건은 하나라도 일치하면 탐지합니다(OR). 키는 대소문자 무시, 값은 정확히 일치해야 합니다.
+# App Service, Container Apps, AKS만 대상이며 실제 실행 코드·Agent 존재를 입증하지 않습니다.
+tags: {}
+# tags:
+#   agent-type: custom-agent
+#   workload: customer-support
+
+# 소유자 등 메타데이터 태그 이름을 바꾸는 고급 규약은 탐지 조건과 별도입니다.
+# 기본값: owner, sponsor, env, cost-center. 필요할 때만 변경하세요.
+# tag_conventions: {owner_key: service-owner}
 
 # 프로젝트는 기본 자동 발견합니다. 명시 대상은 projects 설정으로 지정할 수 있습니다.
 projects: []

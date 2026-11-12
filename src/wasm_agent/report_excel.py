@@ -67,6 +67,7 @@ LABELS = {
     "null": "확인 자료 없음",
     "foundry": "Microsoft Foundry",
     "langchain": "LangChain 탐지 후보",
+    "custom": "자체 Agent 탐지 후보",
     "manual": "수동 등록",
     "other": "기타 플랫폼",
     "tag": "태그를 근거로 탐지",

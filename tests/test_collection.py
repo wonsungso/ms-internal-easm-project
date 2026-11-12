@@ -12,9 +12,9 @@ import pytest
 from wasm_agent.azure import AccessError, EvidenceStore, redact
 from wasm_agent.collect import collect
 from wasm_agent.collect_foundry import FoundryCollector, list_data
-from wasm_agent.collect_inventory import ManualCollector
+from wasm_agent.collect_inventory import LangChainCollector, ManualCollector
 from wasm_agent.collect_signals import SignalCollector
-from wasm_agent.models import Collection, load_criteria, load_settings
+from wasm_agent.models import Collection, Settings, load_conventions, load_criteria, load_settings
 
 ROOT = Path(__file__).parents[1]
 NOW = datetime(2026, 11, 3, 1, tzinfo=UTC)
@@ -91,13 +91,20 @@ def test_foundry_versions_do_not_count_as_multiple_agents(
     assert data.evaluations[0].completed_at is None
 
 
-def test_three_subscription_pipeline_and_cross_subscription_model_link(tmp_path: Path) -> None:
+@pytest.mark.parametrize("custom", [False, True])
+def test_three_subscription_pipeline_and_cross_subscription_model_link(tmp_path: Path, custom: bool) -> None:
     fixture = json.loads((ROOT / "tests" / "fixtures" / "api_responses.json").read_text(encoding="utf-8"))
     subs = fixture["subscriptions"]
     settings = load_settings(ROOT / "config" / "custom-config.yaml")
     settings.tenant_id, settings.expected_principal_id = TENANT, PRINCIPAL
     settings.subscriptions = [entry["subscription_id"] for entry in subs]
     settings.evidence_dir = tmp_path / "evidence"
+    if custom:
+        settings.tags = {"agent-type": "custom-agent"}
+        for index, entry in enumerate(subs[1:], 1):
+            host = next(row for row in entry["resources"] if row["type"].lower() == "microsoft.web/sites")
+            host["tags"]["agent-type"] = "custom-agent"
+            host["name"] = f"support-host-{index}"
 
     def request(method: str, url: str, **kwargs: object) -> Mock:
         body = kwargs.get("json") or {}
@@ -154,13 +161,62 @@ def test_three_subscription_pipeline_and_cross_subscription_model_link(tmp_path:
         data = collect(settings, fake_credential(), NOW)
     assert len(data.agents) == 3
     assert len(data.completed_subscriptions) == 3
-    assert {agent.platform for agent in data.agents} == {"foundry", "langchain"}
+    assert {agent.platform for agent in data.agents} == {"foundry", "custom" if custom else "langchain"}
     assert all(agent.model == "gpt-4o-mini" for agent in data.agents)
     assert all(agent.model_version == "2024-07-18" for agent in data.agents)
     assert len(data.costs) == 3
     assert len(data.secure_scores) == 3 and not data.budgets
     assert set(data.facts["budget_complete_subscriptions"]) == set(settings.subscriptions)
     assert "policy_complete_subscriptions" not in data.facts
+    for host in (agent for agent in data.agents if agent.platform != "foundry"):
+        assert any(row.resource_id == host.resource_id for row in data.logs)
+        assert any(row["resource_id"] == host.resource_id for row in data.facts["resource_metrics"])
+
+
+def test_custom_tags_add_or_matches_without_changing_default_detection_or_scope(tmp_path: Path) -> None:
+    sid = "11111111-1111-4111-8111-111111111111"
+    settings = Settings(tags={"agent-type": "custom-agent", "workload": "customer-support"})
+    specifications = [
+        ("custom", {"Agent-Type": "custom-agent"}, sid, "microsoft.web/sites"),
+        ("support", {"workload": "customer-support"}, sid, "microsoft.app/containerapps"),
+        ("cluster", {"agent-type": "custom-agent"}, sid, "microsoft.containerservice/managedclusters"),
+        ("langchain-default", {"agent-type": "langchain"}, sid, "microsoft.web/sites"),
+        ("both", {"agent-type": "langchain", "workload": "customer-support"}, sid, "microsoft.web/sites"),
+        ("wrong-value", {"agent-type": "Custom-Agent"}, sid, "microsoft.web/sites"),
+        ("missing", {}, sid, "microsoft.web/sites"),
+        ("other-scope", {"agent-type": "custom-agent"}, "other", "microsoft.web/sites"),
+        ("storage", {"agent-type": "custom-agent"}, sid, "microsoft.storage/storageaccounts"),
+    ]
+    resources = [{
+        "id": f"/subscriptions/{scope}/resourceGroups/rg/providers/{kind}/{name}",
+        "name": name, "subscriptionId": scope, "type": kind, "tags": tags, "resourceGroup": "rg",
+    } for name, tags, scope, kind in specifications]
+    data = LangChainCollector(
+        resources, load_conventions(settings), TENANT, NOW, EvidenceStore(tmp_path, NOW),
+    ).discover([sid])
+    assert {agent.agent_name: agent.platform for agent in data.agents} == {
+        "custom": "custom", "support": "custom", "cluster": "custom", "langchain-default": "langchain",
+        "both": "langchain",
+    }
+    assert all(agent.detection_confidence == "tag" for agent in data.agents)
+
+
+@pytest.mark.parametrize("tags", [{"agent-type": ""}, {" ": "agent"}, {"x": True}, {"x": ["agent"]}])
+def test_invalid_custom_tag_filters_fail_explicitly(tags: dict) -> None:
+    with pytest.raises(ValueError):
+        Settings(tags=tags)
+
+
+def test_tag_filter_keys_are_not_reserved_and_legacy_lists_still_load(tmp_path: Path) -> None:
+    path = tmp_path / "settings.yaml"
+    path.write_text("tags:\n  owner_key: custom-agent\n", encoding="utf-8")
+    settings = load_settings(path)
+    assert load_conventions(settings)["custom_tag_filters"] == {"owner_key": "custom-agent"}
+    assert load_conventions(settings)["owner_key"] == "owner"
+    path.write_text("tags:\n  langchain_values: [langchain]\n  owner_key: service-owner\n", encoding="utf-8")
+    settings = load_settings(path)
+    assert settings.tags == {}
+    assert load_conventions(settings)["owner_key"] == "service-owner"
 
 
 def test_subscription_failure_preserves_other_subscription_records(tmp_path: Path) -> None:

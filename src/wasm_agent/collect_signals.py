@@ -7,6 +7,7 @@ from urllib.parse import urlencode
 
 from wasm_agent.azure import ARM, GRAPH_URL, LOG_SCOPE, AccessError, ReaderHTTP, issue
 from wasm_agent.models import (
+    HOSTED_AGENT_PLATFORMS,
     Budget,
     Collection,
     CostRecord,
@@ -69,7 +70,7 @@ class SignalCollector:
         }
         ids.update(
             rid.lower() for agent in self.base.agents
-            if agent.subscription_id == sid and agent.platform == "langchain"
+            if agent.subscription_id == sid and agent.platform in HOSTED_AGENT_PLATFORMS
             for rid in agent.cost_resource_ids
         )
         ids.update(
@@ -138,7 +139,7 @@ class SignalCollector:
             and row.get("kind", "").lower() in ("aiservices", "openai")
         }
         targets.update(agent.resource_id for agent in self.base.agents
-                       if agent.subscription_id == sid and agent.platform == "langchain" and agent.resource_id)
+                       if agent.subscription_id == sid and agent.platform in HOSTED_AGENT_PLATFORMS and agent.resource_id)
         workspaces: dict[str, tuple[str, int | None]] = {}
         for rid in sorted(targets):
             try:
@@ -188,7 +189,7 @@ class SignalCollector:
             except AccessError as exc:
                 result.issues.append(issue(self.http, "logs", rid, exc, ("Reader", "Log Analytics Reader")))
         for workspace, (customer_id, _) in workspaces.items():
-            if not any(agent.platform == "langchain" and agent.subscription_id == sid for agent in self.base.agents):
+            if not any(agent.platform in HOSTED_AGENT_PLATFORMS and agent.subscription_id == sid for agent in self.base.agents):
                 continue
             usage_days = self.criteria["usage_window_days"]
             inactivity = self.criteria["inactivity_days"]

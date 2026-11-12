@@ -101,12 +101,18 @@ class LangChainCollector:
             tags = resource.get("tags") or {}
             tagged = tags.get(self.tags["agent_type_key"], "").lower() in self.tags["langchain_values"]
             named = any(part.lower() in resource["name"].lower() for part in self.tags["name_patterns"])
-            if not (tagged or named):
+            custom = any(
+                actual_key.casefold() == key.casefold() and actual_value == value
+                for key, value in self.tags.get("custom_tag_filters", {}).items()
+                for actual_key, actual_value in tags.items()
+            )
+            if not (tagged or named or custom):
                 continue
             record = AgentEvidence(
                 collected_at=self.now, tenant_id=self.tenant, subscription_id=sid,
                 resource_group=resource.get("resourceGroup"),
-                platform="langchain", agent_id=tags.get(self.tags["agent_id_key"]) or resource["id"],
+                platform="langchain" if tagged or named else "custom",
+                agent_id=tags.get(self.tags["agent_id_key"]) or resource["id"],
                 agent_name=resource["name"], resource_id=resource["id"], hosting_type=resource["type"],
                 owner=redact(tags.get(self.tags["owner_key"])),
                 sponsor=redact(tags.get(self.tags["sponsor_key"])),
@@ -117,10 +123,10 @@ class LangChainCollector:
                         resource["id"], (resource.get("properties") or {}).get("serverFarmId"),
                     ] if value
                 ],
-                detection_confidence="tag" if tagged else "name_heuristic",
+                detection_confidence="tag" if tagged or custom else "name_heuristic",
                 evidence_refs=self.store.refs(sid), se_codes=["OT-SY-28", "OT-SY-29", "OE-SY-22"],
             ).mark_unknowns()
-            record.unavailable("tools", "feature_unavailable", "호스팅 메타데이터로 실제 LangChain 도구는 확인 불가")
+            record.unavailable("tools", "feature_unavailable", "호스팅 메타데이터로 실제 Agent 도구는 확인 불가")
             record.unavailable(
                 "evaluated_before_deploy", "not_found", "자체 Agent의 버전별 평가·배포 증적 미입력",
             )

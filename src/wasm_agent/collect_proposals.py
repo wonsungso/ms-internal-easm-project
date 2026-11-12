@@ -7,7 +7,7 @@ from typing import Any
 
 from wasm_agent.azure import ARM, GRAPH_URL, AccessError, ReaderHTTP, issue
 from wasm_agent.collect_inventory import HOSTS
-from wasm_agent.models import Collection, ProposalObservation
+from wasm_agent.models import HOSTED_AGENT_PLATFORMS, Collection, ProposalObservation
 
 PRIVILEGED_ROLES = {
     "8e3af657-a8ff-443c-a75c-2fe8c4bcb635": "Owner",
@@ -123,7 +123,7 @@ class ProposalCollector:
             return self.cache[sid]
         host_ids = {
             (agent.resource_id or "").lower() for agent in self.data.agents
-            if agent.platform == "langchain" and agent.subscription_id == sid
+            if agent.platform in HOSTED_AGENT_PLATFORMS and agent.subscription_id == sid
         }
         types = quoted(AI_TYPES)
         rows = self.graph(sid, PROPERTIES_QUERY.format(types=types))

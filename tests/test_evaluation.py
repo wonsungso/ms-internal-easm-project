@@ -5,7 +5,7 @@ from functools import cache
 
 import pytest
 
-from wasm_agent.api_grading import Measurement, measurements
+from wasm_agent.api_grading import Measurement, measurements, targets
 from wasm_agent.evaluation import evaluate, matches
 from wasm_agent.models import (
     DEFAULT_TAGS,
@@ -40,6 +40,18 @@ CODES = list(load_criteria()["items"])
 
 def grade(data: Collection, criteria: dict | None = None, facts: dict | None = None) -> dict:
     return {row.se_code: row for row in evaluate(data, criteria or load_criteria(), {}, DEFAULT_TAGS, facts)}
+
+
+def test_custom_host_uses_same_grading_scope_as_langchain_host(data: Collection) -> None:
+    data.agents[0].platform = "langchain"
+    baseline = {code: row.model_dump() for code, row in grade(data).items()}
+    baseline_targets = targets(data)
+    baseline_measurements = measurements(data, load_criteria(), DEFAULT_TAGS)
+    data.agents[0].platform = "custom"
+    assert targets(data) == baseline_targets
+    assert data.agents[0].resource_id.lower() in targets(data)
+    assert measurements(data, load_criteria(), DEFAULT_TAGS) == baseline_measurements
+    assert {code: row.model_dump() for code, row in grade(data).items()} == baseline
 
 
 @pytest.fixture
