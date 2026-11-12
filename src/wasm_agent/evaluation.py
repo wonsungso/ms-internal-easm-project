@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from wasm_agent.api_grading import PROFILE, Measurement, measurements
-from wasm_agent.models import Collection, Finding
+from wasm_agent.models import AssessmentMeasurement, Collection, Finding
+from wasm_agent.provenance import assessment_provenance
 
 
 class Evaluator(Protocol):
@@ -50,6 +51,7 @@ def evaluate(
     data: Collection, criteria: dict[str, Any], allowed: dict[str, Any],
     conventions: dict[str, Any], policy_facts: dict[str, Any] | None = None,
     interviews: dict[str, float] | None = None,
+    *, provenance_origin: Literal["evaluation", "saved_snapshot_reassessment"] = "evaluation",
 ) -> list[Finding]:
     if criteria.get("grading_profile") != PROFILE:
         raise ValueError(f"지원되지 않는 등급 기준입니다. grading_profile={PROFILE} 기준을 사용하세요.")
@@ -60,6 +62,7 @@ def evaluate(
         raise ValueError("구현 API 지표와 criteria.yaml의 항목이 일치하지 않습니다.")
     findings = []
     data.facts["grading_profile"] = PROFILE
+    data.assessment_provenance = assessment_provenance(criteria, conventions, provenance_origin)
     for code, config in criteria["items"].items():
         measurement: Measurement = observed[code]
         issues = [row for row in data.issues if row.collector in config.get("collectors", [])]
@@ -98,8 +101,18 @@ def evaluate(
         interview = (interviews or {}).get(code)
         findings.append(Finding(
             se_code=code, scope=config["scope"], metric_value=ratio, level=level,
+            measurement=AssessmentMeasurement(
+                numerator=measurement.compliant if ratio is not None else None,
+                denominator=measurement.total if ratio is not None else None,
+                unit=measurement.unit, currency=measurement.currency,
+                complete=ratio is not None, reason=incomplete or measurement.unavailable,
+                targets=measurement.decisions,
+            ),
             level_criterion=config["levels"].get(level),
-            rationale=rationale, reason=reason, evidence_refs=measurement.refs,
+            rationale=rationale, reason=reason,
+            evidence_refs=sorted(set(measurement.refs) | {
+                ref for entry in measurement.decisions for ref in entry.evidence_refs
+            } | {ref for issue in issues for ref in issue.evidence_refs}),
             next_step=next_step, interview_level=interview,
             gap_flag=interview is not None and level != "N/A" and interview - int(level[1]) >= criteria["interview_gap"],
         ))

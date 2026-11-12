@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 
 import pytest
 
-from wasm_agent.azure import AccessError, EvidenceStore, redact
+from wasm_agent.azure import ARM, AccessError, EvidenceStore, ReaderHTTP, redact
 from wasm_agent.collect import collect
 from wasm_agent.collect_foundry import FoundryCollector, list_data
 from wasm_agent.collect_inventory import LangChainCollector, ManualCollector
@@ -42,6 +42,24 @@ def test_redaction_preserves_numeric_usage_and_masks_sensitive_content(tmp_path:
     path = store.save("fixture", payload, "subscription")
     assert "do-not-store" not in Path(path).read_text(encoding="utf-8")
     assert "person@example.invalid" not in Path(path).read_text(encoding="utf-8")
+    assert store.sources()[0].evidence_refs == [path]
+    assert store.sources()[0].target == "fixture"
+
+
+def test_failed_request_does_not_reuse_previous_success_as_its_evidence(tmp_path: Path) -> None:
+    from requests import ConnectionError
+
+    session = Mock()
+    session.request.side_effect = [
+        Mock(status_code=200, json=Mock(return_value={"value": []})),
+        *[ConnectionError("network failure") for _ in range(4)],
+    ]
+    http = ReaderHTTP(fake_credential(), session=session, store=EvidenceStore(tmp_path, NOW))
+    http.request("GET", ARM + "/first")
+    assert http.last_ref is not None
+    with patch("wasm_agent.azure.time.sleep"), pytest.raises(AccessError):
+        http.request("GET", ARM + "/second")
+    assert http.last_ref is None
 
 
 def test_foundry_data_pages_reject_cycles() -> None:

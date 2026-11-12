@@ -201,7 +201,7 @@ def _emphasize_evidence(text: str) -> CellRichText:
     return content
 
 
-def _evidence_needs_expansion(text: str, width: float, original_height: float, font_size: float) -> bool:
+def _wrapped_height(text: str, width: float, font_size: float) -> float:
     lines = sum(
         max(1, math.ceil(sum(
             2 if unicodedata.east_asian_width(character) in ("W", "F") else 1
@@ -209,7 +209,21 @@ def _evidence_needs_expansion(text: str, width: float, original_height: float, f
         ) / width))
         for line in text.splitlines()
     )
-    return lines * font_size * 1.35 > original_height
+    return lines * font_size * 1.35
+
+
+def _evidence_needs_expansion(text: str, width: float, original_height: float, font_size: float) -> bool:
+    return _wrapped_height(text, width, font_size) > original_height
+
+
+def _fit_audit_rows(sheet: Worksheet, first: int, last: int, columns: int) -> None:
+    for row in range(first, last + 1):
+        height = max(
+            _wrapped_height(str(sheet.cell(row, column).value or ""),
+                            sheet.column_dimensions[get_column_letter(column)].width, FONT_SIZE)
+            for column in range(1, columns + 1)
+        )
+        sheet.row_dimensions[row].height = min(409, max(60, height + 6))
 
 
 def _cell(sheet: Worksheet, row: int, column: int, value: Any) -> None:
@@ -437,6 +451,39 @@ def _with_collection_method(value: str | CellRichText, method: str) -> str | Cel
     return result
 
 
+def _scope_summary(
+    sheet: Worksheet, data: Collection, findings: list[Finding], evidence_only_codes: set[str],
+) -> None:
+    system_codes = {
+        sheet.cell(row, 2).value for row in range(5, sheet.max_row + 1)
+        if "-SY-" in str(sheet.cell(row, 2).value)
+    }
+    graded = {item.se_code for item in findings if item.level != "N/A" and item.se_code not in evidence_only_codes}
+    pending = {item.se_code for item in findings if item.se_code not in graded}
+    missing = system_codes - graded - pending
+    admin_failed = sum(not item.completed for item in data.admin_evidence)
+    sheet["B2"] = (
+        f"점검 요약 - 구독 {len(data.subscriptions)}개, Azure Agent {len(azure_agents(data))}개. "
+        f"System Evidence {len(system_codes)}개 중 등급 산정 {len(graded)}개, "
+        f"판정 보류 {len(pending)}개(보조 증거 포함), 자동 수집 결과 없음 {len(missing)}개. "
+        f"API 조회 이슈 {len(data.issues)}건, 관리자 조회 미완료 {admin_failed}건. 인터뷰 항목은 별도입니다."
+    )
+    provenance = data.assessment_provenance
+    basis = (
+        f"기준 SHA256 {provenance.criteria_sha256[:12]} / 평가 실행기 {provenance.collector_version}. "
+        + ("저장된 실측 데이터 재평가이며 새 API 수집 아님. "
+           if provenance.origin == "saved_snapshot_reassessment" else "")
+    ) if provenance else "수집 당시 평가 기준 사본·수집기 버전 미기록 - 과거 결과에 현재 기준을 소급 기재하지 않음. "
+    sheet["B3"] = (
+        "해석 주의 - L5는 해당 API 구성·기록의 충족률 100%이며 조직 전체 거버넌스 성숙도·정책 실효성의 증명이 아닙니다. "
+        "실패·미확인·빈 분모는 0점이 아닌 판정 보류입니다. " + basis
+        + "7번 시트에서 계산값·대상별 판정·증적·기준 출처를 확인하세요."
+    )
+    for row in (2, 3):
+        sheet.row_dimensions[row].height = 45
+        sheet.cell(row, 2).alignment = Alignment(vertical="center", wrap_text=True)
+
+
 def _result_sheet(
     book: Workbook, data: Collection, findings: list[Finding], resources: dict[str, list[ResourceName]],
 ) -> dict[str, int]:
@@ -568,6 +615,7 @@ def _result_sheet(
     sheet.add_data_validation(validation)
     validation.add(f"M5:M{source.max_row}")
     book.active = sheet
+    _scope_summary(sheet, data, findings, set(evidence_only_codes))
     return rows
 
 
@@ -625,6 +673,26 @@ def write_workbook(
             "증적 ID": finding.evidence_refs,
         })
     details.sort(key=lambda item: result_rows.get(item["SE 코드"], float("inf")))
+    by_code = {item.se_code: item for item in findings}
+    for detail in details:
+        finding = by_code.get(detail["SE 코드"])
+        if finding is None or finding.measurement is None:
+            continue
+        measured = finding.measurement
+        detail["구성 값·건수"] = {
+            "numerator": measured.numerator, "denominator": measured.denominator,
+            "unit": measured.unit, "currency": measured.currency, "coverage": finding.metric_value,
+            "complete": measured.complete, "reason": measured.reason,
+            "target_count": len(measured.targets),
+        }
+        detail["수집 구성 요약"] = str(detail["수집 구성 요약"] or "") + (
+            f"\n계산: {measured.numerator:g} / {measured.denominator:g}"
+            + (f" {measured.currency}" if measured.currency else "개")
+            + f" = {finding.metric_value:.2%}"
+            if measured.complete and measured.numerator is not None and measured.denominator is not None
+            and finding.metric_value is not None else "\n계산 보류: " + (measured.reason or "값 미확인")
+        )
+        detail["증적 ID"] = finding.evidence_refs
     crosschecks = {item.se_code: item for item in data.agent365_crosschecks}
     for detail in details:
         detail["수집 구성 요약"] = (
@@ -670,7 +738,7 @@ def write_workbook(
             ref=cell.coordinate, location=f"'{proposals_sheet.title}'!A{row}",
             display="수집결과", tooltip=f"{code} 수집결과 근거로 이동",
         )
-    _cell(proposals_sheet, 1, 1, "수집된 설정·값·건수와 검증 한계. 하단에 항목별 리소스 전체 목록 포함. 다음조치는 6. 수집 결과의 L열 확인")
+    _cell(proposals_sheet, 1, 1, "수집된 설정·값·건수와 검증 한계. 하단에 리소스 목록·대상별 판정·기준 출처 포함. 다음조치는 6. 수집 결과의 L열 확인")
     proposals_sheet.merge_cells("A1:L1")
     proposals_sheet.row_dimensions[1].height = 30
     proposals_sheet.print_title_rows = "1:3"
@@ -731,5 +799,52 @@ def write_workbook(
     _table(book, DETAILS_TITLE, [
         "SE 코드", "리소스 유형", "리소스 이름", "구독 ID", "리소스 그룹", "식별자",
     ], resource_rows, sheet=proposals_sheet, start_row=resource_header)
+    target_rows = []
+    status_labels = {"compliant": "충족", "non_compliant": "미충족", "unknown": "미확인", "excluded": "계산 제외"}
+    for finding in findings:
+        if finding.measurement is None:
+            continue
+        for target in finding.measurement.targets:
+            target_rows.append({
+                "SE 코드": finding.se_code, "확인 상태": status_labels[target.status],
+                "대상 식별자": target.subject, "확인한 설정·값": target.observed,
+                "단위": "금액" if finding.measurement.unit == "amount" else "개수",
+                "계산 기여값": target.contribution, "통화": finding.measurement.currency,
+                "사유": target.reason, "증적 ID": target.evidence_refs,
+            })
+    header = proposals_sheet.max_row + 4
+    _cell(proposals_sheet, header - 1, 1, "대상별 판정 - 미확인·제외 대상과 금액 귀속 내역 포함. 종합 판정 보류 시 개별 관측값은 점수가 아닙니다.")
+    proposals_sheet.merge_cells(start_row=header - 1, end_row=header - 1, start_column=1, end_column=12)
+    _table(book, DETAILS_TITLE, [
+        "SE 코드", "확인 상태", "단위", "계산 기여값", "통화", "확인한 설정·값", "대상 식별자", "사유", "증적 ID",
+    ], target_rows, sheet=proposals_sheet, start_row=header)
+    _fit_audit_rows(proposals_sheet, header + 1, proposals_sheet.max_row, 9)
+    provenance = data.assessment_provenance
+    provenance_rows = [
+        {"항목": "원본 API 수집 시각", "값": data.collected_at.isoformat()},
+        {"항목": "평가 범위", "값": "API 구성·기록 충족률. 조직 승인·정책 실효성·전체 성숙도 판정 아님"},
+    ]
+    if provenance:
+        provenance_rows.extend([
+            {"항목": "평가 시각", "값": provenance.evaluated_at.isoformat()},
+            {"항목": "평가 구분", "값": "저장 실측 재평가 - 새 수집 아님"
+             if provenance.origin == "saved_snapshot_reassessment" else "수집 데이터 평가"},
+            {"항목": "평가 기준 SHA256", "값": provenance.criteria_sha256},
+            {"항목": "태그 규약 SHA256", "값": provenance.conventions_sha256},
+            {"항목": "재평가 실행기 버전" if provenance.origin == "saved_snapshot_reassessment" else "수집기 버전",
+             "값": provenance.collector_version},
+            {"항목": "평가 실행기 Python 소스 SHA256", "값": provenance.collector_source_sha256},
+            {"항목": "해시 범위", "값": provenance.hash_scope},
+            {"항목": "기준 사본", "값": "결과 JSON의 collection.assessment_provenance.criteria_snapshot"},
+        ])
+        if provenance.source_result_data_sha256:
+            provenance_rows.append({"항목": "재평가 전 원본 결과 데이터 SHA256", "값": provenance.source_result_data_sha256})
+    else:
+        provenance_rows.append({"항목": "기준·버전 출처", "값": "과거 수집 당시 사본 미기록. 현재 기준으로 채워 넣지 않음"})
+    header = proposals_sheet.max_row + 4
+    _cell(proposals_sheet, header - 1, 1, "평가 기준·수집기 출처")
+    proposals_sheet.merge_cells(start_row=header - 1, end_row=header - 1, start_column=1, end_column=12)
+    _table(book, DETAILS_TITLE, ["항목", "값"], provenance_rows, sheet=proposals_sheet, start_row=header)
+    _fit_audit_rows(proposals_sheet, header + 1, proposals_sheet.max_row, 2)
     book.save(path)
     preserve_template_parts(path, template)

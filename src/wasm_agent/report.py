@@ -13,6 +13,7 @@ from urllib.parse import unquote
 from wasm_agent.assessment_codes import ASSESSMENT_REVISION, migrate_revision_4_codes
 from wasm_agent.azure import redact
 from wasm_agent.models import Collection, Finding
+from wasm_agent.provenance import digest
 from wasm_agent.report_excel import write_workbook
 
 RAW_PATTERN = "raw-data-*.json"
@@ -21,11 +22,6 @@ RUN_PATTERN = re.compile(r"(?P<stamp>\d{8}T\d{12}Z)(?:-(?P<sequence>\d+))?")
 
 def json_bytes(value: Any) -> bytes:
     return json.dumps(value, ensure_ascii=False, indent=2, default=str).encode("utf-8")
-
-
-def digest(value: Any) -> str:
-    canonical = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def atomic_write(path: Path, payload: bytes) -> None:

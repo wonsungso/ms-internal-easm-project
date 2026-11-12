@@ -169,4 +169,5 @@ def collect(settings: Settings, credential: Credential, now: datetime | None = N
             raise ValueError("같은 관리자 조회 원천을 중복 반영할 수 없습니다.")
         merge(result, incoming)
     result.facts["evidence_directory"] = str(store.path.resolve())
+    result.evidence_sources = store.sources()
     return result

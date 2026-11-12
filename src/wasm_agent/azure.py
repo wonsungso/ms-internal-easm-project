@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 import requests
 from azure.core.exceptions import ClientAuthenticationError
 
-from wasm_agent.models import Issue, Reason
+from wasm_agent.models import EvidenceSource, Issue, Reason
 
 ARM = "https://management.azure.com"
 ARM_SCOPE = ARM + "/.default"
@@ -108,6 +108,7 @@ class ReaderHTTP:
         self, method: str, url: str, audience: str = ARM_SCOPE,
         body: dict[str, Any] | None = None, extra_headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
+        self.last_ref = None
         trusted_url(url, audience)
         path = urlparse(url).path.lower()
         if method not in ("GET", "POST"):
@@ -270,6 +271,7 @@ class EvidenceStore:
         self.path.mkdir(parents=True, exist_ok=False)
         self._lock = threading.Lock()
         self._refs: dict[str, list[str]] = {}
+        self._sources: list[EvidenceSource] = []
 
     def save(self, target: str, payload: Any, subscription: str = "") -> str:
         filename = hashlib.sha256(target.encode()).hexdigest()[:16] + "-" + uuid.uuid4().hex[:8] + ".json"
@@ -283,11 +285,16 @@ class EvidenceStore:
         ref = str(path.resolve())
         with self._lock:
             self._refs.setdefault(subscription, []).append(ref)
+            self._sources.append(EvidenceSource(target=target, evidence_refs=[ref]))
         return ref
 
     def refs(self, subscription: str) -> list[str]:
         with self._lock:
             return list(self._refs.get(subscription, []))
+
+    def sources(self) -> list[EvidenceSource]:
+        with self._lock:
+            return [source.model_copy(deep=True) for source in self._sources]
 
 
 def issue(http: ReaderHTTP, collector: str, target: str, error: AccessError,

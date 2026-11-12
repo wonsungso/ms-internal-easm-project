@@ -15,6 +15,7 @@ from wasm_agent.models import (
     EntraAgentIdentity,
     EntraBlueprint,
     EvaluationRun,
+    EvidenceSource,
     Issue,
     LogSetting,
     ModelDeployment,
@@ -44,14 +45,80 @@ def grade(data: Collection, criteria: dict | None = None, facts: dict | None = N
 
 def test_custom_host_uses_same_grading_scope_as_langchain_host(data: Collection) -> None:
     data.agents[0].platform = "langchain"
-    baseline = {code: row.model_dump() for code, row in grade(data).items()}
+    baseline = {code: row.model_dump(exclude={"measurement"}) for code, row in grade(data).items()}
     baseline_targets = targets(data)
     baseline_measurements = measurements(data, load_criteria(), DEFAULT_TAGS)
     data.agents[0].platform = "custom"
     assert targets(data) == baseline_targets
     assert data.agents[0].resource_id.lower() in targets(data)
-    assert measurements(data, load_criteria(), DEFAULT_TAGS) == baseline_measurements
-    assert {code: row.model_dump() for code, row in grade(data).items()} == baseline
+    updated = measurements(data, load_criteria(), DEFAULT_TAGS)
+    assert {code: row.ratio for code, row in updated.items()} == {
+        code: row.ratio for code, row in baseline_measurements.items()
+    }
+    assert {code: row.model_dump(exclude={"measurement"}) for code, row in grade(data).items()} == baseline
+
+
+def test_control_evidence_is_specific_and_target_decisions_reconcile(data: Collection) -> None:
+    data.entra_agent_identities[0].evidence_refs = ["unrelated-role-definition"]
+    data.evidence_sources = [
+        EvidenceSource(target="https://graph.microsoft.com/v1.0/servicePrincipals/microsoft.graph.agentIdentity",
+                       evidence_refs=["identity-list"]),
+        EvidenceSource(target="https://graph.microsoft.com/v1.0/applications/microsoft.graph.agentIdentityBlueprint",
+                       evidence_refs=["blueprint-list"]),
+        EvidenceSource(target="https://example.invalid/unrelated", evidence_refs=["unrelated-query"]),
+    ]
+    for row in data.proposal_observations:
+        row.evidence_refs = [f"source:{row.code}"]
+    data.costs[0].evidence_refs = ["cost-query"]
+    results = grade(data)
+    assert set(results["DS-SY-05"].evidence_refs) == {"identity-list", "blueprint-list"}
+    assert results["DS-SY-08"].evidence_refs == ["source:DS-SY-08"]
+    assert "cost-query" not in results["DS-SY-08"].evidence_refs
+    assert results["DS-SY-08"].measurement.targets[0].observed == {"require_approval": "always"}
+    for result in results.values():
+        measurement = result.measurement
+        assert measurement is not None
+        if not measurement.complete:
+            assert measurement.numerator is measurement.denominator is None
+            continue
+        assert measurement.numerator / measurement.denominator == result.metric_value
+        assert sum(target.contribution or 0 for target in measurement.targets) == measurement.numerator
+        if measurement.unit == "count":
+            assert sum(target.status != "excluded" for target in measurement.targets) == measurement.denominator
+    amount = results["OT-SY-29"].measurement
+    assert amount.unit == "amount" and amount.currency == "USD"
+    assert amount.numerator == amount.denominator == 10
+
+
+def test_incomplete_measurement_keeps_null_counts_and_missing_targets(data: Collection) -> None:
+    data.proposal_observations = [row for row in data.proposal_observations if row.code != "DS-SY-07"]
+    result = grade(data)["DS-SY-07"]
+    assert result.level == "N/A" and result.metric_value is None
+    assert result.measurement.numerator is result.measurement.denominator is None
+    assert not result.measurement.complete
+    assert result.measurement.targets[0].subject == ACCOUNT.lower()
+    assert result.measurement.targets[0].status == "unknown"
+
+
+def test_evaluation_snapshots_criteria_and_detects_later_tampering(data: Collection) -> None:
+    from copy import deepcopy
+
+    from wasm_agent.models import AssessmentProvenance
+    from wasm_agent.provenance import digest
+
+    criteria = deepcopy(load_criteria())
+    evaluate(data, criteria, {}, DEFAULT_TAGS, provenance_origin="saved_snapshot_reassessment")
+    provenance = data.assessment_provenance
+    assert provenance.origin == "saved_snapshot_reassessment"
+    assert digest(provenance.criteria_snapshot) == provenance.criteria_sha256
+    before = provenance.criteria_sha256
+    criteria["workspace_retention_target_days"] = 365
+    assert provenance.criteria_snapshot["workspace_retention_target_days"] == 90
+    assert provenance.criteria_sha256 == before
+    altered = provenance.model_dump(mode="json")
+    altered["criteria_snapshot"]["workspace_retention_target_days"] = 365
+    with pytest.raises(ValueError, match="해시"):
+        AssessmentProvenance.model_validate(altered)
 
 
 @pytest.fixture

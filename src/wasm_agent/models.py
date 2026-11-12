@@ -354,6 +354,52 @@ class AdminEvidenceExport(EvidenceModel):
     reads: list[AdminReadResult] = Field(min_length=1, max_length=4)
 
 
+class EvidenceSource(EvidenceModel):
+    target: str
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class AssessmentProvenance(EvidenceModel):
+    evaluated_at: AwareDatetime
+    origin: Literal["evaluation", "saved_snapshot_reassessment"]
+    criteria_snapshot: dict[str, Any]
+    criteria_sha256: str
+    conventions_snapshot: dict[str, Any]
+    conventions_sha256: str
+    collector_version: str
+    collector_source_sha256: str
+    source_result_data_sha256: str | None = None
+    hash_scope: str = "SHA-256 of masked snapshot JSON; UTF-8, sorted keys, compact separators"
+
+    @model_validator(mode="after")
+    def verify_snapshots(self) -> AssessmentProvenance:
+        from wasm_agent.provenance import digest
+
+        for field in ("criteria", "conventions"):
+            if digest(getattr(self, f"{field}_snapshot")) != getattr(self, f"{field}_sha256"):
+                raise ValueError(f"{field} 기준 사본과 해시가 일치하지 않습니다.")
+        return self
+
+
+class TargetAssessment(EvidenceModel):
+    subject: str
+    status: Literal["compliant", "non_compliant", "unknown", "excluded"] = "unknown"
+    observed: dict[str, Any] = Field(default_factory=dict)
+    contribution: float | None = None
+    reason: str | None = None
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class AssessmentMeasurement(EvidenceModel):
+    numerator: float | None = None
+    denominator: float | None = None
+    unit: Literal["count", "amount"] = "count"
+    currency: str | None = None
+    complete: bool
+    reason: str | None = None
+    targets: list[TargetAssessment] = Field(default_factory=list)
+
+
 class Collection(EvidenceModel):
     collected_at: AwareDatetime
     agents: list[AgentEvidence] = Field(default_factory=list)
@@ -379,6 +425,8 @@ class Collection(EvidenceModel):
     subscriptions: list[str] = Field(default_factory=list)
     completed_subscriptions: list[str] = Field(default_factory=list)
     resources: list[dict[str, Any]] = Field(default_factory=list)
+    evidence_sources: list[EvidenceSource] = Field(default_factory=list)
+    assessment_provenance: AssessmentProvenance | None = None
     facts: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -386,6 +434,7 @@ class Finding(EvidenceModel):
     se_code: str
     scope: str
     metric_value: float | int | None = None
+    measurement: AssessmentMeasurement | None = None
     level: Literal["L1", "L2", "L3", "L4", "L5", "N/A"]
     assessment_basis: Literal["criteria", "configuration"] = "criteria"
     configuration_value: float | int | None = Field(default=None, gt=0)

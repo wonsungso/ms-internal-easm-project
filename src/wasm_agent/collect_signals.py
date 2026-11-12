@@ -289,6 +289,8 @@ class SignalCollector:
         rows = page.get("data")
         if not isinstance(rows, list):
             raise AccessError("error", "보안 Resource Graph data 배열 없음")
+        if self.http.last_ref:
+            result.facts.setdefault("security_evidence_refs", []).append(self.http.last_ref)
         ids = self.ai_ids(sid)
         for row in rows:
             properties = row.get("properties") or {}

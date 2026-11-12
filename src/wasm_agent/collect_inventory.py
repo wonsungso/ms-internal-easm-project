@@ -68,6 +68,10 @@ class InventoryCollector:
                 for row in rows:
                     if row.get("subscriptionId", "").lower() != sid:
                         raise AccessError("error", "요청 구독 밖 Resource Graph 응답")
+                    result.facts.setdefault("inventory_evidence", []).append({
+                        "resource_id": row["id"],
+                        "evidence_refs": [self.http.last_ref] if self.http.last_ref else [],
+                    })
                 result.resources.extend(rows)
                 continuation = page.get("$skipToken")
                 if not continuation:

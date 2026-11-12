@@ -16,12 +16,14 @@ from openpyxl.worksheet.worksheet import Worksheet
 from wasm_agent.cli import main
 from wasm_agent.models import (
     AgentEvidence,
+    AssessmentMeasurement,
     Collection,
     CostRecord,
     EvaluationRun,
     Finding,
     Issue,
     LogSetting,
+    TargetAssessment,
 )
 from wasm_agent.report import (
     digest,
@@ -80,6 +82,36 @@ def finding(**changes: object) -> Finding:
               "reason": "permission_denied", "rationale": "근거가 부족합니다.",
               "next_step": "조회 권한을 확인하세요.", **changes}
     return Finding.model_validate(values)
+
+
+def test_audit_summary_and_target_table_do_not_promote_pending_results(tmp_path: Path) -> None:
+    from wasm_agent.provenance import assessment_provenance
+
+    data = sample()
+    data.assessment_provenance = assessment_provenance(
+        {"grading_profile": "api_configuration_v1", "threshold": 0.8}, {}, "saved_snapshot_reassessment",
+    )
+    pending = finding(measurement=AssessmentMeasurement(
+        complete=False, reason="권한 부족", targets=[
+            TargetAssessment(subject="project", reason="필수 값 미확인", evidence_refs=["missing-source"]),
+        ],
+    ))
+    path = tmp_path / "audit.xlsx"
+    write_workbook(data, [pending], path)
+    book = load_workbook(path)
+    summary = book[RESULT_SHEET]
+    assert "등급 산정 0개" in summary["B2"].value
+    assert "조직 전체 거버넌스 성숙도" in summary["B3"].value
+    assert "새 API 수집 아님" in summary["B3"].value
+    details = book[TITLES["수집결과 근거"]]
+    table = next(table for table in details.tables.values() if table.tableColumns[1].name == "확인 상태")
+    _, first, _, _ = range_boundaries(table.ref)
+    assert details.cell(first + 1, 2).value == "미확인"
+    columns = {details.cell(first, column).value: column for column in range(1, 10)}
+    assert details.cell(first + 1, columns["계산 기여값"]).value is None
+    values = [str(cell.value) for row in details for cell in row]
+    assert data.assessment_provenance.criteria_sha256 in values
+    assert any("numerator" in value and "null" in value for value in values)
 
 
 def prepared(tmp_path: Path, mode: str = "live") -> tuple[Collection, Path, Path, Path]:
@@ -491,7 +523,7 @@ def test_workbook_sheets_tables_borders_and_validation(tmp_path: Path) -> None:
         )
         assert len(sheet.tables) == (
             15 if sheet.title == TITLES["수집 Raw 데이터"] else
-            2 if sheet.title == TITLES["수집결과 근거"] else 1
+            4 if sheet.title == TITLES["수집결과 근거"] else 1
         )
         # Excel repairs a file that has both a table and a sheet-level autoFilter on one range.
         assert not sheet.auto_filter.ref

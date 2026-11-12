@@ -71,12 +71,17 @@ class ProposalCollector:
     def __init__(self, http: ReaderHTTP, data: Collection, now: datetime) -> None:
         self.http, self.data, self.now = http, data, now
         self.cache: dict[str, tuple[list[dict[str, Any]], list[dict[str, Any]]]] = {}
+        self.cache_refs: dict[str, list[str]] = {}
+        self.graph_refs: list[str] = []
 
     def refs(self) -> list[str]:
+        if self.http.last_ref and self.http.last_ref in self.graph_refs:
+            return list(self.graph_refs)
         return [self.http.last_ref] if self.http.last_ref else []
 
     def graph(self, sid: str, query: str) -> list[dict[str, Any]]:
         rows, seen = [], set()
+        self.graph_refs = []
         token = None
         while True:
             options: dict[str, Any] = {"resultFormat": "objectArray", "$top": 1000}
@@ -85,6 +90,8 @@ class ProposalCollector:
             page = self.http.request("POST", GRAPH_URL, body={
                 "subscriptions": [sid], "query": query, "options": options,
             })
+            if self.http.last_ref:
+                self.graph_refs.append(self.http.last_ref)
             data = page.get("data")
             if not isinstance(data, list) or not all(isinstance(row, dict) for row in data):
                 raise AccessError("error", "Resource Graph data 배열 형식 불일치")
@@ -116,6 +123,10 @@ class ProposalCollector:
                 except AccessError as exc:
                     result.issues.append(issue(self.http, "proposal_" + name, sid, exc, self.required_roles))
                     result.facts.setdefault("proposal_incomplete", []).append(name)
+        result.facts["target_property_evidence"] = [
+            {"resource_id": row["id"], "evidence_refs": self.cache_refs.get(sid, [])}
+            for sid, (accounts, hosts) in self.cache.items() for row in [*accounts, *hosts]
+        ]
         return result
 
     def targets(self, sid: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -136,11 +147,12 @@ class ProposalCollector:
             if row["type"].lower() in HOSTS and row["id"].lower() in host_ids
         ]
         self.cache[sid] = (accounts, hosts)
+        self.cache_refs[sid] = self.refs()
         return accounts, hosts
 
     def identity(self, sid: str, result: Collection) -> None:
         accounts, hosts = self.targets(sid)
-        refs = self.refs()
+        refs = list(self.cache_refs.get(sid, []))
         subjects = [*accounts, *hosts]
         principals = {
             row["id"]: {value for value in [row.get("principalId"), *(row.get("userPrincipals") or [])] if value}
@@ -154,7 +166,7 @@ class ProposalCollector:
                 row.get("properties") or {} for row in self.http.list_arm(url)
                 if (row.get("properties") or {}).get("principalId") in wanted
             ]
-            refs = self.refs()
+            refs = sorted(set(refs + self.refs()))
         for row in subjects:
             own = principals[row["id"]]
             mine = [item for item in assignments if item.get("principalId") in own]
@@ -179,7 +191,7 @@ class ProposalCollector:
 
     def network(self, sid: str, result: Collection) -> None:
         accounts, hosts = self.targets(sid)
-        refs = self.refs()
+        refs = list(self.cache_refs.get(sid, []))
         for row in accounts:
             result.proposal_observations.append(ProposalObservation(
                 code="DS-SY-07", subscription_id=sid, subject=row["id"], kind="ai_account",
@@ -290,6 +302,7 @@ class ProposalCollector:
     def monitoring(self, sid: str, result: Collection) -> None:
         rows = self.graph(sid, MONITOR_QUERY)
         refs = self.refs()
+        result.facts.setdefault("monitoring_evidence_refs", []).extend(refs)
         accounts, hosts = self.targets(sid)
         ai_ids = [row["id"].lower() for row in (*accounts, *hosts)]
         groups = {

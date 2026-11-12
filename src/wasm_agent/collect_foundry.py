@@ -243,4 +243,7 @@ class FoundryCollector:
                 result.issues.append(issue(self.http, "foundry_evaluations", project["id"], exc, self.required_roles))
         result.facts["evaluation_complete_projects"] = complete_projects
         result.facts["foundry_project_ids"] = [project["id"] for project in projects.values()]
+        result.facts["foundry_project_endpoints"] = [
+            {"project_id": project["id"], "endpoint": project["endpoint"]} for project in projects.values()
+        ]
         return result

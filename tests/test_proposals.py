@@ -159,6 +159,25 @@ def properties_rows() -> list[dict]:
     ]
 
 
+def test_cached_target_properties_keep_their_own_evidence_after_role_queries() -> None:
+    source = collector({"identity": properties_rows()})
+    source.http.last_ref = "properties-source"
+    source.targets(SID)
+
+    def assignments(url: str) -> list:
+        source.http.last_ref = "role-source"
+        return []
+
+    source.http.list_arm.side_effect = assignments
+    result = Collection(collected_at=NOW)
+    source.identity(SID, result)
+    identity = next(row for row in result.proposal_observations if row.subject == ACCOUNT)
+    assert set(identity.evidence_refs) == {"properties-source", "role-source"}
+    source.network(SID, result)
+    network = next(row for row in result.proposal_observations if row.code == "DS-SY-07" and row.subject == ACCOUNT)
+    assert network.evidence_refs == ["properties-source"]
+
+
 def test_default_allow_all_rule_is_not_reported_as_ip_restriction() -> None:
     source = collector({"identity": properties_rows()})
     source.targets(SID)
