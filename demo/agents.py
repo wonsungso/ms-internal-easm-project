@@ -29,6 +29,7 @@ from openai.types.responses import Response
 from demo.auth import GraphCertificates
 from demo.infrastructure import ARM, FOUNDRY_USER, AdminARM, build_linux_package, deploy_zip
 from demo.manage import ROOT, save
+from easm_agent.paths import state_path
 from scripts.setup_account import AzureCLI, ensure_assignment
 
 
@@ -73,7 +74,7 @@ def configure(
                for row in providers):
         cli.run("provider", "register", "--namespace", "Microsoft.ManagedIdentity", "--subscription", sid, "--wait")
     identity = arm.ensure(identity_id, "2023-01-31", {
-        "location": lab["region"], "tags": {"wasmagent-lab": lab["lab_id"]},
+        "location": lab["region"], "tags": {"easmagent-lab": lab["lab_id"]},
     }, lab["lab_id"])
     site = arm.request("GET", host["id"], "2024-11-01")
     identities = (site.get("identity") or {}).get("userAssignedIdentities") or {}
@@ -81,7 +82,7 @@ def configure(
         cli.run("webapp", "identity", "assign", "--name", host["name"], "--resource-group", group,
                 "--subscription", sid, "--identities", identity_id)
     display = host["name"] + "-chat-login"
-    marker = "WASMAgent chatbot lab " + lab["lab_id"]
+    marker = "EASMAgent chatbot lab " + lab["lab_id"]
     apps = graph.request("GET", "/applications", params={
         "$filter": f"displayName eq '{display}'", "$select": "id,appId,notes,web,signInAudience",
     })["value"]
@@ -109,7 +110,7 @@ def configure(
     if not principals:
         graph.request("POST", "/servicePrincipals", {"appId": app_id})
     fic = {
-        "name": "wasmagent-web-login", "issuer": f"https://login.microsoftonline.com/{setup['tenant_id']}/v2.0",
+        "name": "easmagent-web-login", "issuer": f"https://login.microsoftonline.com/{setup['tenant_id']}/v2.0",
         "subject": identity["properties"]["principalId"], "audiences": ["api://AzureADTokenExchange"],
     }
     credentials = graph.request("GET", f"/applications/{object_id}/federatedIdentityCredentials")["value"]
@@ -122,7 +123,7 @@ def configure(
         "webapp", "config", "appsettings", "set", "--name", host["name"], "--resource-group", group,
         "--subscription", sid, "--settings",
         "OVERRIDE_USE_MI_FIC_ASSERTION_CLIENTID=" + identity["properties"]["clientId"],
-        "WASMAGENT_CHAT_ALLOWED_OIDS=" + ",".join(allowed_oids),
+        "EASMAGENT_CHAT_ALLOWED_OIDS=" + ",".join(allowed_oids),
         "--slot-settings", "OVERRIDE_USE_MI_FIC_ASSERTION_CLIENTID=" + identity["properties"]["clientId"],
     )
     settings = auth_settings(setup["tenant_id"], app_id, allowed_oids)
@@ -230,7 +231,7 @@ def evaluate_agent(project: AIProjectClient, entry: dict, version: str, path: Pa
                         "query": query, "response": response.output_text.strip(), "ground_truth": expected,
                     }})
             evaluation = client.evals.create(
-                name="wasmagent-chatbot-readonly-contract",
+                name="easmagent-chatbot-readonly-contract",
                 data_source_config={"type": "custom", "item_schema": {
                     "type": "object", "properties": {
                         key: {"type": "string"} for key in ("query", "response", "ground_truth")
@@ -240,7 +241,7 @@ def evaluate_agent(project: AIProjectClient, entry: dict, version: str, path: Pa
                     "type": "string_check", "name": "exact-readonly-contract",
                     "input": "{{item.response}}", "reference": "{{item.ground_truth}}", "operation": "eq",
                 }],
-                metadata={"wasmagent_sample": "chatbot-contract"},
+                metadata={"easmagent_sample": "chatbot-contract"},
             )
             evaluation_id = evaluation.id
             run = client.evals.runs.create(
@@ -276,14 +277,14 @@ def evaluate_agent(project: AIProjectClient, entry: dict, version: str, path: Pa
         return result
 
 
-def expand() -> None:
-    setup = json.loads((ROOT / ".wasm-agent" / "setup.json").read_text(encoding="utf-8"))
-    lab = json.loads((ROOT / ".wasm-agent" / "demo" / "lab.json").read_text(encoding="utf-8"))
+def expand(*, administrator_cli: Any | None = None, administrator_graph: Any | None = None) -> None:
+    setup = json.loads((state_path(ROOT, "setup.json")).read_text(encoding="utf-8"))
+    lab = json.loads((state_path(ROOT, "demo", "lab.json")).read_text(encoding="utf-8"))
     catalog = json.loads((ROOT / "demo" / "catalog.json").read_text(encoding="utf-8"))
-    cli = AzureCLI()
+    cli = AzureCLI() if administrator_cli is None else administrator_cli
     if cli.run("account", "show")["tenantId"].lower() != setup["tenant_id"]:
         raise RuntimeError("관리자 테넌트가 승인한 셋업과 다릅니다.")
-    receipts = ROOT / ".wasm-agent" / "demo" / "chatbot-expansion" / lab["lab_id"]
+    receipts = state_path(ROOT, "demo", "chatbot-expansion") / lab["lab_id"]
     receipts.mkdir(parents=True, exist_ok=True)
     state_file = receipts / "state.json"
     state = json.loads(state_file.read_text(encoding="utf-8")) if state_file.is_file() else {"foundry": [], "hosts": []}
@@ -292,13 +293,13 @@ def expand() -> None:
         claims = json.loads(base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4)))
         oid = claims["oid"]
         arm = AdminARM(credential, [group["id"] for group in lab["groups"]])
-        graph = GraphCertificates(setup.get("client_id"))
+        graph = GraphCertificates(setup.get("client_id")) if administrator_graph is None else administrator_graph
         try:
             # Configure identity protection before deploying any inference HTTP route.
             for host in lab["hosts"]:
                 auth = configure(cli, arm, graph, setup, lab, host, [oid])
                 host["web_auth"] = auth
-                save(ROOT / ".wasm-agent" / "demo" / "lab.json", lab)
+                save(state_path(ROOT, "demo", "lab.json"), lab)
             with AIProjectClient(
                 endpoint=lab["project_endpoint"], credential=credential, allow_preview=True,
             ) as project:
@@ -317,7 +318,7 @@ def expand() -> None:
                                 model=lab["deployment_name"], instructions=entry["instructions"],
                                 tools=agent_tools(entry),
                             ), metadata={
-                                "wasmagent-lab": lab["lab_id"], "env": entry["env"],
+                                "easmagent-lab": lab["lab_id"], "env": entry["env"],
                                 "sample_revision": agent_revision(entry), "owner": "sample-governance-team",
                                 "scenario": entry["id"], "sample_only": "true",
                             },
@@ -369,7 +370,7 @@ def expand() -> None:
             evaluated = ",".join(row["agent_id"] for row in state["foundry"] if row["evaluation_status"] == "completed")
             for host in lab["hosts"]:
                 site = arm.request("GET", host["id"], "2024-11-01")
-                if (site.get("tags") or {}).get("wasmagent-lab") != lab["lab_id"]:
+                if (site.get("tags") or {}).get("easmagent-lab") != lab["lab_id"]:
                     raise RuntimeError("챗봇 웹 앱 소유 태그가 다릅니다.")
                 ensure_assignment(cli, site["identity"]["principalId"], "ServicePrincipal", lab["project_id"], FOUNDRY_USER)
                 sid, group = host["id"].split("/")[2], host["id"].split("/")[4]
@@ -380,8 +381,8 @@ def expand() -> None:
                 cli.run("webapp", "config", "appsettings", "set", "--name", host["name"],
                         "--resource-group", group, "--subscription", sid, "--settings",
                         "AZURE_AI_PROJECT_ENDPOINT=" + lab["project_endpoint"],
-                        "WASMAGENT_LOCAL_AGENT=" + local, "WASMAGENT_EVALUATED_AGENTS=" + evaluated,
-                        "WASMAGENT_AGENT_ID=" + host["name"], "WASMAGENT_SMOKE_ON_START=true")
+                        "EASMAGENT_LOCAL_AGENT=" + local, "EASMAGENT_EVALUATED_AGENTS=" + evaluated,
+                        "EASMAGENT_AGENT_ID=" + host["name"], "EASMAGENT_SMOKE_ON_START=true")
                 previous = cli.run("webapp", "log", "deployment", "list", "--name", host["name"],
                                    "--resource-group", group, "--subscription", sid)
                 deployment = deploy_zip(
@@ -397,17 +398,17 @@ def expand() -> None:
                     raise RuntimeError("비로그인 모델 호출이 차단되지 않았습니다.")
                 cli.run("webapp", "config", "appsettings", "set", "--name", host["name"],
                         "--resource-group", group, "--subscription", sid,
-                        "--settings", "WASMAGENT_SMOKE_ON_START=false")
+                        "--settings", "EASMAGENT_SMOKE_ON_START=false")
                 host.update({"chat_url": url, "smoke": health, "deployment_id": deployment["id"],
                              "anonymous_chat_status": denied.status_code, "deployment_verified": True})
                 state["hosts"] = [old for old in state["hosts"] if old["name"] != host["name"]] + [host]
                 save(state_file, state)
-                save(ROOT / ".wasm-agent" / "demo" / "lab.json", lab)
+                save(state_path(ROOT, "demo", "lab.json"), lab)
                 print("로그인 보호 챗봇 배포: " + host["name"], flush=True)
             lab["chatbot_agents"] = state["foundry"]
             lab["expected_agent_count"] = len(catalog)
             lab["chatbot_expansion_complete"] = len(state["foundry"]) == 8 and len(state["hosts"]) == 2
-            save(ROOT / ".wasm-agent" / "demo" / "lab.json", lab)
+            save(state_path(ROOT, "demo", "lab.json"), lab)
         finally:
             graph.close()
             arm.session.close()
@@ -419,7 +420,7 @@ def main() -> int:
     args = parser.parse_args()
     if not args.apply:
         parser.error("승인한 샘플 변경에는 --apply가 필요합니다.")
-    validation = ROOT / ".wasm-agent" / "demo" / "validation.json"
+    validation = state_path(ROOT, "demo", "validation.json")
     if not validation.is_file() or not json.loads(validation.read_text())["passed"]:
         raise RuntimeError("배포 전 검증이 필요합니다.")
     expand()

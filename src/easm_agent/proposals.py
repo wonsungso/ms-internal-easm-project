@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
-from wasm_agent.models import (
+from easm_agent.models import (
     AZURE_AGENT_PLATFORMS,
     Collection,
     Issue,

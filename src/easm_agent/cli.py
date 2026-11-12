@@ -12,13 +12,13 @@ from pathlib import Path
 from azure.core.exceptions import ClientAuthenticationError
 from azure.identity import DefaultAzureCredential
 
-from wasm_agent.azure import AccessError, EvidenceStore
-from wasm_agent.collect import collect
-from wasm_agent.collect_admin_evidence import admin_observations, read_admin_evidence
-from wasm_agent.collect_agent365 import Agent365Collector, agent365_observations
-from wasm_agent.collect_entra import EntraCollector
-from wasm_agent.evaluation import evaluate
-from wasm_agent.models import (
+from easm_agent.azure import AccessError, EvidenceStore
+from easm_agent.collect import collect
+from easm_agent.collect_admin_evidence import admin_observations, read_admin_evidence
+from easm_agent.collect_agent365 import Agent365Collector, agent365_observations
+from easm_agent.collect_entra import EntraCollector
+from easm_agent.evaluation import evaluate
+from easm_agent.models import (
     Collection,
     Finding,
     allowed_models,
@@ -26,8 +26,8 @@ from wasm_agent.models import (
     load_criteria,
     load_settings,
 )
-from wasm_agent.proposals import evaluate_proposals
-from wasm_agent.report import latest_raw, load_result, write_reports
+from easm_agent.proposals import evaluate_proposals
+from easm_agent.report import latest_raw, load_result, write_reports
 
 
 def main(argv: list[str] | None = None) -> int:

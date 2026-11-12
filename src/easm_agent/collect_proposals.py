@@ -5,9 +5,9 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
-from wasm_agent.azure import ARM, GRAPH_URL, AccessError, ReaderHTTP, issue
-from wasm_agent.collect_inventory import HOSTS
-from wasm_agent.models import HOSTED_AGENT_PLATFORMS, Collection, ProposalObservation
+from easm_agent.azure import ARM, GRAPH_URL, AccessError, ReaderHTTP, issue
+from easm_agent.collect_inventory import HOSTS
+from easm_agent.models import HOSTED_AGENT_PLATFORMS, Collection, ProposalObservation
 
 PRIVILEGED_ROLES = {
     "8e3af657-a8ff-443c-a75c-2fe8c4bcb635": "Owner",

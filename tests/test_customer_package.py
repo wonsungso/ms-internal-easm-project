@@ -47,12 +47,12 @@ def test_downloaded_archive_plan_runs_without_repository(tmp_path: Path) -> None
             "22222222-2222-4222-8222-222222222222",
             "33333333-3333-4333-8333-333333333333",
         ],
-        "account_type": "service-principal", "account_name": "wasmagent-diagnostic",
+        "account_type": "service-principal", "account_name": "easmagent-diagnostic",
         "client_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
     }), encoding="utf-8")
     result = subprocess.run(
         [executable, "setup.sh", "plan"], cwd=customer,
-        env={**os.environ, "WASM_AGENT_PYTHON": sys.executable, "PYTHONIOENCODING": "utf-8",
+        env={**os.environ, "EASM_AGENT_PYTHON": sys.executable, "PYTHONIOENCODING": "utf-8",
              "PYTHONDONTWRITEBYTECODE": "1"},
         capture_output=True, text=True, encoding="utf-8", check=False,
     )
@@ -63,10 +63,10 @@ def test_downloaded_archive_plan_runs_without_repository(tmp_path: Path) -> None
     assert len(payload["foundry_custom_role"]["DataActions"]) == 3
     assert len(payload["graph_application_roles"]) == 4
     assert "CopilotPackages.Read.All" in payload["graph_application_roles"]
-    assert not (tmp_path / ".wasm-agent").exists()
+    assert not (tmp_path / ".easm-agent").exists()
     help_result = subprocess.run(
         [executable, "setup.sh", "cleanup-plan", "--help"], cwd=customer,
-        env={**os.environ, "WASM_AGENT_PYTHON": sys.executable, "PYTHONIOENCODING": "utf-8",
+        env={**os.environ, "EASM_AGENT_PYTHON": sys.executable, "PYTHONIOENCODING": "utf-8",
              "PYTHONDONTWRITEBYTECODE": "1"},
         capture_output=True, text=True, encoding="utf-8", check=False,
     )

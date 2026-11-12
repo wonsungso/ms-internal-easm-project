@@ -5,9 +5,9 @@ from collections import Counter
 from datetime import datetime
 from typing import Any
 
-from wasm_agent.api_grading import agent_has_entra_identity
-from wasm_agent.azure import MSGRAPH, AccessError, EvidenceStore, ReaderHTTP, issue
-from wasm_agent.models import (
+from easm_agent.api_grading import agent_has_entra_identity
+from easm_agent.azure import MSGRAPH, AccessError, EvidenceStore, ReaderHTTP, issue
+from easm_agent.models import (
     AZURE_AGENT_PLATFORMS,
     Agent365Crosscheck,
     Agent365Package,

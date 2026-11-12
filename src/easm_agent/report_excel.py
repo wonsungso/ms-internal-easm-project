@@ -21,10 +21,10 @@ from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.worksheet.worksheet import Worksheet
 from pydantic import BaseModel
 
-from wasm_agent.azure import redact
-from wasm_agent.collect_admin_evidence import admin_observations
-from wasm_agent.collect_agent365 import OBSERVATION_ONLY, STATUS_LABELS, agent365_observations
-from wasm_agent.models import (
+from easm_agent.azure import redact
+from easm_agent.collect_admin_evidence import admin_observations
+from easm_agent.collect_agent365 import OBSERVATION_ONLY, STATUS_LABELS, agent365_observations
+from easm_agent.models import (
     AdminReadResult,
     Agent365Crosscheck,
     Agent365Package,
@@ -44,9 +44,9 @@ from wasm_agent.models import (
     SecureScore,
     SecurityRecommendation,
 )
-from wasm_agent.proposals import DOMAINS, TITLES, azure_agents
-from wasm_agent.report_resources import ResourceName, resource_names, resource_summary
-from wasm_agent.report_template import (
+from easm_agent.proposals import DOMAINS, TITLES, azure_agents
+from easm_agent.report_resources import ResourceName, resource_names, resource_summary
+from easm_agent.report_template import (
     COLLECTION_METHODS,
     CRITERIA_SHEET,
     RESULT_SHEET,
@@ -756,7 +756,7 @@ def write_workbook(
         "교차검증에 사용한 최소 필드 등록부 및 기존 API 증적 ID",
     )
     for column, explanation in enumerate(explanations, 1):
-        proposals_sheet.cell(3, column).comment = Comment(explanation, "WASM Agent")
+        proposals_sheet.cell(3, column).comment = Comment(explanation, "EASM Agent")
     sections: list[tuple[str, type[BaseModel], Sequence[BaseModel]]] = [
         ("Agent Raw 데이터", AgentEvidence, data.agents),
         ("제안 Raw 데이터", ProposalObservation, data.proposal_observations),

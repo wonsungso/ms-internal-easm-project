@@ -9,12 +9,12 @@ from urllib.parse import urlparse
 
 import pytest
 
-from wasm_agent.azure import ARM, AccessError, EvidenceStore, ReaderHTTP, redact
-from wasm_agent.collect import collect
-from wasm_agent.collect_foundry import FoundryCollector, list_data
-from wasm_agent.collect_inventory import LangChainCollector, ManualCollector
-from wasm_agent.collect_signals import SignalCollector
-from wasm_agent.models import Collection, Settings, load_conventions, load_criteria, load_settings
+from easm_agent.azure import ARM, AccessError, EvidenceStore, ReaderHTTP, redact
+from easm_agent.collect import collect
+from easm_agent.collect_foundry import FoundryCollector, list_data
+from easm_agent.collect_inventory import LangChainCollector, ManualCollector
+from easm_agent.collect_signals import SignalCollector
+from easm_agent.models import Collection, Settings, load_conventions, load_criteria, load_settings
 
 ROOT = Path(__file__).parents[1]
 NOW = datetime(2026, 11, 3, 1, tzinfo=UTC)
@@ -57,9 +57,40 @@ def test_failed_request_does_not_reuse_previous_success_as_its_evidence(tmp_path
     http = ReaderHTTP(fake_credential(), session=session, store=EvidenceStore(tmp_path, NOW))
     http.request("GET", ARM + "/first")
     assert http.last_ref is not None
-    with patch("wasm_agent.azure.time.sleep"), pytest.raises(AccessError):
+    with patch("easm_agent.azure.time.sleep"), pytest.raises(AccessError):
         http.request("GET", ARM + "/second")
     assert http.last_ref is None
+
+
+def test_security_query_is_scoped_before_saving_responses() -> None:
+    rid = "/subscriptions/test/resourceGroups/current/providers/Microsoft.CognitiveServices/accounts/current"
+    base = Collection(collected_at=NOW, resources=[{
+        "id": rid, "subscriptionId": "test", "type": "Microsoft.CognitiveServices/accounts", "kind": "AIServices",
+    }])
+    http = Mock(last_ref="fixture://security")
+    http.request.return_value = {"data": [
+        {"id": "current-assessment", "properties": {
+            "resourceDetails": {"Id": rid + "/deployments/model"}, "status": {"code": "Healthy"},
+        }},
+        {"id": "unrelated-assessment", "properties": {
+            "resourceDetails": {"Id": rid + "-other"}, "status": {"code": "Unhealthy"},
+        }},
+    ]}
+    result = Collection(collected_at=NOW)
+    SignalCollector(http, base, NOW, {}, {}).security("test", result)
+    query = http.request.call_args.kwargs["body"]["query"]
+    assert "properties.resourceDetails.Id" in query
+    assert f"assessment_target == {json.dumps(rid.lower())}" in query
+    assert f"assessment_target startswith {json.dumps(rid.lower() + '/')}" in query
+    assert [row.assessment_id for row in result.security] == ["current-assessment"]
+
+
+def test_security_without_targets_does_not_query_the_whole_subscription() -> None:
+    http = Mock()
+    collector = SignalCollector(http, Collection(collected_at=NOW), NOW, {}, {})
+    with pytest.raises(AccessError, match="현재 AI 리소스"):
+        collector.security("test", Collection(collected_at=NOW))
+    http.request.assert_not_called()
 
 
 def test_foundry_data_pages_reject_cycles() -> None:
@@ -87,7 +118,7 @@ def test_foundry_versions_do_not_count_as_multiple_agents(
     http.request.return_value = {
         "properties": {"endpoints": {"AI Foundry API": "https://fixture.services.ai.azure.com/api/projects/test"}},
     }
-    with patch("wasm_agent.collect_foundry.list_data", side_effect=[
+    with patch("easm_agent.collect_foundry.list_data", side_effect=[
         fixtures["foundry_agents"]["data"], fixtures["foundry_versions"]["data"],
         [{"id": "eval-fixture"}],
         [{"id": "run-fixture", "status": "completed", "result_counts": counts,
@@ -254,10 +285,10 @@ def test_subscription_failure_preserves_other_subscription_records(tmp_path: Pat
             facts={"inventory_complete": True},
         )
 
-    with patch("wasm_agent.collect_inventory.InventoryCollector.discover", autospec=True, side_effect=inventory), patch(
-        "wasm_agent.collect.FoundryCollector.discover", return_value=Collection(collected_at=NOW),
-    ), patch("wasm_agent.collect.LangChainCollector.discover", return_value=Collection(collected_at=NOW)), patch(
-        "wasm_agent.collect.SignalCollector.discover", return_value=Collection(collected_at=NOW),
+    with patch("easm_agent.collect_inventory.InventoryCollector.discover", autospec=True, side_effect=inventory), patch(
+        "easm_agent.collect.FoundryCollector.discover", return_value=Collection(collected_at=NOW),
+    ), patch("easm_agent.collect.LangChainCollector.discover", return_value=Collection(collected_at=NOW)), patch(
+        "easm_agent.collect.SignalCollector.discover", return_value=Collection(collected_at=NOW),
     ):
         data = collect(settings, fake_credential(), NOW)
     assert len(data.agents) == 2
@@ -329,7 +360,7 @@ def test_policy_collection_is_skipped_without_customer_policy_ids_and_missing_sc
 
 
 def test_entra_collector_reads_graph_keeps_counts_not_people_and_isolates_failures() -> None:
-    from wasm_agent.collect_entra import EntraCollector
+    from easm_agent.collect_entra import EntraCollector
 
     identity = "11111111-1111-4111-8111-111111111111"
     graph_sp = "22222222-2222-4222-8222-222222222222"
@@ -391,7 +422,7 @@ def test_entra_collector_reads_graph_keeps_counts_not_people_and_isolates_failur
 def test_entra_graph_requests_use_only_the_graph_host_and_reject_foreign_pagination() -> None:
     import requests
 
-    from wasm_agent.azure import MSGRAPH_SCOPE, ReaderHTTP, trusted_url
+    from easm_agent.azure import MSGRAPH_SCOPE, ReaderHTTP, trusted_url
 
     trusted_url("https://graph.microsoft.com/v1.0/servicePrincipals", MSGRAPH_SCOPE)
     with pytest.raises(ValueError):
@@ -469,18 +500,18 @@ def test_all_subscriptions_overrides_config_and_dry_run_never_calls_azure(
 ) -> None:
     import yaml
 
-    from wasm_agent.cli import main
+    from easm_agent.cli import main
 
     config = tmp_path / "config.yaml"
     config.write_text(yaml.safe_dump({"subscriptions": ["11111111-1111-4111-8111-111111111111"]}))
-    with patch("wasm_agent.cli.DefaultAzureCredential", side_effect=AssertionError("no Azure calls")):
+    with patch("easm_agent.cli.DefaultAzureCredential", side_effect=AssertionError("no Azure calls")):
         assert main(["collect", "--config", str(config), "--all-subscriptions", "--dry-run"]) == 0
     result = json.loads(capsys.readouterr().out)
     assert result["subscriptions"] == "auto-enumerate"
 
 
 def test_all_subscriptions_and_explicit_scope_cannot_be_combined() -> None:
-    from wasm_agent.cli import main
+    from easm_agent.cli import main
 
     with pytest.raises(SystemExit) as exc:
         main(["collect", "--all-subscriptions", "--subscriptions", "a"])
@@ -495,7 +526,7 @@ def test_all_subscriptions_and_explicit_scope_cannot_be_combined() -> None:
 def test_setup_file_subscriptions_are_the_default_scope(
     tmp_path: Path, capsys: pytest.CaptureFixture, extra: list[str], expected: object,
 ) -> None:
-    from wasm_agent.cli import main
+    from easm_agent.cli import main
 
     setup = tmp_path / "setup.json"
     setup.write_text(json.dumps({
@@ -529,9 +560,9 @@ def test_auto_enumeration_handles_hundreds_and_filters_tenant_and_state(tmp_path
         assert set(resolved.subscriptions) == set(ids)
         return Collection(collected_at=instant, completed_subscriptions=[sid], facts={"inventory_complete": True})
 
-    with patch("wasm_agent.collect.verify_identity"), patch(
-        "wasm_agent.collect.ReaderHTTP", return_value=http,
-    ), patch("wasm_agent.collect.collect_subscription", side_effect=per_subscription) as worker:
+    with patch("easm_agent.collect.verify_identity"), patch(
+        "easm_agent.collect.ReaderHTTP", return_value=http,
+    ), patch("easm_agent.collect.collect_subscription", side_effect=per_subscription) as worker:
         result = collect(settings, Mock(), datetime.now(UTC))
     assert set(result.subscriptions) == set(ids)
     assert set(result.completed_subscriptions) == set(ids)
@@ -544,8 +575,8 @@ def test_auto_enumeration_handles_hundreds_and_filters_tenant_and_state(tmp_path
 def test_entra_cannot_be_disabled_by_cli_or_settings() -> None:
     from pydantic import ValidationError
 
-    from wasm_agent.cli import main
-    from wasm_agent.models import Settings
+    from easm_agent.cli import main
+    from easm_agent.models import Settings
 
     with pytest.raises(SystemExit) as exc:
         main(["collect", "--no-entra", "--dry-run"])

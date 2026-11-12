@@ -3,9 +3,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, Literal, Protocol
 
-from wasm_agent.api_grading import PROFILE, Measurement, measurements
-from wasm_agent.models import AssessmentMeasurement, Collection, Finding
-from wasm_agent.provenance import assessment_provenance
+from easm_agent.api_grading import PROFILE, Measurement, measurements
+from easm_agent.models import AssessmentMeasurement, Collection, Finding
+from easm_agent.provenance import assessment_provenance
 
 
 class Evaluator(Protocol):

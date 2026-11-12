@@ -91,13 +91,13 @@ def test_captured_images_are_real_pngs_with_highlight_metadata() -> None:
 def test_screenshot_notes_match_the_documented_example() -> None:
     root = Path(__file__).parents[1]
     readme = (root / "README.md").read_text(encoding="utf-8")
-    assert "`wasmagent-diagnostic`" in readme
+    assert "`easmagent-diagnostic`" in readme
     assert "**[" not in readme
     assert "docs/imgs/12-entra-consent.png" in readme
     step3 = readme.split("## Step 3.", 1)[1].split("## Step 4.", 1)[0]
     for image in ("10-reader-role.png", "17-foundry-reader.png", "12-entra-consent.png"):
         assert f"(docs/imgs/{image})" in step3
-    assert "https://github.com/wonsungso/ms-internal-wasm-project/raw/refs/heads/main/docs/downloads/customer-setup.zip" in step3
+    assert "https://github.com/wonsungso/ms-internal-easm-project/raw/refs/heads/main/docs/downloads/customer-setup.zip" in step3
     assert "[**customer-setup.zip**](docs/downloads/customer-setup.zip)" in step3
     assert "python3 -m zipfile -e customer-setup.zip customer-setup" in step3
     assert "bash setup.sh login" in step3 and "bash setup.sh apply" in step3
@@ -122,7 +122,7 @@ def test_setup_success_example_masks_identifiers_and_covers_all_grants() -> None
 def test_ms_collection_step_uses_existing_certificate_without_shell_variable_dependency() -> None:
     readme = (Path(__file__).parents[1] / "README.md").read_text(encoding="utf-8")
     step4 = readme.split("## Step 4.", 1)[1].split("## Step 5.", 1)[0]
-    assert "cd /workspaces/ms-internal-wasm-project" in step4
+    assert "cd /workspaces/ms-internal-easm-project" in step4
     assert "Step 1에서 사용한 동일 Codespaces 터미널" in step4
     assert 'AZURE_CLIENT_CERTIFICATE_PATH="$(python3 scripts/certificate_path.py)" &&' in step4
     assert "read -r -p '위 인증서의 전체 경로: '" not in step4
@@ -172,7 +172,7 @@ def test_summary_table_links_resolve_to_checklist_sections_with_images() -> None
 
 
 def test_summary_marks_added_items_only_in_the_rightmost_column() -> None:
-    from wasm_agent.proposals import TITLES
+    from easm_agent.proposals import TITLES
 
     readme = (Path(__file__).parents[1] / "README.md").read_text(encoding="utf-8")
     assert "| 점검 내용 | 수집 방법 | 수집 | 신규 추가 |" in readme
@@ -212,7 +212,7 @@ def test_chatbot_guide_uses_real_masked_highlighted_screenshots() -> None:
     assert re.search(r"^## (?:Step )?1\.", root, re.M)
     assert "오프라인 검증" not in root
     assert "docs/guide.md" not in root
-    assert "고객사 담당자" in root and "MS WASM 관리자" in root
+    assert "고객사 담당자" in root and "MS EASM 관리자" in root
 
 
 def test_consolidated_document_links_and_collapsed_demo_are_preserved() -> None:

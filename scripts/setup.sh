@@ -6,10 +6,10 @@ root_dir="$(cd -- "$script_dir/.." && pwd)"
 config_file="$script_dir/setup.json"
 repository_mode=false
 if [[ -f "$script_dir/verify_permissions.py" ]]; then
-  config_file="$root_dir/.wasm-agent/setup.json"
+  config_file="$root_dir/.easm-agent/setup.json"
   repository_mode=true
 fi
-python_command="${WASM_AGENT_PYTHON:-python3}"
+python_command="${EASM_AGENT_PYTHON:-python3}"
 command="${1:-help}"
 if [[ $# -gt 0 ]]; then
   shift

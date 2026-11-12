@@ -5,11 +5,11 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from wasm_agent.azure import AccessError
-from wasm_agent.collect_foundry import FoundryCollector
-from wasm_agent.collect_proposals import ProposalCollector
-from wasm_agent.collect_signals import SignalCollector
-from wasm_agent.models import AgentEvidence, Collection, Settings, load_criteria
+from easm_agent.azure import AccessError
+from easm_agent.collect_foundry import FoundryCollector
+from easm_agent.collect_proposals import ProposalCollector
+from easm_agent.collect_signals import SignalCollector
+from easm_agent.models import AgentEvidence, Collection, Settings, load_criteria
 
 NOW = datetime(2026, 11, 9, tzinfo=UTC)
 SID = "11111111-1111-4111-8111-111111111111"

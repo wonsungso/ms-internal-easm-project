@@ -15,8 +15,8 @@ if [[ "$apply" != true ]]; then
   printf '%s\n' '관리자 전용입니다. 승인 후 bash demo/run.sh --apply [--collect]를 사용하세요.' >&2
   exit 1
 fi
-if [[ -n "${WASM_AGENT_PYTHON:-}" ]]; then
-  python_command="$WASM_AGENT_PYTHON"
+if [[ -n "${EASM_AGENT_PYTHON:-}" ]]; then
+  python_command="$EASM_AGENT_PYTHON"
 elif [[ -x "$root/.venv/bin/python" ]]; then
   python_command="$root/.venv/bin/python"
 else

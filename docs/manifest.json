@@ -6,7 +6,7 @@
     "highlight_color": "#d40000",
     "account_banner_excluded": true,
     "account_identifiers_masked": true,
-    "display_text_editing": "식별자와 테넌트 이름은 회색 영역으로 가렸고, 실제 역할·권한·승인 문구는 바꾸지 않았음",
+    "display_text_editing": "식별자·대상명·테넌트 이름은 회색 또는 짙은 회색 영역으로 가렸고, 다른 이름이나 권한값을 덧씌우지 않았음",
     "application_and_sp_created": true,
     "credentials_modified": true,
     "credential_counts_before_cleanup": {

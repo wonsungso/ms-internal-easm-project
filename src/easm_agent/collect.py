@@ -6,7 +6,7 @@ from typing import Any
 
 from azure.core.exceptions import ClientAuthenticationError
 
-from wasm_agent.azure import (
+from easm_agent.azure import (
     ARM,
     AccessError,
     Credential,
@@ -15,18 +15,18 @@ from wasm_agent.azure import (
     issue,
     verify_identity,
 )
-from wasm_agent.collect_admin_evidence import read_admin_evidence
-from wasm_agent.collect_agent365 import Agent365Collector, crosscheck_agent365
-from wasm_agent.collect_entra import EntraCollector
-from wasm_agent.collect_foundry import FoundryCollector
-from wasm_agent.collect_inventory import (
+from easm_agent.collect_admin_evidence import read_admin_evidence
+from easm_agent.collect_agent365 import Agent365Collector, crosscheck_agent365
+from easm_agent.collect_entra import EntraCollector
+from easm_agent.collect_foundry import FoundryCollector
+from easm_agent.collect_inventory import (
     InventoryCollector,
     LangChainCollector,
     ManualCollector,
 )
-from wasm_agent.collect_proposals import ProposalCollector
-from wasm_agent.collect_signals import SignalCollector
-from wasm_agent.models import (
+from easm_agent.collect_proposals import ProposalCollector
+from easm_agent.collect_signals import SignalCollector
+from easm_agent.models import (
     HOSTED_AGENT_PLATFORMS,
     Collection,
     Issue,

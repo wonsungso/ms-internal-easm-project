@@ -10,11 +10,11 @@ from pathlib import Path, PureWindowsPath
 from typing import Any
 from urllib.parse import unquote
 
-from wasm_agent.assessment_codes import ASSESSMENT_REVISION, migrate_revision_4_codes
-from wasm_agent.azure import redact
-from wasm_agent.models import Collection, Finding
-from wasm_agent.provenance import digest
-from wasm_agent.report_excel import write_workbook
+from easm_agent.assessment_codes import ASSESSMENT_REVISION, migrate_revision_4_codes
+from easm_agent.azure import redact
+from easm_agent.models import Collection, Finding
+from easm_agent.provenance import digest
+from easm_agent.report_excel import write_workbook
 
 RAW_PATTERN = "raw-data-*.json"
 RUN_PATTERN = re.compile(r"(?P<stamp>\d{8}T\d{12}Z)(?:-(?P<sequence>\d+))?")
@@ -226,9 +226,11 @@ def normalize_result(
         attached = False
         identifier = ref.removeprefix("evidence:") if ref.startswith("evidence:") else ""
         if not identifier:
+            reference_sha256 = hashlib.sha256(redact(ref).encode("utf-8")).hexdigest()
             identifier = next((
                 item["id"] for item in old_refs
-                if item.get("reference") == redact(ref) and item.get("status") == "attached"
+                if (item.get("reference") == redact(ref) or item.get("reference_sha256") == reference_sha256)
+                and item.get("status") == "attached"
             ), "")
         source = links.source(ref) if not ref.startswith("evidence:") else None
         if source is not None:
@@ -255,7 +257,8 @@ def normalize_result(
         if ref.startswith("evidence:") and originals:
             for item in originals:
                 updated = {
-                    **item, "sha256": identifier if attached else None,
+                    **item, "reference": "evidence:" + identifier if attached else item["reference"],
+                    "sha256": identifier if attached else None,
                     "status": "attached" if attached else "not_found",
                     "detail": None if attached else "파일 확인불가 - 안전한 로컬 파일 연결 불가",
                 }
@@ -263,7 +266,9 @@ def normalize_result(
                     references.append(updated)
         else:
             references.append({
-                "reference": redact(ref), "id": identifier, "sha256": identifier if attached else None,
+                "reference": "evidence:" + identifier if attached else redact(ref),
+                "reference_sha256": hashlib.sha256(redact(ref).encode("utf-8")).hexdigest(),
+                "id": identifier, "sha256": identifier if attached else None,
                 "status": "attached" if attached else "not_found",
                 "detail": None if attached else "파일 확인불가 - 안전한 로컬 파일 연결 불가",
             })

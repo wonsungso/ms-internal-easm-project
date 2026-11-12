@@ -6,11 +6,11 @@ from pathlib import Path
 import pytest
 from openpyxl import load_workbook
 
+from easm_agent.assessment_codes import REVISION_4_CODES
+from easm_agent.models import load_criteria
+from easm_agent.report import load_result
+from easm_agent.report_template import CRITERIA_SHEET, assessment_template_path
 from scripts.merge_assessment import MANUAL_LEVELS
-from wasm_agent.assessment_codes import REVISION_4_CODES
-from wasm_agent.models import load_criteria
-from wasm_agent.report import load_result
-from wasm_agent.report_template import CRITERIA_SHEET, assessment_template_path
 
 
 def test_codes_follow_approved_continuous_sequence() -> None:

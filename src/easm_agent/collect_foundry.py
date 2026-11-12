@@ -5,8 +5,8 @@ from datetime import datetime
 from typing import Any
 from urllib.parse import quote, urlencode, urlparse
 
-from wasm_agent.azure import AI_SCOPE, ARM, AccessError, ReaderHTTP, issue, redact, trusted_url
-from wasm_agent.models import (
+from easm_agent.azure import AI_SCOPE, ARM, AccessError, ReaderHTTP, issue, redact, trusted_url
+from easm_agent.models import (
     AgentEvidence,
     Collection,
     EvaluationRun,
@@ -50,7 +50,7 @@ def list_data(
 
 
 class FoundryCollector:
-    required_roles = ("Reader", "WASMAgent Foundry Evidence Reader v2")
+    required_roles = ("Reader", "EASMAgent Foundry Evidence Reader v2")
 
     def tool_observations(
         self, project: dict[str, Any], record: AgentEvidence, raw_tools: Any,

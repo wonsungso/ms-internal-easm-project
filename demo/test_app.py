@@ -17,17 +17,17 @@ CATALOG, app, reserve_call = chat.CATALOG, chat.app, chat.reserve_call
 
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    monkeypatch.setenv("WASMAGENT_CHAT_ALLOWED_OIDS", "allowed-user")
-    monkeypatch.setenv("WASMAGENT_QUOTA_DIR", str(tmp_path))
-    monkeypatch.setenv("WASMAGENT_AGENT_ID", "host-02")
-    monkeypatch.setenv("WASMAGENT_LOCAL_AGENT", "langchain-tools")
+    monkeypatch.setenv("EASMAGENT_CHAT_ALLOWED_OIDS", "allowed-user")
+    monkeypatch.setenv("EASMAGENT_QUOTA_DIR", str(tmp_path))
+    monkeypatch.setenv("EASMAGENT_AGENT_ID", "host-02")
+    monkeypatch.setenv("EASMAGENT_LOCAL_AGENT", "langchain-tools")
     app.config["TESTING"] = True
     with app.test_client() as client:
         yield client
 
 
 def headers() -> dict[str, str]:
-    return {"X-MS-CLIENT-PRINCIPAL-ID": "allowed-user", "Origin": "http://localhost", "X-WASMAgent-Chat": "1"}
+    return {"X-MS-CLIENT-PRINCIPAL-ID": "allowed-user", "Origin": "http://localhost", "X-EASMAgent-Chat": "1"}
 
 
 def question() -> dict:
@@ -101,7 +101,7 @@ def test_health_has_no_model_call(client) -> None:
 
 
 def test_real_chat_ui_and_available_agents(client, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("WASMAGENT_EVALUATED_AGENTS", "policy-guide")
+    monkeypatch.setenv("EASMAGENT_EVALUATED_AGENTS", "policy-guide")
     page = client.get("/", headers=headers())
     assert page.status_code == 200 and "질문 보내기" in page.text
     rows = client.get("/api/agents", headers=headers()).json["agents"]
@@ -113,7 +113,7 @@ def test_real_chat_ui_and_available_agents(client, monkeypatch: pytest.MonkeyPat
 
 
 @pytest.mark.parametrize("replacement", [
-    {"Origin": "https://foreign.example"}, {"X-WASMAgent-Chat": ""},
+    {"Origin": "https://foreign.example"}, {"X-EASMAgent-Chat": ""},
 ])
 def test_cross_origin_chat_is_rejected(client, replacement: dict) -> None:
     with patch("demo.app.invoke_agent", side_effect=AssertionError("must not invoke")):
@@ -154,7 +154,7 @@ def test_chat_calls_llm_and_logs_only_usage(client, capsys: pytest.CaptureFixtur
     assert invoke.call_args.args[0]["id"] == "langchain-tools"
     assert response.json["input_tokens"] == 15
     log = capsys.readouterr().out
-    assert "wasmagent.sample.completed" in log
+    assert "easmagent.sample.completed" in log
     assert "실제 모델 답변" not in log and "allowed-user" not in log and "읽기 전용 진단이란?" not in log
 
 

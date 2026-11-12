@@ -6,7 +6,7 @@
 
 ## 배포와 실행
 
-- 프로젝트 루트에서 실행합니다. 승인된 관리자 권한과 `.wasm-agent/setup.json`이 필요합니다.
+- 프로젝트 루트에서 실행합니다. 승인된 관리자 권한과 `.easm-agent/setup.json`이 필요합니다.
 - 환경 입력은 `tenant_id`, `subscription_ids`, `account_name`과 [config.yaml](config.yaml)입니다. 진단 SP가 없으면 진단용 역할 생성·할당은 생략합니다.
 - 기본 데모는 Foundry·모델·웹 앱·로그 리소스를 별도 소유 태그가 있는 그룹에 배포합니다. Agent 구성은 [catalog.json](catalog.json)의 Foundry 8개와 LangChain 2개입니다.
 - Korea Central·소형 모델·합성 데이터용 설정입니다. 모델의 GlobalStandard 처리와 필요한 공급자 등록을 승인한 환경에서만 실행합니다.
@@ -18,7 +18,7 @@ bash demo/run.sh --apply
 
 - 위 명령은 인프라·로그인 보호 챗봇 10개·실제 평가 4건을 준비하고 유지합니다. 진단 SP 생성이나 진단 수집을 대신하지 않습니다.
 - 수집까지 통합 실행하려면 Reader 진단 SP 설정을 별도로 준비한 후 `bash demo/run.sh --apply --collect`를 사용합니다.
-- 배포 전 테스트·Ruff·Bicep·구독별 ARM validate/what-if·정책 조회를 수행합니다. 삭제 계획이 있으면 중단하며, 통과 증거는 `.wasm-agent/demo/validation.json`에 남깁니다.
+- 배포 전 테스트·Ruff·Bicep·구독별 ARM validate/what-if·정책 조회를 수행합니다. 삭제 계획이 있으면 중단하며, 통과 증거는 `.easm-agent/demo/validation.json`에 남깁니다.
 - 모델·로그·B1 유지 비용이 발생합니다. B1 2개 합계 USD 0.036/시간은 기존 검증 당시 기준이며 모델·로그는 별도입니다. 설정의 USD 100은 승인 예산이지 하드 과금 상한이 아닙니다.
 
 ## 개별 명령과 실패 후 재개
@@ -35,7 +35,7 @@ python -m demo.diagnostics codespace --codespace '<Codespace 이름>' --apply
 ```
 
 - 재사용 배포도 소유 태그와 검증 증거를 확인합니다. 없는 리소스를 재사용 모드에서 임의 생성하지 않습니다.
-- 실패한 단계만 같은 명령으로 재개합니다. `.wasm-agent/demo/lab.json`, `runthrough.json`, `chatbot-expansion/`의 배포·평가 영수증을 확인합니다.
+- 실패한 단계만 같은 명령으로 재개합니다. `.easm-agent/demo/lab.json`, `runthrough.json`, `chatbot-expansion/`의 배포·평가 영수증을 확인합니다.
 - `collect`는 임시 공개 인증서와 저장소 밖 사용자 전용 개인키를 사용하고 종료 시 새 인증서만 정리합니다. 기존 인증서는 보존합니다. 강제 종료한 경우 별도 확인이 필요합니다.
 - 권한 거부가 실제 확인된 경우에만 설정에 따라 Cost Management Reader 또는 워크스페이스 Log Analytics Reader를 추가합니다. `auto_grant_needed_read_roles: false`로 끌 수 있습니다. 관리자 수집으로 대체하지 않습니다.
 - 결과는 실행별 `output/<실행시각-UTC>/` 폴더의 Excel과 raw-data JSON 두 개입니다. 재실행·권한 보완 후 수집도 별도 폴더에 보존하며 Codespaces 다운로드도 실행 폴더를 유지합니다. 종료 코드 `2`의 자료 미확보 사유를 보존합니다.
@@ -59,10 +59,10 @@ python -m demo.diagnostics codespace --codespace '<Codespace 이름>' --apply
 
 ## 챗봇 접속과 안전 경계
 
-- `.wasm-agent/demo/lab.json`의 호스트별 `chat_url`을 엽니다. 기본 허용자는 배포를 실행한 관리자 1명이며 다른 사용자를 자동 추가하지 않습니다.
+- `.easm-agent/demo/lab.json`의 호스트별 `chat_url`을 엽니다. 기본 허용자는 배포를 실행한 관리자 1명이며 다른 사용자를 자동 추가하지 않습니다.
 - Agent 선택 → 질문 입력 → **질문 보내기**를 사용합니다. 각 호스트는 Foundry 8개와 자기 LangChain 1개를 보여주므로 화면의 중복 목록을 추가 Agent로 세지 않습니다.
 - App Service 로그인·동일 테넌트·허용 사용자 검증을 적용합니다. 서버는 User Assigned MI 연합 인증을 사용하며 client secret을 만들지 않습니다. 모델 호출 주체는 웹 앱 MI로, 진단 SP와 다릅니다.
-- 인바운드 경계 데모는 App Service 1개에 승인된 공인 IP 대역 허용과 기본 거부를 적용합니다. 허용 대역 밖에서는 로그인·`/health` 접근도 차단되며, SCM 설정과 나머지 워크로드는 유지합니다. 실제 적용 기록은 `.wasm-agent/demo/network-boundary-20261109.json`에서 확인합니다.
+- 인바운드 경계 데모는 App Service 1개에 승인된 공인 IP 대역 허용과 기본 거부를 적용합니다. 허용 대역 밖에서는 로그인·`/health` 접근도 차단되며, SCM 설정과 나머지 워크로드는 유지합니다. 실제 적용 기록은 `.easm-agent/demo/network-boundary-20261109.json`에서 확인합니다.
 - 동시 호출 1개, 사용자별 분당 10회·호스트별 하루 100회, 메시지 2,000자·대화 8,000자·10개 메시지·응답 256토큰으로 제한합니다. 일일 카운트는 재시작 후 유지되지만 비용 상한을 보장하지 않습니다.
 - 질문·답변·사용자 ID는 앱 로그에 쓰지 않고 완료 이벤트·Agent ID·토큰 수만 기록합니다. `/health` 조회는 모델을 호출하지 않으며 비로그인 채팅은 차단합니다.
 - Linux CPython 3.11 wheel을 사전 패키징합니다. 배포 ZIP에는 [app.py](app.py)·[catalog.json](catalog.json)·[chat.html](chat.html)과 의존성만 넣고 관리자 코드·설정·테스트는 제외합니다. 새 Kudu 배포 ID의 완료와 실제 모델 응답을 각각 검증합니다.
@@ -81,7 +81,7 @@ python -m demo.diagnostics codespace --codespace '<Codespace 이름>' --apply
 - 브라우저 개발자 도구에서 실제 사용자가 요청합니다. 첫 명령 뒤 승인 또는 거부를 직접 선택하고, 승인했다면 채팅에 `synthetic_record`로 해당 ID를 실행하도록 요청합니다. 실제 고객 데이터는 입력하지 않습니다.
 
 ```javascript
-const headers = {"Content-Type": "application/json", "X-WASMAgent-Chat": "1"};
+const headers = {"Content-Type": "application/json", "X-EASMAgent-Chat": "1"};
 const action = await fetch("/api/governance/actions", {
   method: "POST", headers, body: JSON.stringify({value: "synthetic-ready"})
 }).then(r => r.json());
@@ -95,7 +95,7 @@ console.log(action.action_id);
 ### 로컬 테스트와 배포 후 검증
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest demo\test_governance.py -q --basetemp=.wasm-agent\pytest-governance
+.\.venv\Scripts\python.exe -m pytest demo\test_governance.py -q --basetemp=.easm-agent\pytest-governance
 .\.venv\Scripts\python.exe -m ruff check demo\governance.py demo\test_governance.py demo\app.py
 ```
 
@@ -107,7 +107,7 @@ console.log(action.action_id);
 - 기존 승인 배포 호출은 프로젝트 루트의 `python -m demo.agents --apply`입니다. `expand()`는 기존 소유 리소스의 로그인 설정, Agent 버전/endpoint, 패키지 배포와 실제 호출을 수행하므로 관리자 승인 없이 실행하지 않습니다. 동일 버전의 성공 영수증이 있으면 Foundry 호출/평가를 재사용할 수 있습니다.
 - 실제 호출 진입점은 `demo.agents.sample_response(client, input=..., max_output_tokens=..., store=False)`와 `demo.app.invoke_agent(entry, messages)`입니다. 후자는 배포 호스트의 `/api/chat`에서 MI로 실행됩니다. 합성 프롬프트만 사용하고 Agent ID/버전, 성공 응답, 해당 호출 시각, 호스트/서비스 경로를 별도 대조해야 합니다.
 - 평가 진입점은 `demo.agents.evaluate_agent(project, entry, version, path)`입니다. 저장 영수증의 `agent_id`, `agent_version`, `run_id`, `status`, 실제 완료 시각/통과 항목을 확인합니다. 기존 `expand()`는 endpoint 연결 후 평가를 실행하므로 이 순서만으로 배포 전 평가를 입증하지 않습니다.
-- `.wasm-agent/demo/chatbot-expansion/<lab_id>/state.json`의 `published_at`은 관리자 실행 영수증입니다. 버전 생성 시각, 이 값 또는 계정 전체 토큰 수를 Agent의 실제 배포 시각/사용 이력으로 바꾸지 않습니다.
+- `.easm-agent/demo/chatbot-expansion/<lab_id>/state.json`의 `published_at`은 관리자 실행 영수증입니다. 버전 생성 시각, 이 값 또는 계정 전체 토큰 수를 Agent의 실제 배포 시각/사용 이력으로 바꾸지 않습니다.
 
 ### 수집 결과와 API 등급
 
@@ -151,6 +151,6 @@ python -m demo.manage cleanup
 - generation `demo-redeploy-20261104`, lab `98faf4dd7e`의 구독 배포는 01:50:30Z 재조회에서 모두 `Succeeded`였습니다. Foundry 8개·LangChain 2개·실제 평가 4건과 모델 응답을 확인했습니다.
 - 두 웹 앱은 health 200·익명 대화 401이었으며 MI의 모델 계정 OpenAI User·프로젝트 Foundry User 역할을 재조회했습니다. 로그인 앱은 연합 인증이며 인증서·client secret은 없었습니다.
 - 배포 이력 조회의 일시 오류는 재조회 후 확장만 멱등 재개했고, 재시작 직후 health 지연도 제한된 재시도로 확인했습니다. 당시 최종 회귀 검사는 228 passed·1 skipped였습니다.
-- 실행 상태·접속 주소·실측 영수증은 Git 제외 `.wasm-agent/demo/`에 보존합니다. 이번 로컬 파일 통합에서는 Azure 리소스를 변경하거나 재배포하지 않습니다.
+- 실행 상태·접속 주소·실측 영수증은 Git 제외 `.easm-agent/demo/`에 보존합니다. 이번 로컬 파일 통합에서는 Azure 리소스를 변경하거나 재배포하지 않습니다.
 
 </details>

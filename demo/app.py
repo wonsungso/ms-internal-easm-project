@@ -70,10 +70,22 @@ def synthetic_record(action_id: str) -> str:
         return "denied: pending, denied, expired, foreign or already executed action"
 
 
+def runtime_setting(name: str, default: str = "") -> str:
+    return os.environ.get(name, default)
+
+
+def required_runtime_setting(name: str) -> str:
+    return os.environ[name]
+
+
+def valid_chat_marker() -> bool:
+    return request.headers.get("X-EASMAgent-Chat") == "1"
+
+
 def principal() -> str | None:
     # App Service Easy Auth validates tokens and replaces these headers before Flask.
     oid = request.headers.get("X-MS-CLIENT-PRINCIPAL-ID")
-    allowed = set(os.environ.get("WASMAGENT_CHAT_ALLOWED_OIDS", "").split(","))
+    allowed = set(runtime_setting("EASMAGENT_CHAT_ALLOWED_OIDS").split(","))
     if oid and oid in allowed:
         return oid
     encoded = request.headers.get("X-MS-CLIENT-PRINCIPAL")
@@ -93,7 +105,7 @@ def principal() -> str | None:
 
 
 def reserve_call(oid: str) -> bool:
-    directory = Path(os.environ.get("WASMAGENT_QUOTA_DIR", "/home/wasmagent-quota"))
+    directory = Path(runtime_setting("EASMAGENT_QUOTA_DIR", "/home/easmagent-quota"))
     directory.mkdir(parents=True, exist_ok=True)
     now = time.time()
     day = datetime.now(UTC).strftime("%Y-%m-%d")
@@ -158,7 +170,7 @@ def invoke_agent(entry: dict, messages: list[dict[str, str]]) -> tuple[str, int 
 
 def record_usage(agent_id: str, inputs: int | None, outputs: int | None) -> None:
     print(json.dumps({
-        "event": "wasmagent.sample.completed", "agent_id": agent_id,
+        "event": "easmagent.sample.completed", "agent_id": agent_id,
         "input_tokens": inputs, "output_tokens": outputs,
     }), flush=True)
 
@@ -174,8 +186,8 @@ def index() -> object:
 def agents() -> object:
     if not principal():
         return jsonify({"message": "로그인이 필요합니다."}), 401
-    evaluated = set(os.environ.get("WASMAGENT_EVALUATED_AGENTS", "").split(","))
-    own = os.environ.get("WASMAGENT_LOCAL_AGENT", "langchain-tools")
+    evaluated = set(runtime_setting("EASMAGENT_EVALUATED_AGENTS").split(","))
+    own = runtime_setting("EASMAGENT_LOCAL_AGENT", "langchain-tools")
     rows = []
     for entry in CATALOG:
         if entry["platform"] == "langchain" and entry["id"] != own:
@@ -197,7 +209,7 @@ def chat() -> object:
     origin = request.headers.get("Origin")
     hostname = os.environ.get("WEBSITE_HOSTNAME")
     expected_origin = "https://" + hostname if hostname else request.host_url.rstrip("/")
-    if origin != expected_origin or request.headers.get("X-WASMAgent-Chat") != "1":
+    if origin != expected_origin or not valid_chat_marker():
         return jsonify({"message": "같은 사이트의 챗봇 화면에서만 요청할 수 있습니다."}), 403
     try:
         data = ChatInput.model_validate(request.get_json(silent=True))
@@ -205,7 +217,7 @@ def chat() -> object:
         return jsonify({"message": "질문은 2,000자, 대화는 10개 메시지 이내의 텍스트로 입력하세요."}), 400
     if data.messages[-1].role != "user" or sum(len(item.content) for item in data.messages) > 8000:
         return jsonify({"message": "마지막 메시지는 질문이어야 하며 전체 대화는 8,000자 이내여야 합니다."}), 400
-    own = os.environ.get("WASMAGENT_LOCAL_AGENT", "langchain-tools")
+    own = runtime_setting("EASMAGENT_LOCAL_AGENT", "langchain-tools")
     entry = next((entry for entry in CATALOG if entry["id"] == data.agent_id), None)
     if not entry or (entry["platform"] == "langchain" and entry["id"] != own):
         return jsonify({"message": "이 호스트에서 실행할 수 없는 Agent입니다."}), 404
@@ -217,7 +229,7 @@ def chat() -> object:
         if not reserve_call(oid):
             return jsonify({"message": "샘플 한도: 계정당 분당 10회, 호스트당 하루 100회입니다."}), 429
         answer, inputs, outputs = invoke_agent(entry, [item.model_dump() for item in data.messages])
-        agent_id = os.environ["WASMAGENT_AGENT_ID"] if entry["platform"] == "langchain" else entry["id"]
+        agent_id = required_runtime_setting("EASMAGENT_AGENT_ID") if entry["platform"] == "langchain" else entry["id"]
         record_usage(agent_id, inputs, outputs)
         return jsonify({"answer": answer[:4000], "input_tokens": inputs, "output_tokens": outputs})
     except RateLimitError:
@@ -239,8 +251,8 @@ def governance_actor() -> str | None:
     origin = "https://" + hostname if hostname else request.host_url.rstrip("/")
     if (
         not actor or request.headers.get("Origin") != origin
-        or request.headers.get("X-WASMAgent-Chat") != "1"
-        or os.environ.get("WASMAGENT_LOCAL_AGENT", "langchain-tools") != "langchain-tools"
+        or not valid_chat_marker()
+        or runtime_setting("EASMAGENT_LOCAL_AGENT", "langchain-tools") != "langchain-tools"
     ):
         return None
     return actor
@@ -289,7 +301,7 @@ def smoke() -> None:
     try:
         with state_lock:
             state["smoke_status"] = "running"
-        own = os.environ.get("WASMAGENT_LOCAL_AGENT", "langchain-tools")
+        own = runtime_setting("EASMAGENT_LOCAL_AGENT", "langchain-tools")
         entry = next(entry for entry in CATALOG if entry["id"] == own)
         for attempt in range(6):
             try:
@@ -304,14 +316,14 @@ def smoke() -> None:
                 time.sleep(60)
         if not answer:
             raise RuntimeError("빈 답변")
-        record_usage(os.environ["WASMAGENT_AGENT_ID"], inputs, outputs)
+        record_usage(required_runtime_setting("EASMAGENT_AGENT_ID"), inputs, outputs)
         with state_lock:
             state["smoke_status"] = "completed"
     except (AzureError, OpenAIError, ValueError, KeyError, OSError, RuntimeError) as exc:
         with state_lock:
             state["smoke_status"] = "failed"
             state["error_type"] = type(exc).__name__
-        print(json.dumps({"event": "wasmagent.sample.failed", "error_type": type(exc).__name__}), flush=True)
+        print(json.dumps({"event": "easmagent.sample.failed", "error_type": type(exc).__name__}), flush=True)
 
 
 @app.get("/health")
@@ -323,5 +335,5 @@ def health() -> tuple[object, int]:
     return jsonify(snapshot), 503 if failed else 200
 
 
-if os.environ.get("WASMAGENT_SMOKE_ON_START") == "true":
+if runtime_setting("EASMAGENT_SMOKE_ON_START") == "true":
     threading.Thread(target=smoke, daemon=True).start()

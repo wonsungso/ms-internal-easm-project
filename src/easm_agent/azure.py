@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 import requests
 from azure.core.exceptions import ClientAuthenticationError
 
-from wasm_agent.models import EvidenceSource, Issue, Reason
+from easm_agent.models import EvidenceSource, Issue, Reason
 
 ARM = "https://management.azure.com"
 ARM_SCOPE = ARM + "/.default"

@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any, Literal
 from urllib.parse import unquote, urlparse
 
-from wasm_agent.models import (
+from easm_agent.models import (
     AZURE_AGENT_PLATFORMS,
     HOSTED_AGENT_PLATFORMS,
     Collection,

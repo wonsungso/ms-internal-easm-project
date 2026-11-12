@@ -9,36 +9,36 @@
 
 | 순서 | 담당 | 실행 위치 | 할 일 |
 | --- | --- | --- | --- |
-| 1 | <span style='background-color: #fff5b1'>**MS WASM 관리자**</span> | Codespaces 터미널 | 인증서 준비, 고객용 ZIP·공개 인증서 전달 |
+| 1 | <span style='background-color: #fff5b1'>**MS EASM 관리자**</span> | Codespaces 터미널 | 인증서 준비, 고객용 ZIP·공개 인증서 전달 |
 | 2 | <span style='background-color: #dcffe4'>**고객사 담당자**</span> | 고객사 VM의 웹 브라우저 - Azure Portal | 진단 앱 등록, 공개 인증서 업로드 |
 | 3 | <span style='background-color: #dcffe4'>**고객사 담당자**</span> | 고객사 VM의 Bash 터미널 | 고객용 ZIP으로 읽기 권한 설정, setup.json 반환 |
-| 4 | <span style='background-color: #fff5b1'>**MS WASM 관리자**</span> | Codespaces 터미널 | 반환받은 setup.json과 개인키로 검증·수집, 결과 다운로드 |
+| 4 | <span style='background-color: #fff5b1'>**MS EASM 관리자**</span> | Codespaces 터미널 | 반환받은 setup.json과 개인키로 검증·수집, 결과 다운로드 |
 | 5 | <span style='background-color: #e5dcf7'>**고객/MS 공동**</span> | Codespaces / 고객사 VM | 결과 공동 검토, 고객은 Portal에서 권한 회수, MS는 개인키·데이터 정리 |
 
-## Step 1. <span style='background-color: #fff5b1'>[MS WASM 관리자]</span> Codespaces와 인증서 준비
+## Step 1. <span style='background-color: #fff5b1'>[MS EASM 관리자]</span> Codespaces와 인증서 준비
 
 - **환경 준비:** 저장소 **Code → Codespaces → Create codespace**에서 엽니다.
 - **인증서 생성:** 아래 명령을 실행하고 개인키 암호는 안전하게 보관합니다.
 
 ```bash
 umask 077
-cert_dir="$HOME/.config/wasm-agent/auth-$(date -u +%Y%m%dT%H%M%SZ)-$$"
-mkdir -p "$HOME/.config/wasm-agent"
+cert_dir="$HOME/.config/easm-agent/auth-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+mkdir -p "$HOME/.config/easm-agent"
 mkdir -m 700 "$cert_dir" || exit 1
 openssl req -x509 -newkey rsa:3072 -sha256 -days 90 \
-  -subj '/CN=wasmagent-diagnostic' \
+  -subj '/CN=easmagent-diagnostic' \
   -keyout "$cert_dir/private-key.pem" -out "$cert_dir/public-cert.pem"
 cat "$cert_dir/private-key.pem" "$cert_dir/public-cert.pem" > "$cert_dir/diagnostic.pem"
 chmod 600 "$cert_dir/private-key.pem" "$cert_dir/diagnostic.pem"
-mkdir -p .wasm-agent
-printf '%s\n' "$cert_dir/diagnostic.pem" > .wasm-agent/certificate-path
+mkdir -p .easm-agent
+printf '%s\n' "$cert_dir/diagnostic.pem" > .easm-agent/certificate-path
 ```
 
-- **고객 전달:** 프로젝트에 포함된 [**customer-setup.zip**](docs/downloads/customer-setup.zip) ([바로 다운로드](https://github.com/wonsungso/ms-internal-wasm-project/raw/refs/heads/main/docs/downloads/customer-setup.zip)) 파일과 위에서 만든 **public-cert.pem**을 전달합니다.
+- **고객 전달:** 프로젝트에 포함된 [**customer-setup.zip**](docs/downloads/customer-setup.zip) ([바로 다운로드](https://github.com/wonsungso/ms-internal-easm-project/raw/refs/heads/main/docs/downloads/customer-setup.zip)) 파일과 위에서 만든 **public-cert.pem**을 전달합니다.
 
 ## Step 2. <span style='background-color: #dcffe4'>[고객사 담당자]</span> 진단 앱 등록
 
-- **앱 등록:** [Azure Portal](https://portal.azure.com) → **Microsoft Entra ID → 앱 등록 → 새 등록**에서 이름은 `wasmagent-diagnostic`, 계정 유형은 **Single tenant**로 등록합니다.
+- **앱 등록:** [Azure Portal](https://portal.azure.com) → **Microsoft Entra ID → 앱 등록 → 새 등록**에서 이름은 `easmagent-diagnostic`, 계정 유형은 **Single tenant**로 등록합니다.
 
 ![앱 등록 위치](docs/imgs/07-register-sp.png)
 
@@ -62,7 +62,7 @@ printf '%s\n' "$cert_dir/diagnostic.pem" > .wasm-agent/certificate-path
 | Azure | `Cost Management Reader` | 승인 구독 |
 | Azure | `Log Analytics Reader` | 승인 구독 |
 | Azure | `Security Reader` | 승인 구독 |
-| Foundry 사용자 지정 역할 | `WASMAgent Foundry Evidence Reader v2` | 승인 구독의 프로젝트에 상속 |
+| Foundry 사용자 지정 역할 | `EASMAgent Foundry Evidence Reader v2` | 승인 구독의 프로젝트에 상속 |
 | Graph 애플리케이션 권한 | `AgentIdentity.Read.All` | 테넌트, 관리자 동의 필요 |
 | Graph 애플리케이션 권한 | `AgentIdentityBlueprint.Read.All` | 테넌트, 관리자 동의 필요 |
 | Graph 애플리케이션 권한 | `Application.Read.All` | 테넌트, 관리자 동의 필요 |
@@ -72,7 +72,7 @@ printf '%s\n' "$cert_dir/diagnostic.pem" > .wasm-agent/certificate-path
 - **최소 권한 유지:** 진단 앱에는 Owner·Contributor를 부여하지 않습니다.
 
 - **실행 환경 준비:** **Python 3.11 이상과 Azure CLI가 있는 승인된 Bash 환경**을 사용합니다.
-- **파일 압축 해제:** MS WASM 관리자로부터 전달받은 [**customer-setup.zip**](docs/downloads/customer-setup.zip) ([바로 다운로드](https://github.com/wonsungso/ms-internal-wasm-project/raw/refs/heads/main/docs/downloads/customer-setup.zip)) 파일을 아래 명령으로 압축 해제합니다.
+- **파일 압축 해제:** MS EASM 관리자로부터 전달받은 [**customer-setup.zip**](docs/downloads/customer-setup.zip) ([바로 다운로드](https://github.com/wonsungso/ms-internal-easm-project/raw/refs/heads/main/docs/downloads/customer-setup.zip)) 파일을 아래 명령으로 압축 해제합니다.
 
 ```bash
 python3 -m zipfile -e customer-setup.zip customer-setup
@@ -91,7 +91,7 @@ cat > setup.json <<'EOF'
     "<승인 구독 3 ID>"
   ],
   "account_type": "service-principal",
-  "account_name": "wasmagent-diagnostic",
+  "account_name": "easmagent-diagnostic",
   "client_id": "<진단 앱의 애플리케이션(클라이언트) ID>"
 }
 EOF
@@ -134,7 +134,7 @@ bash setup.sh apply
 
 ### Foundry 사용자 지정 역할 설정
 
-- **Foundry 역할:** 스크립트로 역할을 생성한 뒤 같은 IAM 화면에서 **WASMAgent Foundry Evidence Reader v2**를 선택합니다.
+- **Foundry 역할:** 스크립트로 역할을 생성한 뒤 같은 IAM 화면에서 **EASMAgent Foundry Evidence Reader v2**를 선택합니다.
 
 ![Foundry 사용자 지정 읽기 역할 선택](docs/imgs/17-foundry-reader.png)
 
@@ -156,7 +156,7 @@ bash setup.sh apply
 
 ![Security Reader 선택](docs/imgs/16-security-reader.png)
 
-- **Foundry 권한 확인:** 스크립트가 생성한 **WASMAgent Foundry Evidence Reader v2**를 선택하고 **View → JSON** 또는 **Permissions → DataActions**에서 아래 읽기 권한 3개만 있는지 확인합니다.
+- **Foundry 권한 확인:** 스크립트가 생성한 **EASMAgent Foundry Evidence Reader v2**를 선택하고 **View → JSON** 또는 **Permissions → DataActions**에서 아래 읽기 권한 3개만 있는지 확인합니다.
 
 | Foundry DataActions 전체 이름 |
 | --- |
@@ -175,13 +175,13 @@ bash setup.sh apply
 - **권한 누락 시:** **Entra 점검도 필수입니다.** 권한이 빠지면 해당 항목은 **판정 보류**로 표시하며, 권한을 보완한 뒤 다시 수집합니다.
 </details>
 
-## Step 4. <span style='background-color: #fff5b1'>[MS WASM 관리자]</span> 점검과 수집
+## Step 4. <span style='background-color: #fff5b1'>[MS EASM 관리자]</span> 점검과 수집
 
-- **준비:** 고객이 반환한 `setup.json`을 저장소의 **.wasm-agent/setup.json**으로 저장합니다.
+- **준비:** 고객이 반환한 `setup.json`을 저장소의 **.easm-agent/setup.json**으로 저장합니다.
 - **실행:** **Step 1에서 사용한 동일 Codespaces 터미널**에서 아래를 실행합니다. Step 1의 개인키 암호를 재입력합니다.
 
 ```bash
-cd /workspaces/ms-internal-wasm-project
+cd /workspaces/ms-internal-easm-project
 
 export AZURE_TENANT_ID='<고객 테넌트 ID>'
 export AZURE_CLIENT_ID='<진단 앱의 애플리케이션(클라이언트) ID>'
@@ -192,7 +192,7 @@ unset AZURE_CLIENT_SECRET AZURE_FEDERATED_TOKEN_FILE
 
 AZURE_CLIENT_CERTIFICATE_PATH="$(python3 scripts/certificate_path.py)" &&
 bash scripts/setup.sh verify --certificate-path "$AZURE_CLIENT_CERTIFICATE_PATH" &&
-wasm-agent collect --setup-file .wasm-agent/setup.json --output-dir output
+easm-agent collect --setup-file .easm-agent/setup.json --output-dir output
 ```
 
 ![Codespaces 점검·수집 완료 예시](docs/imgs/21-codespaces-collection-success.png)
@@ -225,10 +225,10 @@ bash setup.sh cleanup-apply  # 진단 앱·SP·해당 역할 할당 삭제, 미�
 | 담당 | 정리할 항목 | 수행 방법 |
 | --- | --- | --- |
 | 고객 | 진단 SP의 Azure 역할 할당 | 정리 스크립트가 승인 구독 IAM의 해당 SP 할당을 먼저 회수하고 잔여 여부 확인 |
-| 고객 | 진단 앱·SP·등록 인증서·Graph 동의 | Entra → 앱 등록 → `wasmagent-diagnostic` → **Delete** 후 확인. 홈 테넌트 SP도 함께 삭제되며 엔터프라이즈 애플리케이션에서 잔여 여부 확인 |
-| 고객 | Foundry 사용자 지정 역할 정의 | 재사용 계획이 없고 다른 활성·적격 할당도 없을 때만 `WASMAgent Foundry Evidence Reader v2` 삭제 |
+| 고객 | 진단 앱·SP·등록 인증서·Graph 동의 | Entra → 앱 등록 → `easmagent-diagnostic` → **Delete** 후 확인. 홈 테넌트 SP도 함께 삭제되며 엔터프라이즈 애플리케이션에서 잔여 여부 확인 |
+| 고객 | Foundry 사용자 지정 역할 정의 | 재사용 계획이 없고 다른 활성·적격 할당도 없을 때만 `EASMAgent Foundry Evidence Reader v2` 삭제 |
 | 고객 | 고객 VM의 전달 파일·관리자 세션 | 보관할 setup.json을 MS에 전달한 뒤 ZIP·압축 해제 파일·공개 인증서를 정리. 진단용 CLI 세션 로그아웃·임시 PIM 활성화 종료 |
-| MS | 개인키·인증서·암호·경로 기록 | Step 1 인증서 폴더와 .wasm-agent/certificate-path 정리, 인증 관련 환경변수 해제. 저장한 암호·임시 인증 설정도 정리 |
+| MS | 개인키·인증서·암호·경로 기록 | Step 1 인증서 폴더와 .easm-agent/certificate-path 정리, 인증 관련 환경변수 해제. 저장한 암호·임시 인증 설정도 정리 |
 | 고객/MS | 보고서·증적·다운로드·공유 사본 | 승인된 보관 기간과 감사 요건에 따라 output·evidence·setup.json·공유 사본 폐기. 전용 Codespaces도 보관 필요가 없으면 삭제 |
 
 ## 점검 항목 (System Evidence 31개)
@@ -285,7 +285,7 @@ bash setup.sh cleanup-apply  # 진단 앱·SP·해당 역할 할당 삭제, 미�
 - [config/custom-config.yaml](config/custom-config.yaml): workers·tags·projects 등 수집 기술 설정. 없어도 기본 수집 가능.
 - [고객 권한 설정 ZIP](docs/downloads/customer-setup.zip): 권한 설정·정리용 파일 4개. 스크립트 변경 후 `python -m scripts.package_customer_setup`으로 갱신
 
-두 파일은 저장소의 `config/` 폴더에서 관리합니다. 별도 기준 파일은 `wasm-agent collect --criteria <기준.yaml> --config <고객설정.yaml>`로 지정합니다. 수집 기본값은 `config/criteria.yaml`과 `config/custom-config.yaml`이며, 기준 파일이 없는 설치 환경은 배포 패키지에 포함한 기본 기준을 사용합니다. 명시한 기준 파일이 없거나 YAML이 잘못되면 오류로 종료합니다.
+두 파일은 저장소의 `config/` 폴더에서 관리합니다. 별도 기준 파일은 `easm-agent collect --criteria <기준.yaml> --config <고객설정.yaml>`로 지정합니다. 수집 기본값은 `config/criteria.yaml`과 `config/custom-config.yaml`이며, 기준 파일이 없는 설치 환경은 배포 패키지에 포함한 기본 기준을 사용합니다. 명시한 기준 파일이 없거나 YAML이 잘못되면 오류로 종료합니다.
 
 기본 LangChain 탐지(`agent-type: langchain` 또는 이름의 `langchain`·`lc-agent`)는 유지됩니다. `tags`에는 추가로 찾을 **Azure 리소스 태그의 key: value**를 한 개만 입력해도 됩니다.
 
@@ -313,7 +313,7 @@ Level 문장과 규칙을 변경한 경우 평가 템플릿도 함께 갱신합�
 <details>
 <summary>Excel 보고서만 다시 만들기</summary>
 
-`wasm-agent package --output-dir output`을 실행합니다. 최신 실행 폴더의 `raw-data-<타임스탬프>.json`에서 `report-<타임스탬프>.xlsx`를 재생성합니다.
+`easm-agent package --output-dir output`을 실행합니다. 최신 실행 폴더의 `raw-data-<타임스탬프>.json`에서 `report-<타임스탬프>.xlsx`를 재생성합니다.
 
 </details>
 

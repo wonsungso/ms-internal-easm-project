@@ -1,7 +1,7 @@
 region: koreacentral
 generation: demo-redeploy-20261104
 budget_usd: 100
-resource_group_prefix: rg-wasmagent-lab
+resource_group_prefix: rg-easmagent-lab
 project_name: governance-lab
 deployment_name: governance-small-model
 model: gpt-4.1-nano

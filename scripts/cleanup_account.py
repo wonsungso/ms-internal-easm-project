@@ -26,9 +26,9 @@ def load_target(path: Path) -> dict[str, Any]:
     for key in ("tenant_id", "client_id", "principal_id"):
         target[key] = str(uuid.UUID(target[key]))
     if target.get("account_type") != "service-principal" or not re.fullmatch(
-        r"wasmagent-diagnostic(?:[-_][A-Za-z0-9_-]+)?", target.get("account_name", ""),
+        r"easmagent-diagnostic(?:[-_][A-Za-z0-9_-]+)?", target.get("account_name", ""),
     ):
-        raise ValueError("진단 전용 wasmagent-diagnostic 앱만 정리할 수 있습니다. 데모 ID는 삭제하지 않습니다.")
+        raise ValueError("진단 전용 easmagent-diagnostic 앱만 정리할 수 있습니다. 데모 ID는 삭제하지 않습니다.")
     subscriptions = target.get("subscription_ids")
     if not isinstance(subscriptions, list) or not subscriptions:
         raise ValueError("승인 subscription_ids가 필요합니다.")

@@ -3,9 +3,9 @@
 var builtInDefinitionId = '/providers/Microsoft.Authorization/policyDefinitions/0725b4dd-7e76-479c-a735-68e7ee23d5ca'
 
 resource assignment 'Microsoft.Authorization/policyAssignments@2024-05-01' = {
-  name: 'wasmagent-demo-cs-public-access'
+  name: 'easmagent-demo-cs-public-access'
   properties: {
-    displayName: '[DEMO] wasmagent - Cognitive Services public network access (audit only)'
+    displayName: '[DEMO] easmagent - Cognitive Services public network access (audit only)'
     description: 'Demo assignment for governance validation. Audit effect, DoNotEnforce: nothing is blocked.'
     policyDefinitionId: builtInDefinitionId
     enforcementMode: 'DoNotEnforce'

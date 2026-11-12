@@ -1,6 +1,7 @@
 .venv/
 .venv-*/
-.wasm-agent/
+.easm-agent/
+.azure/
 /build/
 __pycache__/
 .pytest_cache/

@@ -9,14 +9,14 @@ import pytest
 from openpyxl import load_workbook
 from openpyxl.utils import range_boundaries
 
-from wasm_agent.azure import AccessError, EvidenceStore, ReaderHTTP
-from wasm_agent.collect_agent365 import (
+from easm_agent.azure import AccessError, EvidenceStore, ReaderHTTP
+from easm_agent.collect_agent365 import (
     REGISTRY_URL,
     Agent365Collector,
     agent365_observations,
     crosscheck_agent365,
 )
-from wasm_agent.models import (
+from easm_agent.models import (
     Agent365Package,
     AgentEvidence,
     Collection,
@@ -25,7 +25,7 @@ from wasm_agent.models import (
     Finding,
     load_criteria,
 )
-from wasm_agent.report_excel import write_workbook
+from easm_agent.report_excel import write_workbook
 
 NOW = datetime(2026, 11, 9, tzinfo=UTC)
 IDENTITY = "11111111-1111-4111-8111-111111111111"
@@ -137,7 +137,7 @@ def test_opaque_next_links_and_429_retry_use_existing_read_only_client() -> None
     session.request.side_effect = responses
     credential = Mock()
     credential.get_token.return_value.token = "fixture-token"
-    with patch("wasm_agent.azure.time.sleep"):
+    with patch("easm_agent.azure.time.sleep"):
         result = Agent365Collector(ReaderHTTP(credential, session=session), NOW).discover()
     assert [row.package_id for row in result.agent365_packages] == ["first", "last"]
     assert all(call.args[0] == "GET" for call in session.request.call_args_list)

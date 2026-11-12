@@ -9,8 +9,8 @@ import pytest
 import requests
 from azure.core.exceptions import ClientAuthenticationError
 
+from easm_agent.azure import credential_token
 from scripts import verify_permissions as verify
-from wasm_agent.azure import credential_token
 
 SID = "11111111-1111-4111-8111-111111111111"
 TENANT = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
@@ -299,12 +299,12 @@ def test_preflight_distinguishes_unchecked_targets_from_actual_failures(
     if code == 0:
         from pathlib import Path
 
-        from wasm_agent.cli import main as collect_main
-        from wasm_agent.report import latest_raw, load_result
+        from easm_agent.cli import main as collect_main
+        from easm_agent.report import latest_raw, load_result
 
         output = tmp_path / "output"
         fixture = Path(__file__).parent / "fixtures" / "three_subscriptions.json"
-        with patch("wasm_agent.cli.DefaultAzureCredential", side_effect=AssertionError("No Azure calls")):
+        with patch("easm_agent.cli.DefaultAzureCredential", side_effect=AssertionError("No Azure calls")):
             assert collect_main(["collect", "--fixture", str(fixture), "--output-dir", str(output)]) == 0
         raw = latest_raw(output)
         assert raw is not None

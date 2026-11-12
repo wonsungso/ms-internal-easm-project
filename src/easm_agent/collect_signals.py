@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import urlencode
 
-from wasm_agent.azure import ARM, GRAPH_URL, LOG_SCOPE, AccessError, ReaderHTTP, issue
-from wasm_agent.models import (
+from easm_agent.azure import ARM, GRAPH_URL, LOG_SCOPE, AccessError, ReaderHTTP, issue
+from easm_agent.models import (
     HOSTED_AGENT_PLATFORMS,
     Budget,
     Collection,
@@ -196,7 +197,7 @@ class SignalCollector:
             query = (
                 f"AppServiceConsoleLogs | where TimeGenerated >= ago({inactivity}d) "
                 r"| extend event=parse_json(extract(@'(\{.*\})',1,ResultDescription)) "
-                "| where tostring(event.event) == 'wasmagent.sample.completed' "
+                "| where tostring(event.event) == 'easmagent.sample.completed' "
                 "| extend agent_id=tostring(event.agent_id), input_tokens=tolong(event.input_tokens),"
                 "output_tokens=tolong(event.output_tokens) "
                 f"| summarize calls_30d=countif(TimeGenerated >= ago({usage_days}d)),"
@@ -231,7 +232,7 @@ class SignalCollector:
                             if self.http.last_ref:
                                 agent.evidence_refs.append(self.http.last_ref)
                             if agent.usage_30d.tokens is None:
-                                from wasm_agent.models import FieldStatus
+                                from easm_agent.models import FieldStatus
 
                                 agent.field_status["usage_30d.tokens"] = FieldStatus(
                                     reason="not_found", detail="사용량 이벤트에 토큰 수가 누락됨",
@@ -279,9 +280,20 @@ class SignalCollector:
         result.facts["resource_metrics"] = signals
 
     def security(self, sid: str, result: Collection) -> None:
+        ids = self.ai_ids(sid)
+        if not ids:
+            raise AccessError("not_found", "보안 권고를 평가할 현재 AI 리소스가 없음")
+        targets = " or ".join(
+            f"(assessment_target == {json.dumps(rid)} or assessment_target startswith {json.dumps(rid + '/')})"
+            for rid in sorted(ids)
+        )
         page = self.http.request("POST", GRAPH_URL, body={
             "subscriptions": [sid],
-            "query": "securityresources | where type =~ 'microsoft.security/assessments' | project id,properties",
+            "query": (
+                "securityresources | where type =~ 'microsoft.security/assessments' "
+                "| extend assessment_target=tolower(tostring(properties.resourceDetails.Id)) "
+                f"| where {targets} | project id,properties"
+            ),
             "options": {"resultFormat": "objectArray", "$top": 1000},
         })
         if page.get("$skipToken") or str(page.get("resultTruncated", "")).lower() == "true":
@@ -291,7 +303,6 @@ class SignalCollector:
             raise AccessError("error", "보안 Resource Graph data 배열 없음")
         if self.http.last_ref:
             result.facts.setdefault("security_evidence_refs", []).append(self.http.last_ref)
-        ids = self.ai_ids(sid)
         for row in rows:
             properties = row.get("properties") or {}
             target = (properties.get("resourceDetails") or {}).get("Id") or ""

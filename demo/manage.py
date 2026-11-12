@@ -16,10 +16,11 @@ from openai import OpenAIError
 
 from demo.auth import TemporaryCertificate
 from demo.infrastructure import deploy, deployment_parameters, plan
+from easm_agent.azure import redact
+from easm_agent.models import load_yaml
+from easm_agent.paths import state_path
+from easm_agent.report import load_result
 from scripts.setup_account import ROLES, AzureCLI, ensure_assignment, ensure_graph_roles
-from wasm_agent.azure import redact
-from wasm_agent.models import load_yaml
-from wasm_agent.report import load_result
 
 
 def validate(cli: Any, setup: dict, options: dict, root: Path, prepare_providers: bool) -> int:
@@ -28,7 +29,7 @@ def validate(cli: Any, setup: dict, options: dict, root: Path, prepare_providers
         "python": sys.version.split()[0], "recipe": "AZCLI with Bicep",
         "checks": [],
     }
-    proof_path = root / ".wasm-agent" / "demo" / "validation.json"
+    proof_path = state_path(root, "demo", "validation.json")
     proof_path.parent.mkdir(parents=True, exist_ok=True)
     proof_path.write_text(json.dumps(proof, indent=2), encoding="utf-8")
     for command in [
@@ -97,7 +98,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def cleanup_main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="별도 승인 후 실행하는 샘플 전용 정리. 기본값은 dry-run.")
-    parser.add_argument("--setup-file", type=Path, default=ROOT / ".wasm-agent" / "setup.json")
+    parser.add_argument("--setup-file", type=Path, default=state_path(ROOT, "setup.json"))
     parser.add_argument("--lab-config", type=Path, default=ROOT / "demo" / "config.yaml")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-lab-id")
@@ -116,7 +117,7 @@ def cleanup_main(argv: list[str] | None = None) -> int:
         if not existing:
             print(f"이미 없는 샘플 그룹: {group['name']}")
             continue
-        if (existing.get("tags") or {}).get("wasmagent-lab") != lab["lab_id"]:
+        if (existing.get("tags") or {}).get("easmagent-lab") != lab["lab_id"]:
             raise ValueError("소유 태그가 다릅니다. 어떤 그룹도 삭제하지 않았습니다.")
         verified.append(group)
     for group in verified:
@@ -129,7 +130,7 @@ def cleanup_main(argv: list[str] | None = None) -> int:
                 raise RuntimeError("삭제 명령 후에도 샘플 그룹이 남아 있습니다.")
             print(f"삭제 완료 재확인: {group['name']}")
     if args.apply:
-        state = ROOT / ".wasm-agent" / "demo"
+        state = state_path(ROOT, "demo")
         state.mkdir(parents=True, exist_ok=True)
         proof = {
             "lab_id": lab["lab_id"], "deleted_at": datetime.now(UTC).isoformat(),
@@ -159,8 +160,8 @@ def child(command: list[str], environment: dict[str, str] | None = None) -> int:
 def offline() -> None:
     if child(["-m", "pytest", "-q"]):
         raise RuntimeError("오프라인 테스트 실패; Azure 샘플 배포를 시작하지 않습니다.")
-    if child(["-m", "wasm_agent.cli", "collect", "--fixture", "tests/fixtures/three_subscriptions.json",
-              "--output-dir", ".wasm-agent/mock"]):
+    if child(["-m", "easm_agent.cli", "collect", "--fixture", "tests/fixtures/three_subscriptions.json",
+              "--output-dir", ".easm-agent/mock"]):
         raise RuntimeError("오프라인 fixture Run-through 실패")
 
 
@@ -170,19 +171,19 @@ def collect_live(setup: dict, lab: dict, cli: AzureCLI, options: dict) -> int:
     settings: dict = {
         "tenant_id": setup["tenant_id"], "expected_principal_id": setup["principal_id"],
         "subscriptions": setup["subscription_ids"],
-        "evidence_dir": str(ROOT / ".wasm-agent" / "evidence"),
+        "evidence_dir": str(state_path(ROOT, "evidence")),
         "projects": [{"subscription_id": setup["subscription_ids"][0],
                       "resource_id": lab["project_id"], "endpoint": lab["project_endpoint"]}],
         "allowed_models": [{"name": lab["model"], "version": lab["model_version"]}],
     }
-    state = ROOT / ".wasm-agent" / "demo"
+    state = state_path(ROOT, "demo")
     state.mkdir(parents=True, exist_ok=True)
     config_path = state / "lab-collection.yaml"
     config_path.write_text(yaml.safe_dump(settings, allow_unicode=True), encoding="utf-8")
     projects_path = state / "lab-projects.json"
     save(projects_path, settings["projects"])
     with TemporaryCertificate(setup) as environment:
-        command = ["-m", "wasm_agent.cli", "collect", "--config", str(config_path),
+        command = ["-m", "easm_agent.cli", "collect", "--config", str(config_path),
                    "--output-dir", str(ROOT / "output")]
         if options.get("collect_all_subscriptions"):
             command.append("--all-subscriptions")
@@ -248,7 +249,7 @@ def collect_live(setup: dict, lab: dict, cli: AzureCLI, options: dict) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="관리자 샘플 준비와 진단 Reader Run-through 분리 실행")
     parser.add_argument("command", choices=["plan", "test", "validate", "deploy", "collect", "all", "cleanup"])
-    parser.add_argument("--setup-file", type=Path, default=ROOT / ".wasm-agent" / "setup.json")
+    parser.add_argument("--setup-file", type=Path, default=state_path(ROOT, "setup.json"))
     parser.add_argument("--lab-config", type=Path, default=ROOT / "demo" / "config.yaml")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--prepare-providers", action="store_true")
@@ -256,7 +257,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--confirm-lab-id")
     args = parser.parse_args(argv)
     logging.getLogger("azure").setLevel(logging.WARNING)
-    output = ROOT / ".wasm-agent" / "demo"
+    output = state_path(ROOT, "demo")
     output.mkdir(parents=True, exist_ok=True)
     started = datetime.now(UTC).isoformat()
     try:
@@ -281,9 +282,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.command in ("deploy", "all"):
             if not args.apply:
                 raise ValueError("샘플 배포에는 승인 확인용 --apply가 필요합니다.")
-            validation = ROOT / ".wasm-agent" / "demo" / "validation.json"
+            validation = state_path(ROOT, "demo", "validation.json")
             if not validation.is_file() or not json.loads(validation.read_text())["passed"]:
-                raise ValueError("배포 전 검증 .wasm-agent/demo/validation.json passed=true가 필요합니다.")
+                raise ValueError("배포 전 검증 .easm-agent/demo/validation.json passed=true가 필요합니다.")
         if args.command == "all":
             offline()
         cli = AzureCLI()

@@ -29,15 +29,16 @@ from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
 from azure.identity import DefaultAzureCredential
 from openai import APIStatusError
 
+from easm_agent.azure import redact
+from easm_agent.paths import state_path
 from scripts.setup_account import ensure_assignment, role_spec, verify_custom_role
-from wasm_agent.azure import redact
 
 
 def build_linux_package(root: Path) -> Path:
     dependencies = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))[
         "project"
     ]["optional-dependencies"]["demo"]
-    archive = root / ".wasm-agent" / "demo" / "langchain-sample.zip"
+    archive = state_path(root, "demo", "langchain-sample.zip")
     archive.parent.mkdir(parents=True, exist_ok=True)
     requirements_text = "\n".join(dependencies) + "\n"
     sources = {
@@ -68,7 +69,7 @@ def build_linux_package(root: Path) -> Path:
                 ):
                     print("검증된 CPython 3.11 Linux 패키지 재사용", flush=True)
                     return archive
-                with tempfile.TemporaryDirectory(prefix="wasmagent-repack-") as directory:
+                with tempfile.TemporaryDirectory(prefix="easmagent-repack-") as directory:
                     refreshed = Path(directory) / "sample.zip"
                     with zipfile.ZipFile(refreshed, "w", zipfile.ZIP_DEFLATED) as bundle:
                         for item in existing.infolist():
@@ -83,7 +84,7 @@ def build_linux_package(root: Path) -> Path:
                 print("검증된 Linux 의존성은 유지하고 변경한 챗봇 소스만 다시 패키징", flush=True)
                 return archive
         print("패키지 입력이 변경되어 Linux 의존성을 다시 준비합니다.", flush=True)
-    with tempfile.TemporaryDirectory(prefix="wasmagent-wheel-") as directory:
+    with tempfile.TemporaryDirectory(prefix="easmagent-wheel-") as directory:
         temporary = Path(directory)
         requirements = temporary / "requirements.txt"
         requirements.write_text(requirements_text, encoding="utf-8")
@@ -212,7 +213,7 @@ class AdminARM:
     def ensure(self, rid: str, version: str, body: dict[str, Any], lab_id: str,
                child: bool = False) -> dict[str, Any]:
         existing = self.request("GET", rid, version)
-        if existing and not child and (existing.get("tags") or {}).get("wasmagent-lab") != lab_id:
+        if existing and not child and (existing.get("tags") or {}).get("easmagent-lab") != lab_id:
             raise RuntimeError("동명 리소스의 샘플 소유 태그가 다릅니다. 덮어쓰지 않습니다.")
         if not existing:
             if not self.create_missing:
@@ -244,11 +245,11 @@ def plan(setup: dict[str, Any], options: dict[str, Any]) -> dict[str, Any]:
     ]
     return {
         "lab_id": lab_id, "region": region, "groups": groups,
-        "account_name": f"wasmagent-{lab_id}", "project_name": options["project_name"],
+        "account_name": f"easmagent-{lab_id}", "project_name": options["project_name"],
         "deployment_name": options["deployment_name"], "model": options["model"],
         "model_version": options["model_version"], "sku": options["model_sku"], "capacity": options["model_capacity"],
         "extra_models": options.get("extra_models", []),
-        "host_names": [f"wasmagent-lc-{lab_id}-02", f"wasmagent-lc-{lab_id}-03"],
+        "host_names": [f"easmagent-lc-{lab_id}-02", f"easmagent-lc-{lab_id}-03"],
         "retention_days": options["retention_days"], "after_run": options["after_run"],
         "budget_usd": options["budget_usd"],
         "b1_plans_usd_per_hour": 0.036,
@@ -298,7 +299,7 @@ def deploy(
     if current["tenantId"].lower() != setup["tenant_id"]:
         raise ValueError("관리자 테넌트 불일치. 디바이스 코드로 올바른 테넌트에 로그인하세요.")
     lab_id, groups = result["lab_id"], result["groups"]
-    tags = {"wasmagent-lab": lab_id, "owner": "governance-sample-team",
+    tags = {"easmagent-lab": lab_id, "owner": "governance-sample-team",
             "sponsor": "governance-sample", "env": "test", "cost-center": "governance-lab"}
     for index, group in enumerate(groups):
         sid = group["subscription_id"]
@@ -314,7 +315,7 @@ def deploy(
                 cli.run("provider", "register", "--namespace", namespace, "--subscription", sid, "--wait")
         existing = next((row for row in cli.run("group", "list", "--subscription", sid)
                          if row["name"].lower() == group["name"]), None)
-        if existing and (existing.get("tags") or {}).get("wasmagent-lab") != lab_id:
+        if existing and (existing.get("tags") or {}).get("easmagent-lab") != lab_id:
             raise RuntimeError("샘플 그룹 이름이 기존 다른 그룹과 충돌합니다.")
         if reuse_infrastructure and not existing:
             raise RuntimeError("재사용할 샘플 그룹이 없습니다.")
@@ -325,7 +326,7 @@ def deploy(
                     "microsoft.cognitiveservices/accounts/raipolicies",
                 ):
                     continue
-                if (resource.get("tags") or {}).get("wasmagent-lab") != lab_id:
+                if (resource.get("tags") or {}).get("easmagent-lab") != lab_id:
                     raise RuntimeError("샘플 그룹 안에 소유 태그가 다른 리소스가 있습니다. 덮어쓰지 않습니다.")
         print(f"샘플 인프라 {'재사용' if reuse_infrastructure else '배포'}: 구독 {index + 1}/3, "
               f"workload={'foundry' if index == 0 else 'langchain'}",
@@ -333,7 +334,7 @@ def deploy(
         if not reuse_infrastructure:
             cli.run(
                 "deployment", "sub", "create", "--subscription", sid, "--location", region,
-                "--name", f"wasmagent-lab-{lab_id}-{index + 1}",
+                "--name", f"easmagent-lab-{lab_id}-{index + 1}",
                 "--template-file", str(root / "demo" / "main.bicep"),
                 "--parameters", *deployment_parameters(result, index),
             )
@@ -441,7 +442,7 @@ def deploy(
                 raise RuntimeError(
                     f"Foundry 샘플 Agent 생성/조회 실패: HTTP {exc.status_code}; 원문 비출력"
                 ) from exc
-        workspace_id = base + "/providers/Microsoft.OperationalInsights/workspaces/wasmagent-observability"
+        workspace_id = base + "/providers/Microsoft.OperationalInsights/workspaces/easmagent-observability"
         workspace = arm.ensure(workspace_id, "2022-10-01", {
             "location": region, "tags": {**tags, "agent-type": "shared-observability"},
             "properties": {"sku": {"name": "PerGB2018"}, "retentionInDays": result["retention_days"],
@@ -454,7 +455,7 @@ def deploy(
             "workspace_customer_id": workspace["properties"]["customerId"],
             "hosts": [],
         })
-        partial_path = root / ".wasm-agent" / "demo" / "lab.partial.json"
+        partial_path = state_path(root, "demo", "lab.partial.json")
         partial_path.parent.mkdir(parents=True, exist_ok=True)
         partial_path.write_text(json.dumps(redact(result), ensure_ascii=False, indent=2), encoding="utf-8")
         hosts = []
@@ -480,7 +481,7 @@ def deploy(
                 )
             else:
                 site = next(site for site in existing_sites if site["name"] == name)
-                if (site.get("tags") or {}).get("wasmagent-lab") != lab_id:
+                if (site.get("tags") or {}).get("easmagent-lab") != lab_id:
                     raise RuntimeError("동명 웹 앱의 소유 태그 불일치")
             principal = (site.get("identity") or {}).get("principalId")
             if not principal:
@@ -493,7 +494,7 @@ def deploy(
                 "PYTHONPATH": "/home/site/wwwroot:/home/site/wwwroot/.python_packages/lib/site-packages",
                 "AZURE_OPENAI_ENDPOINT": model_endpoint,
                 "AZURE_OPENAI_DEPLOYMENT": result["deployment_name"],
-                "WASMAGENT_AGENT_ID": name, "WASMAGENT_SMOKE_ON_START": "true",
+                "EASMAGENT_AGENT_ID": name, "EASMAGENT_SMOKE_ON_START": "true",
             }
             cli.run(
                 "webapp", "config", "appsettings", "set", "--name", name,
@@ -510,7 +511,7 @@ def deploy(
                 "--subscription", sid, "--startup-file",
                 "gunicorn --chdir /home/site/wwwroot --bind=0.0.0.0 --timeout 120 --workers 1 app:app",
             )
-            arm.request("PUT", site_id + "/providers/Microsoft.Insights/diagnosticSettings/wasmagent-sample",
+            arm.request("PUT", site_id + "/providers/Microsoft.Insights/diagnosticSettings/easmagent-sample",
                         "2021-05-01-preview", {"properties": {
                             "workspaceId": workspace_id,
                             "logs": [{"category": "AppServiceConsoleLogs", "enabled": True}],
@@ -553,7 +554,7 @@ def deploy(
             cli.run(
                 "webapp", "config", "appsettings", "set", "--name", name,
                 "--resource-group", group["name"], "--subscription", sid,
-                "--settings", "WASMAGENT_SMOKE_ON_START=false",
+                "--settings", "EASMAGENT_SMOKE_ON_START=false",
             )
             hosts.append({
                 "id": site_id, "name": name, "health_url": health, "smoke": smoke_state,

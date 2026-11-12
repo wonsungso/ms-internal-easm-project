@@ -13,8 +13,8 @@ from openpyxl import load_workbook
 from openpyxl.utils.cell import range_boundaries
 from openpyxl.worksheet.worksheet import Worksheet
 
-from wasm_agent.cli import main
-from wasm_agent.models import (
+from easm_agent.cli import main
+from easm_agent.models import (
     AgentEvidence,
     AssessmentMeasurement,
     Collection,
@@ -25,7 +25,7 @@ from wasm_agent.models import (
     LogSetting,
     TargetAssessment,
 )
-from wasm_agent.report import (
+from easm_agent.report import (
     digest,
     json_bytes,
     latest_raw,
@@ -34,8 +34,8 @@ from wasm_agent.report import (
     report_name,
     write_reports,
 )
-from wasm_agent.report_excel import write_workbook
-from wasm_agent.report_template import CRITERIA_SHEET, RESULT_SHEET
+from easm_agent.report_excel import write_workbook
+from easm_agent.report_template import CRITERIA_SHEET, RESULT_SHEET
 
 ROOT = Path(__file__).parents[1]
 EXTRA_SHEETS = [
@@ -50,7 +50,7 @@ SECRETS = (
     "secret-value", "nested-secret", "facts-secret", "private-person", "private-sponsor",
     "private-owner", "someone@example.invalid", "do-not-export", "api-key-in-evidence",
 )
-NO_AZURE = patch("wasm_agent.cli.DefaultAzureCredential", side_effect=AssertionError("no Azure calls"))
+NO_AZURE = patch("easm_agent.cli.DefaultAzureCredential", side_effect=AssertionError("no Azure calls"))
 
 
 def sample() -> Collection:
@@ -85,7 +85,7 @@ def finding(**changes: object) -> Finding:
 
 
 def test_audit_summary_and_target_table_do_not_promote_pending_results(tmp_path: Path) -> None:
-    from wasm_agent.provenance import assessment_provenance
+    from easm_agent.provenance import assessment_provenance
 
     data = sample()
     data.assessment_provenance = assessment_provenance(
@@ -326,7 +326,10 @@ def test_attached_evidence_is_masked_embedded_and_referenced_by_hash(tmp_path: P
     assert result["findings"][0]["evidence_refs"] == ["evidence:" + identifier]
     assert result["collection"]["facts"]["evidence_directory"] == "embedded:evidence"
     assert result["provenance"]["unattached_evidence"] == []
-    assert result["provenance"]["references"][0]["reference"] == str(source.resolve())
+    assert result["provenance"]["references"][0]["reference"] == "evidence:" + identifier
+    assert result["provenance"]["references"][0]["reference_sha256"] == hashlib.sha256(
+        str(source.resolve()).encode("utf-8"),
+    ).hexdigest()
     book = load_workbook(workbook)
     assert json.loads(raw_record(book, "Agent Raw 데이터")["evidence_refs"].value) == ["evidence:" + identifier]
     values = [c.value for sheet in book for row in sheet.iter_rows()
@@ -428,7 +431,7 @@ def test_failed_replace_preserves_existing_files_and_leaves_no_pending_files(tmp
     (output / "unrelated.txt").write_bytes(b"keep")
     originals = {path.relative_to(output): path.read_bytes() for path in output.rglob("*") if path.is_file()}
     data.agents[0].agent_name = "new name"
-    with patch("wasm_agent.report.os.replace", side_effect=OSError("locked")), pytest.raises(OSError):
+    with patch("easm_agent.report.os.replace", side_effect=OSError("locked")), pytest.raises(OSError):
         write_reports(data, [], output)
     assert {path.relative_to(output): path.read_bytes() for path in output.rglob("*") if path.is_file()} == originals
     assert not [path for path in output.rglob("*") if "pending" in path.name]
@@ -436,7 +439,7 @@ def test_failed_replace_preserves_existing_files_and_leaves_no_pending_files(tmp
 
 def test_failed_replace_on_first_write_leaves_empty_output(tmp_path: Path) -> None:
     output = tmp_path / "fresh"
-    with patch("wasm_agent.report.os.replace", side_effect=OSError("locked")), pytest.raises(OSError):
+    with patch("easm_agent.report.os.replace", side_effect=OSError("locked")), pytest.raises(OSError):
         write_reports(sample(), [], output)
     assert list(output.iterdir()) == []
 
@@ -457,10 +460,10 @@ def test_repeated_collection_timestamp_creates_distinct_runs_without_overwrite(t
 
 
 def test_run_collision_uses_sequence_and_latest_discovery_is_numeric(tmp_path: Path) -> None:
-    from wasm_agent.report import create_run_directory
+    from easm_agent.report import create_run_directory
 
     fixed = datetime(2026, 11, 5, 1, 2, 3, 456789, tzinfo=UTC)
-    with patch("wasm_agent.report.datetime", wraps=datetime) as clock:
+    with patch("easm_agent.report.datetime", wraps=datetime) as clock:
         clock.now.return_value = fixed
         runs = [create_run_directory(tmp_path) for _ in range(12)]
     for run in runs:
@@ -472,7 +475,7 @@ def test_run_collision_uses_sequence_and_latest_discovery_is_numeric(tmp_path: P
 
 def test_new_report_names_match_run_stamp_including_collision_suffix(tmp_path: Path) -> None:
     fixed = datetime(2026, 11, 5, 1, 2, 3, 456789, tzinfo=UTC)
-    with patch("wasm_agent.report.datetime", wraps=datetime) as clock:
+    with patch("easm_agent.report.datetime", wraps=datetime) as clock:
         clock.now.return_value = fixed
         first = write_reports(sample(), [], tmp_path)
         second = write_reports(sample(), [], tmp_path)

@@ -16,7 +16,7 @@ from urllib.parse import parse_qs, urlsplit
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:
-    from wasm_agent.models import Collection
+    from easm_agent.models import Collection
 
 POLICY_REVISION = "demo-governance-v1"
 RUNTIME_REVISION = "chatbot-governance-v1"
@@ -268,7 +268,7 @@ class PolicyProof(StrictModel):
 
 def read_collection_file(path: Path) -> tuple[Collection, dict[str, Any]]:
     """Accept an explicit Collection or schema-v1 export; malformed wrappers never fall back."""
-    from wasm_agent.models import Collection
+    from easm_agent.models import Collection
 
     document = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(document, dict):

@@ -3,8 +3,8 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass
 
-from wasm_agent.api_grading import targets
-from wasm_agent.models import AZURE_AGENT_PLATFORMS, AgentEvidence, Collection
+from easm_agent.api_grading import targets
+from easm_agent.models import AZURE_AGENT_PLATFORMS, AgentEvidence, Collection
 
 
 @dataclass(frozen=True)

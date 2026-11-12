@@ -27,7 +27,7 @@ from demo.infrastructure import (
 )
 from demo.manage import cleanup_main as cleanup
 from demo.manage import main
-from wasm_agent.models import load_yaml
+from easm_agent.models import load_yaml
 
 ROOT = Path(__file__).parents[1]
 
@@ -57,8 +57,8 @@ def test_demo_shell_keeps_collection_opt_in(
         pytest.skip("Bash가 설치된 개발 환경에서 실행")
     interpreter = tmp_path / "fake-python.sh"
     interpreter.write_text(
-        '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$WASM_AGENT_TEST_CALLS"\n'
-        'if [[ "$*" == "$WASM_AGENT_TEST_FAILURE" ]]; then exit 9; fi\n'
+        '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$EASM_AGENT_TEST_CALLS"\n'
+        'if [[ "$*" == "$EASM_AGENT_TEST_FAILURE" ]]; then exit 9; fi\n'
         'if [[ "$*" == "-m demo.manage collect" ]]; then exit 2; fi\n',
         encoding="utf-8",
     )
@@ -67,8 +67,8 @@ def test_demo_shell_keeps_collection_opt_in(
     result = subprocess.run(
         [bash, (ROOT / "demo" / "run.sh").as_posix(), *arguments],
         env={
-            **os.environ, "WASM_AGENT_PYTHON": interpreter.as_posix(),
-            "WASM_AGENT_TEST_CALLS": calls.as_posix(), "WASM_AGENT_TEST_FAILURE": fail_command,
+            **os.environ, "EASM_AGENT_PYTHON": interpreter.as_posix(),
+            "EASM_AGENT_TEST_CALLS": calls.as_posix(), "EASM_AGENT_TEST_FAILURE": fail_command,
         },
         capture_output=True, text=True, encoding="utf-8", check=False,
     )
@@ -205,7 +205,7 @@ def test_demo_plan_does_not_require_diagnostic_identity() -> None:
     setup = setup_values()
     setup.pop("client_id")
     setup.pop("principal_id")
-    setup["account_name"] = "wasmagent-diagnostic"
+    setup["account_name"] = "easmagent-diagnostic"
     options = load_yaml(ROOT / "demo" / "config.yaml")
     result = plan(setup, options)
     assert result == plan(setup, options)
@@ -240,7 +240,7 @@ def test_fresh_demo_expansion_creates_receipt_parents(tmp_path: Path) -> None:
 
     from demo.agents import expand
 
-    demo = tmp_path / ".wasm-agent" / "demo"
+    demo = tmp_path / ".easm-agent" / "demo"
     demo.mkdir(parents=True)
     (demo.parent / "setup.json").write_text(json.dumps(setup_values()), encoding="utf-8")
     (demo / "lab.json").write_text(json.dumps({"lab_id": "fresh-demo"}), encoding="utf-8")
@@ -299,7 +299,7 @@ def test_cleanup_dry_run_does_not_delete_owned_groups(tmp_path: Path) -> None:
     cli = Mock()
     cli.run.side_effect = [
         {"tenantId": setup["tenant_id"]},
-        *[[{"name": group["name"], "tags": {"wasmagent-lab": lab["lab_id"]}}] for group in lab["groups"]],
+        *[[{"name": group["name"], "tags": {"easmagent-lab": lab["lab_id"]}}] for group in lab["groups"]],
     ]
     with patch("demo.manage.AzureCLI", return_value=cli):
         assert cleanup(["--setup-file", str(settings)]) == 0
@@ -366,7 +366,7 @@ def test_codespace_name_cannot_inject_shell() -> None:
 
 
 def test_remote_key_is_removed_on_collection_failure(tmp_path: Path) -> None:
-    output = tmp_path / ".wasm-agent"
+    output = tmp_path / ".easm-agent"
     output.mkdir()
     (output / "setup.json").write_text(json.dumps({
         "tenant_id": "tenant", "client_id": "client", "principal_id": "reader",
@@ -382,8 +382,8 @@ def test_remote_key_is_removed_on_collection_failure(tmp_path: Path) -> None:
     def cli(*args, **kwargs):
         commands.append(args)
         if "mktemp" in args[-1]:
-            return subprocess.CompletedProcess(args, 0, "/home/vscode/wasm-agent-auth-12345678\n", "")
-        if "WASM_COLLECTION_EXIT" in args[-1]:
+            return subprocess.CompletedProcess(args, 0, "/home/vscode/easm-agent-auth-12345678\n", "")
+        if "EASM_COLLECTION_EXIT" in args[-1]:
             raise RuntimeError("fixture remote failure")
         return subprocess.CompletedProcess(args, 0, "", "")
 
@@ -394,12 +394,12 @@ def test_remote_key_is_removed_on_collection_failure(tmp_path: Path) -> None:
         with pytest.raises(RuntimeError, match="fixture remote failure"):
             remote.run("approved-codespace")
         certificate.return_value.__exit__.assert_called_once()
-    assert any("rm -f /home/vscode/wasm-agent-auth-12345678/credential.pem" in cmd[-1] for cmd in commands)
+    assert any("rm -f /home/vscode/easm-agent-auth-12345678/credential.pem" in cmd[-1] for cmd in commands)
 
 
 @pytest.mark.parametrize("run_folder", ["", "20261105T010203456789Z/"])
 def test_codespace_download_uses_validated_ssh_stream(tmp_path: Path, run_folder: str) -> None:
-    output = tmp_path / ".wasm-agent"
+    output = tmp_path / ".easm-agent"
     output.mkdir()
     (output / "setup.json").write_text(json.dumps({
         "tenant_id": "tenant", "client_id": "client", "principal_id": "reader",
@@ -423,9 +423,9 @@ def test_codespace_download_uses_validated_ssh_stream(tmp_path: Path, run_folder
         command = args[-1]
         text = ""
         if "mktemp" in command:
-            text = "/home/vscode/wasm-agent-auth-12345678\n"
-        elif "WASM_COLLECTION_EXIT" in command:
-            text = "WASM_COLLECTION_EXIT=2\n"
+            text = "/home/vscode/easm-agent-auth-12345678\n"
+        elif "EASM_COLLECTION_EXIT" in command:
+            text = "EASM_COLLECTION_EXIT=2\n"
         elif "latest_raw" in command:
             base = "output/" + run_folder
             text = json.dumps([base + name, base + raw_file])
@@ -556,7 +556,7 @@ def test_source_only_repack_reuses_verified_dependencies(tmp_path: Path) -> None
     (tmp_path / "pyproject.toml").write_text(
         '[project.optional-dependencies]\ndemo = ["fixture==1"]\n', encoding="utf-8",
     )
-    output = tmp_path / ".wasm-agent" / "demo"
+    output = tmp_path / ".easm-agent" / "demo"
     output.mkdir(parents=True)
     archive = output / "langchain-sample.zip"
     native = ".python_packages/lib/site-packages/native.so"

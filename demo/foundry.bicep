@@ -9,7 +9,7 @@ param modelSku string
 param modelCapacity int
 param retentionDays int
 param extraModels array = []
-param raiPolicyName string = 'wasmagent-demo-content-filter'
+param raiPolicyName string = 'easmagent-demo-content-filter'
 
 resource account 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
   name: accountName
@@ -118,7 +118,7 @@ resource extra 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = [
 }]
 
 resource workspace 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
-  name: 'wasmagent-observability'
+  name: 'easmagent-observability'
   location: location
   tags: union(tags, {
     'agent-type': 'shared-observability'

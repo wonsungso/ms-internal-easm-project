@@ -12,11 +12,11 @@ from openpyxl import load_workbook
 from openpyxl.cell.rich_text import CellRichText, TextBlock
 from openpyxl.utils import range_boundaries
 
-from wasm_agent import report_template
-from wasm_agent.models import DEFAULT_TAGS, Collection, Finding, load_criteria
-from wasm_agent.proposals import evaluate_proposals
-from wasm_agent.report_excel import _emphasize_evidence, _evidence_needs_expansion, write_workbook
-from wasm_agent.report_template import (
+from easm_agent import report_template
+from easm_agent.models import DEFAULT_TAGS, Collection, Finding, load_criteria
+from easm_agent.proposals import evaluate_proposals
+from easm_agent.report_excel import _emphasize_evidence, _evidence_needs_expansion, write_workbook
+from easm_agent.report_template import (
     COLLECTION_METHODS,
     CRITERIA_SHEET,
     RESULT_SHEET,
@@ -329,10 +329,10 @@ def test_evidence_labels_and_numbers_are_bold_and_cause_column_is_removed(tmp_pa
 
 def test_installed_template_location_is_supported(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     source = assessment_template_path()
-    installed = tmp_path / "prefix" / "share" / "wasm-agent" / report_template.TEMPLATE_NAME
+    installed = tmp_path / "prefix" / "share" / "easm-agent" / report_template.TEMPLATE_NAME
     installed.parent.mkdir(parents=True)
     copyfile(source, installed)
-    monkeypatch.setattr(report_template, "__file__", str(tmp_path / "site-packages" / "wasm_agent" / "module.py"))
+    monkeypatch.setattr(report_template, "__file__", str(tmp_path / "site-packages" / "easm_agent" / "module.py"))
     monkeypatch.setattr(report_template.sysconfig, "get_path", lambda name: str(tmp_path / "prefix"))
     assert assessment_template_path() == installed
 
@@ -340,7 +340,7 @@ def test_installed_template_location_is_supported(tmp_path: Path, monkeypatch: p
 def test_missing_template_does_not_silently_change_report_layout(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(report_template, "__file__", str(tmp_path / "site-packages" / "wasm_agent" / "module.py"))
+    monkeypatch.setattr(report_template, "__file__", str(tmp_path / "site-packages" / "easm_agent" / "module.py"))
     monkeypatch.setattr(report_template.sysconfig, "get_path", lambda name: str(tmp_path / "prefix"))
     with pytest.raises(FileNotFoundError, match="평가 결과 템플릿"):
         assessment_template_path()

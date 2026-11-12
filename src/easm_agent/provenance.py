@@ -7,8 +7,8 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, Literal
 
-from wasm_agent.azure import redact
-from wasm_agent.models import AssessmentProvenance
+from easm_agent.azure import redact
+from easm_agent.models import AssessmentProvenance
 
 
 def digest(value: Any) -> str:
@@ -23,7 +23,7 @@ def assessment_provenance(
     snapshot = redact(criteria)
     convention_snapshot = redact(conventions)
     try:
-        collector_version = version("wasm-agent")
+        collector_version = version("easm-agent")
     except PackageNotFoundError:
         collector_version = "unavailable - package metadata not installed"
     package = Path(__file__).parent

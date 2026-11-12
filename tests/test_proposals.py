@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from unittest.mock import Mock
 
-from wasm_agent.azure import AccessError
-from wasm_agent.collect_proposals import ProposalCollector
-from wasm_agent.models import (
+from easm_agent.azure import AccessError
+from easm_agent.collect_proposals import ProposalCollector
+from easm_agent.models import (
     AgentEvidence,
     Budget,
     Collection,
@@ -15,7 +15,7 @@ from wasm_agent.models import (
     Settings,
     load_conventions,
 )
-from wasm_agent.proposals import DOMAINS, TITLES, evaluate_proposals
+from easm_agent.proposals import DOMAINS, TITLES, evaluate_proposals
 
 NOW = datetime(2026, 11, 4, tzinfo=UTC)
 SID = "11111111-1111-4111-8111-111111111111"

@@ -20,6 +20,7 @@
 | 자체 Agent 탐지 | 기본 LangChain 조건에 `tags`의 임의 key:value OR 조건을 추가. 승인 구독의 App Service·Container Apps·AKS만 대상. 사용자 태그만 일치하면 `custom` 후보로 분류하고 기존 호스트 점검 적용. 태그는 실제 Agent·프레임워크 실행 증명이 아님 |
 | 승인 경계 | 지정 테넌트의 접근 가능한 구독을 기본 열거하고 CLI·설정의 승인 범위를 적용. 외부 workspace·청구 범위 접근을 자동 확대하지 않음 |
 | 실행 신원 | 진단 SP의 DefaultAzureCredential. Reader 중심 GET 및 Resource Graph·비용·로그의 읽기 query POST만 허용 |
+| 보안 권고 범위 | 현재 발견한 AI 관련 리소스와 그 하위 리소스로 Resource Graph 요청부터 제한. 삭제된 리소스·무관한 대상의 권고는 원본 증적에 포함하지 않으며, 응답도 같은 범위로 다시 확인 |
 | 관리자 예외 | `scripts/setup.sh`, `setup_account.py`, 정리 스크립트와 demo만 승인된 배포·역할·일회성 인증 준비 수행. 수집기에서 import 금지 |
 | 결과 번호 | `assessment_revision: 5`는 01~31 순번. Demand 01~03, Design 04~09, Build 10~16, Deploy 17~19, Operate 20~26, Optimize 27~31 |
 | 호환성 | 이전 revision 4는 항목·점수·증거 귀속을 보존해 한 번 변환. 더 오래된 결과는 위험 Agent·Red team 제거와 구 번호 변환을 먼저 수행 |
@@ -33,6 +34,7 @@
 | `findings[].measurement` | 분자·분모, 개수/금액 구분, 통화, 계산 완료 여부와 보류 사유. 실패·미확인·빈 분모는 계산값 `null` 유지 |
 | `measurement.targets[]` | 대상 식별자, 실제 확인 값, 충족·미충족·미확인·계산 제외 상태, 계산 기여값과 증적 참조. 부분 관측값은 종합 점수가 아님 |
 | `collection.evidence_sources` | API 요청 주소와 증적 참조의 연결. 페이지가 여러 개인 조회도 같은 원천의 증적을 찾아 연결 |
+| `provenance.references` | 연결된 증적은 `evidence:<SHA256>`로 표시. 로컬 절대 경로 대신 참조 키의 SHA256을 보관해 재패키징 시 연결 유지 |
 | `collection.assessment_provenance` | 평가 시각, 마스킹된 유효 평가 기준·태그 규약의 사본과 SHA256, 수집기 패키지 버전·Python 소스 묶음의 SHA256 |
 | Excel 6번 상단 | 등급 산정·판정 보류·결과 없음 및 조회 이슈 요약. L5는 API 구성·기록 조건 100% 충족이며 조직 전체 성숙도·정책 실효성의 증명이 아님 |
 | Excel 7번 | 항목 요약·전체 리소스 목록·대상별 판정·평가 출처. 비용은 건수가 아닌 금액·통화로 확인 |
@@ -110,7 +112,7 @@
 | 집계 | 인터뷰 54개·SE 31개 구조 유지. 시트 5 실제 집계는 시트 4 입력 기준이며 빈칸·N/A 제외. 4개 인터뷰 관점·SE 확보 시 영역, 6개 영역 확보 시 종합 산정 |
 | 괴리 보정 | 인터뷰 평균 - SE 평균 >= 1.5이면 SE 평균 + 1.0으로 하향 보정, 소수 첫째 자리 반올림. 미확보를 0으로 보간하지 않음 |
 | 템플릿 갱신 | `python -m scripts.merge_assessment --source <검토할-xlsx> --output <다른-경로.xlsx>`. 검토 후 사용하며 원본 덮어쓰기 금지. 패키지에도 템플릿 포함, 누락 시 오류 |
-| 기존 결과 | `wasm-agent package --output-dir output`은 최신 실행의 Excel만 재생성. 특정 실행 폴더·기존 평면 구조 지원. 기존 파일명·판정 보존, 현재 기준으로 재채점하지 않음 |
+| 기존 결과 | `easm-agent package --output-dir output`은 최신 실행의 Excel만 재생성. 특정 실행 폴더·기존 평면 구조 지원. 기존 파일명·판정 보존, 현재 기준으로 재채점하지 않음 |
 
 ## 고객 셋업·정리 계약
 
@@ -118,20 +120,20 @@
 - 고객에게는 [customer-setup.zip](downloads/customer-setup.zip)의 `setup.sh`, `setup_account.py`, `foundry-reader.json`, `cleanup_account.py` 4개 실행 파일과 고객별 공개 인증서를 별도 전달합니다. ZIP에 setup.json·개인키·인증서·수집기를 포함하지 않습니다.
 - `python -m scripts.package_customer_setup`으로 현재 소스에서 ZIP을 다시 만듭니다. LF 줄바꿈·고정 파일 목록을 사용하며 테스트는 ZIP·소스 일치와 압축 해제한 고객 폴더의 다중 구독 plan 실행을 확인합니다.
 - 고객은 Python 3.11 이상·Azure CLI가 있는 승인된 Bash 환경에서 `bash setup.sh login/plan/apply`를 사용하고 완료한 `setup.json`만 MS에 반환합니다. Python 표준 라이브러리만 사용하며 저장소·수집기 패키지를 요구하지 않습니다. 고객은 관리자 인증 정보나 개인키를 MS에 전달하지 않습니다.
-- 고객 폴더는 같은 위치의 setup.json을 기본 입출력으로 사용하고 저장소 내부는 `.wasm-agent/setup.json`을 유지합니다. `verify`는 별도 진단 모듈·개인키가 필요해 MS 저장소에서만 실행하며 고객 폴더에서는 거부합니다.
+- 고객 폴더는 같은 위치의 setup.json을 기본 입출력으로 사용하고 저장소 내부는 `.easm-agent/setup.json`을 유지합니다. `verify`는 별도 진단 모듈·개인키가 필요해 MS 저장소에서만 실행하며 고객 폴더에서는 거부합니다.
 - `plan`은 계정 식별자의 실제 존재를 조회하지 않습니다. `apply`는 Client ID로 SP를 조회해 앱 이름·반환 Client ID·SP 개체 ID를 검증합니다. principal_id는 생략 가능하며 잘못된 이전 값은 검증한 ID로 보정 사실을 안내하고 성공 후 저장합니다. Client ID 조회·이름 검증 실패 시 이름 기반 대체·새 SP 생성 없이 쓰기 전 중단합니다. Client ID 없는 기존 명시 SP 방식은 유지합니다.
 
 | 권한 구분 | 관리자 apply 계약 |
 | --- | --- |
 | Azure 읽기 | 승인 구독마다 Reader·Cost Management Reader·Log Analytics Reader·Security Reader |
-| Foundry 읽기 | `WASMAgent Foundry Evidence Reader v2`를 승인 구독에 할당해 기존·이후 프로젝트에 상속. `--foundry-project-scopes`로 승인 프로젝트 제한 가능 |
+| Foundry 읽기 | `EASMAgent Foundry Evidence Reader v2`를 승인 구독에 할당해 기존·이후 프로젝트에 상속. `--foundry-project-scopes`로 승인 프로젝트 제한 가능 |
 | Foundry DataActions | `agents/read·evaluations/read·assets/read` 3개만. 역할 생성·할당은 관리자 예외이며 수집기가 수행하지 않음 |
 | Graph 앱 읽기 | `AgentIdentity.Read.All`, `AgentIdentityBlueprint.Read.All`, `Application.Read.All`, `CopilotPackages.Read.All` 및 테넌트 관리자 동의 |
 | 최소 권한 | 진단 SP에 Owner·Contributor·Foundry User 등 쓰기 역할 부여 금지. Graph 관리자 동의 권한은 구독 역할 할당 권한과 별개 |
 
 - Graph 읽기 권한은 앱의 `requiredResourceAccess`에도 추가한 뒤 동의해 Configured permissions와 실제 appRoleAssignments를 맞춥니다. 기존 다른 API 권한은 보존하고 필요한 `Role`만 추가·동의합니다. [Azure CLI API 권한 추가](https://learn.microsoft.com/en-us/cli/azure/ad/app/permission?view=azure-cli-latest#az-ad-app-permission-add).
 - Graph appRoleAssignments POST 실패는 Azure 역할 부여 성공과 별도로 동의 미완료로 표시합니다. 활성 Privileged Role Administrator/Global Administrator 등 동의 권한이 필요하고 Global Reader로는 불가합니다. PIM 활성화 후 `bash setup.sh login --login-resource graph`로 토큰을 갱신하고 재실행합니다. Azure CLI 오류는 승인한 고정 코드만 표시하고 본문·토큰은 출력하지 않습니다. [Graph appRoleAssignment 권한](https://learn.microsoft.com/en-us/graph/api/serviceprincipal-post-approleassignments?view=graph-rest-1.0).
-- Step 1은 인증서 경로만 `.wasm-agent/certificate-path`에 기록합니다. Step 4의 `scripts/certificate_path.py`는 이를 재사용합니다. 기록 없는 기존 환경에서는 `auth-*/diagnostic.pem`이 정확히 하나일 때만 선택·기록하며 부재·다중 후보·잘못된 기존 기록은 오류입니다. 개인키 내용은 읽지 않습니다.
+- Step 1은 인증서 경로만 `.easm-agent/certificate-path`에 기록합니다. Step 4의 `scripts/certificate_path.py`는 이를 재사용합니다. 기록 없는 기존 환경에서는 `auth-*/diagnostic.pem`이 정확히 하나일 때만 선택·기록하며 부재·다중 후보·잘못된 기존 기록은 오류입니다. 개인키 내용은 읽지 않습니다.
 - 사전 점검의 대상 AI 리소스 없음·프로젝트 endpoint 미지정은 `NOT_CHECKED/not_found`로 저장하며 OK가 아닙니다. 이 항목만 미점검이면 종료 0으로 수집을 이어가고 실제 DENIED·ERROR·FEATURE_UNAVAILABLE는 종료 2입니다. 정식 수집은 프로젝트를 자동 발견하며 실패·null 계약을 유지합니다.
 
 | 정리 단계 | 안전 계약 |
@@ -245,7 +247,7 @@
 - 모든 권한이 있어도 제품 기능·라이선스·데이터가 없을 수 있습니다. 403은 IAM·방화벽·Private Endpoint 모두 가능하며 permission_denied로 남기되 원인을 단정하지 않습니다. license_missing은 명시적 라이선스 상태 응답에만 사용합니다.
 - LangChain 앱 설정 list는 비밀을 반환할 수 있어 기본 수집에서 호출하지 않습니다. 승인 태그·메타데이터 또는 명시적 CSV 입력을 사용합니다.
 - 공통 AgentEvidence는 platform과 필드별 null 사유로 플랫폼 차이를 보존합니다. 같은 이름의 Foundry Agent도 platform·subscription_id·resource_id·agent_id 복합 키로 구분하며 비용·사용량의 공유 리소스 중복 귀속을 금지합니다.
-- `wasm-agent collect --manual-agents config/manual_agents.csv`는 manual/other 플랫폼의 직접 등록입니다. Google/AWS 자동 로그인 수집이 아닙니다. 최소 필드는 agent_id·agent_name·platform이며 날짜는 시간대 포함 ISO 8601, tags·tools·usage_30d·field_status는 JSON입니다.
+- `easm-agent collect --manual-agents config/manual_agents.csv`는 manual/other 플랫폼의 직접 등록입니다. Google/AWS 자동 로그인 수집이 아닙니다. 최소 필드는 agent_id·agent_name·platform이며 날짜는 시간대 포함 ISO 8601, tags·tools·usage_30d·field_status는 JSON입니다.
 - 빈 CSV 값은 null + not_found이며 0으로 채우지 않습니다. 수동 Agent는 인벤토리·플랫폼 개수에만 포함하고 Azure 전용 SE 분모에 섞지 않으며 CSV 행 evidence_refs로 API 실측과 구분합니다.
 - 확장 Collector Protocol은 `discover(subscriptions)`와 `required_roles`를 사용합니다. 사례 커넥터 매핑·API Management AI Gateway·OpenTelemetry gen_ai 연계는 재사용 후보이며 구현·검증 완료로 표시하지 않습니다.
 
@@ -302,18 +304,18 @@
 저장소를 준비한 별도 관리자 터미널에서 실행합니다. 환경 내보내기는 `az login --tenant <테넌트-ID>`로 로그인한 사용자만 사용하며, PowerShell 도구는 공식 모듈이 미리 설치되어 있어야 합니다.
 
 ```powershell
-python scripts\export_admin_environments.py --tenant-id <테넌트-ID> --output .wasm-agent\admin-exports\environments.json
-.\scripts\export_admin_evidence.ps1 -TenantId <테넌트-ID> -Service PowerPlatform -OutputPath .wasm-agent\admin-exports\powerplatform.json
-.\scripts\export_admin_evidence.ps1 -TenantId <테넌트-ID> -Service Purview -OutputPath .wasm-agent\admin-exports\purview.json
+python scripts\export_admin_environments.py --tenant-id <테넌트-ID> --output .easm-agent\admin-exports\environments.json
+.\scripts\export_admin_evidence.ps1 -TenantId <테넌트-ID> -Service PowerPlatform -OutputPath .easm-agent\admin-exports\powerplatform.json
+.\scripts\export_admin_evidence.ps1 -TenantId <테넌트-ID> -Service Purview -OutputPath .easm-agent\admin-exports\purview.json
 ```
 
 관리자 JSON만 전달하고 기존 결과에 반영합니다. 원래 Azure 수집 시각은 유지되며 각 관리자 조회 시각을 별도로 기록합니다. 원본 증적이 내장된 이식형 결과에는 해당 실행 폴더의 `evidence/<내보내기반영시각>/`에 새 증적을 보관합니다. 새 수집에서도 같은 `--admin-evidence-file`을 반복 지정할 수 있습니다.
 
 ```powershell
-wasm-agent package --output-dir output\<실행폴더> --tenant-id <테넌트-ID> `
-  --admin-evidence-file .wasm-agent\admin-exports\environments.json `
-  --admin-evidence-file .wasm-agent\admin-exports\powerplatform.json `
-  --admin-evidence-file .wasm-agent\admin-exports\purview.json
+easm-agent package --output-dir output\<실행폴더> --tenant-id <테넌트-ID> `
+  --admin-evidence-file .easm-agent\admin-exports\environments.json `
+  --admin-evidence-file .easm-agent\admin-exports\powerplatform.json `
+  --admin-evidence-file .easm-agent\admin-exports\purview.json
 ```
 
 - 2026-11-10 실측: 환경 API 200·접근 가능 환경 1개. 로컬 PowerApps·Exchange Online 모듈 부재로 역할·정책·Purview 활동은 미수집이며, 완료했다고 표시하지 않습니다. 공식 모듈 다운로드는 CDN TLS 연결 문제로 중단했고 검증을 우회하지 않았습니다.

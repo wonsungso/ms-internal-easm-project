@@ -5,8 +5,8 @@ import re
 from datetime import datetime
 from typing import Any
 
-from wasm_agent.azure import MSGRAPH, MSGRAPH_SCOPE, AccessError, ReaderHTTP, issue
-from wasm_agent.models import (
+from easm_agent.azure import MSGRAPH, MSGRAPH_SCOPE, AccessError, ReaderHTTP, issue
+from easm_agent.models import (
     Collection,
     EntraAgentIdentity,
     EntraBlueprint,

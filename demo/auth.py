@@ -90,7 +90,7 @@ class GraphCertificates:
         current = self.certificates()
         current.append({
             "keyId": key_id, "type": "AsymmetricX509Cert", "usage": "Verify",
-            "displayName": "CN=wasmagent-temporary-validation",
+            "displayName": "CN=easmagent-temporary-validation",
             "key": base64.b64encode(certificate.public_bytes(serialization.Encoding.DER)).decode("ascii"),
             "startDateTime": start.isoformat(), "endDateTime": end.isoformat(),
         })
@@ -138,11 +138,11 @@ class TemporaryCertificate:
 
     def __enter__(self) -> dict[str, str]:
         try:
-            self.directory = Path(tempfile.mkdtemp(prefix="wasmagent-cert-")).resolve()
+            self.directory = Path(tempfile.mkdtemp(prefix="easmagent-cert-")).resolve()
             restrict_directory(self.directory)
             private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
             now = datetime.now(UTC)
-            subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "wasmagent-temporary-validation")])
+            subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "easmagent-temporary-validation")])
             certificate = (
                 x509.CertificateBuilder().subject_name(subject).issuer_name(subject)
                 .public_key(private_key.public_key()).serial_number(x509.random_serial_number())

@@ -16,9 +16,9 @@ import requests
 from azure.core.exceptions import ClientAuthenticationError
 from azure.identity import AzureCliCredential
 
-from wasm_agent.azure import redact
-from wasm_agent.collect_admin_evidence import ENVIRONMENTS_URL
-from wasm_agent.models import AdminEnvironment, AdminEvidenceExport, AdminReadResult
+from easm_agent.azure import redact
+from easm_agent.collect_admin_evidence import ENVIRONMENTS_URL
+from easm_agent.models import AdminEnvironment, AdminEvidenceExport, AdminReadResult
 
 SCOPE = "https://api.powerplatform.com/.default"
 

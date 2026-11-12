@@ -12,17 +12,17 @@ import pytest
 from openpyxl import load_workbook
 from pydantic import ValidationError
 
-from scripts.export_admin_environments import export_environments
-from wasm_agent.azure import EvidenceStore
-from wasm_agent.cli import main
-from wasm_agent.collect_admin_evidence import (
+from easm_agent.azure import EvidenceStore
+from easm_agent.cli import main
+from easm_agent.collect_admin_evidence import (
     ENVIRONMENTS_URL,
     admin_observations,
     read_admin_evidence,
 )
-from wasm_agent.models import AdminEvidenceExport, Collection, Finding
-from wasm_agent.report import load_result, write_reports
-from wasm_agent.report_excel import write_workbook
+from easm_agent.models import AdminEvidenceExport, Collection, Finding
+from easm_agent.report import load_result, write_reports
+from easm_agent.report_excel import write_workbook
+from scripts.export_admin_environments import export_environments
 
 NOW = datetime(2026, 11, 9, tzinfo=UTC)
 TENANT = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
@@ -130,11 +130,11 @@ def test_package_rejects_fixture_admin_import_before_writing_evidence(
     tmp_path: Path, recorded_mode: str, requested_mode: str,
 ) -> None:
     data = Collection(collected_at=NOW)
-    with patch("wasm_agent.cli.latest_raw", return_value=tmp_path / "raw.json"), patch(
-        "wasm_agent.cli.load_result", return_value={
+    with patch("easm_agent.cli.latest_raw", return_value=tmp_path / "raw.json"), patch(
+        "easm_agent.cli.load_result", return_value={
             "collection": data.model_dump(mode="json"), "findings": [], "mode": recorded_mode,
         },
-    ), patch("wasm_agent.cli.read_admin_evidence") as read:
+    ), patch("easm_agent.cli.read_admin_evidence") as read:
         assert main([
             "package", "--output-dir", str(tmp_path), "--mode", requested_mode,
             "--admin-evidence-file", str(tmp_path / "admin.json"),
@@ -144,11 +144,11 @@ def test_package_rejects_fixture_admin_import_before_writing_evidence(
 
 def test_package_requires_existing_evidence_root(tmp_path: Path) -> None:
     data = Collection(collected_at=NOW, facts={"evidence_directory": str(tmp_path / "missing")})
-    with patch("wasm_agent.cli.latest_raw", return_value=tmp_path / "raw.json"), patch(
-        "wasm_agent.cli.load_result", return_value={
+    with patch("easm_agent.cli.latest_raw", return_value=tmp_path / "raw.json"), patch(
+        "easm_agent.cli.load_result", return_value={
             "collection": data.model_dump(mode="json"), "findings": [], "mode": "live",
         },
-    ), patch("wasm_agent.cli.read_admin_evidence") as read:
+    ), patch("easm_agent.cli.read_admin_evidence") as read:
         assert main([
             "package", "--output-dir", str(tmp_path), "--tenant-id", TENANT,
             "--admin-evidence-file", str(tmp_path / "admin.json"),

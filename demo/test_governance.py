@@ -27,12 +27,12 @@ from demo.governance import (
     read_collection_file,
     run_self_test,
 )
-from wasm_agent.models import AgentEvidence, Budget, Collection
+from easm_agent.models import AgentEvidence, Budget, Collection
 
 
 @pytest.fixture
 def work_directory():
-    directory = Path(".wasm-agent") / ("governance-tests-" + uuid.uuid4().hex)
+    directory = Path(".easm-agent") / ("governance-tests-" + uuid.uuid4().hex)
     directory.mkdir(parents=True)
     try:
         yield directory
@@ -147,7 +147,7 @@ sys.path.extend(json.loads(sys.argv[1]))
 sys.path.insert(0, ".")
 assert all(Path(value).resolve() not in excluded for value in sys.path)
 original_import = builtins.__import__
-collector_only = {"wasm_agent", "demo", "yaml"}
+collector_only = {"easm_agent", "demo", "yaml"}
 
 def guarded_import(name, *args, **kwargs):
     if name.split(".")[0] in collector_only:
@@ -174,7 +174,7 @@ with app.app.test_client() as client:
 '''
     environment = dict(os.environ)
     environment.update({
-        "WASMAGENT_SMOKE_ON_START": "false",
+        "EASMAGENT_SMOKE_ON_START": "false",
         "AZURE_OPENAI_ENDPOINT": "https://synthetic.invalid",
         "AZURE_AI_PROJECT_ENDPOINT": "",
     })
@@ -499,13 +499,13 @@ def test_required_budget_amount_must_be_explicit_positive_number(amount) -> None
 
 def test_app_control_paths_are_real_and_auth_protected(monkeypatch: pytest.MonkeyPatch) -> None:
     chat = pytest.importorskip("demo.app", exc_type=ImportError)
-    monkeypatch.setenv("WASMAGENT_CHAT_ALLOWED_OIDS", "allowed-user,other-user")
-    monkeypatch.setenv("WASMAGENT_LOCAL_AGENT", "langchain-tools")
+    monkeypatch.setenv("EASMAGENT_CHAT_ALLOWED_OIDS", "allowed-user,other-user")
+    monkeypatch.setenv("EASMAGENT_LOCAL_AGENT", "langchain-tools")
     monkeypatch.delenv("WEBSITE_HOSTNAME", raising=False)
     chat.governance.clear()
     headers = {
         "X-MS-CLIENT-PRINCIPAL-ID": "allowed-user", "Origin": "http://localhost",
-        "X-WASMAgent-Chat": "1",
+        "X-EASMAgent-Chat": "1",
     }
     try:
         with chat.app.test_client() as client:

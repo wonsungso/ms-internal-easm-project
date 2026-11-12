@@ -8,7 +8,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.utils import range_boundaries
 from openpyxl.worksheet.worksheet import Worksheet
 
-from wasm_agent.models import (
+from easm_agent.models import (
     AgentEvidence,
     Collection,
     EntraAgentIdentity,
@@ -16,8 +16,8 @@ from wasm_agent.models import (
     ModelDeployment,
     ProposalObservation,
 )
-from wasm_agent.report_excel import write_workbook
-from wasm_agent.report_resources import resource_names, resource_summary
+from easm_agent.report_excel import write_workbook
+from easm_agent.report_resources import resource_names, resource_summary
 
 NOW = datetime(2026, 11, 9, tzinfo=UTC)
 SID = "11111111-1111-4111-8111-111111111111"

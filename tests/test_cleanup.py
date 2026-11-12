@@ -22,7 +22,7 @@ OTHER = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
 def target() -> dict:
     return {
         "tenant_id": TENANT, "client_id": CLIENT, "principal_id": PRINCIPAL,
-        "account_type": "service-principal", "account_name": "wasmagent-diagnostic",
+        "account_type": "service-principal", "account_name": "easmagent-diagnostic",
         "subscription_ids": [SID],
     }
 
@@ -31,7 +31,7 @@ class FakeCLI:
     def __init__(self) -> None:
         self.calls = []
         self.app, self.sp, self.role = True, True, True
-        self.name = "wasmagent-diagnostic"
+        self.name = "easmagent-diagnostic"
         self.eligible = False
         self.deny_pim = False
         self.role_delete_requested = False
@@ -162,7 +162,7 @@ def test_out_of_scope_assignment_is_not_deleted(target: dict) -> None:
     assert not cli.mutations
 
 
-@pytest.mark.parametrize("name", ["wasmagent-lc-demo-chat-login", "wasmagent-lab-AgentIdentityBlueprint"])
+@pytest.mark.parametrize("name", ["easmagent-lc-demo-chat-login", "easmagent-lab-AgentIdentityBlueprint"])
 def test_demo_names_are_rejected_before_cloud_calls(tmp_path: Path, target: dict, name: str) -> None:
     target["account_name"] = name
     path = tmp_path / "setup.json"

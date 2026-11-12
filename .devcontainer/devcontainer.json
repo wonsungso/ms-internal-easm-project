@@ -14,7 +14,7 @@
   "remoteEnv": {
     "VIRTUAL_ENV": "${containerWorkspaceFolder}/.venv",
     "PATH": "${containerWorkspaceFolder}/.venv/bin:${containerEnv:PATH}",
-    "WASM_AGENT_PYTHON": "${containerWorkspaceFolder}/.venv/bin/python"
+    "EASM_AGENT_PYTHON": "${containerWorkspaceFolder}/.venv/bin/python"
   },
   "customizations": {
     "vscode": {

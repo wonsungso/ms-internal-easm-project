@@ -18,7 +18,7 @@ param retentionDays int = 90
 param extraModels array = []
 
 var commonTags = {
-    'wasmagent-lab': labId
+    'easmagent-lab': labId
     owner: 'governance-sample-team'
     sponsor: 'governance-sample'
     env: 'test'
@@ -32,7 +32,7 @@ resource group 'Microsoft.Resources/resourceGroups@2024-03-01' = {
 }
 
 module foundry 'foundry.bicep' = if (workload == 'foundry') {
-  name: 'wasmagent-foundry'
+  name: 'easmagent-foundry'
   scope: group
   params: {
     location: location
@@ -50,7 +50,7 @@ module foundry 'foundry.bicep' = if (workload == 'foundry') {
 }
 
 module host 'host.bicep' = if (workload == 'langchain') {
-  name: 'wasmagent-host'
+  name: 'easmagent-host'
   scope: group
   params: {
     location: location
@@ -62,7 +62,7 @@ module host 'host.bicep' = if (workload == 'langchain') {
 }
 
 module monitor 'monitor.bicep' = {
-  name: 'wasmagent-monitor'
+  name: 'easmagent-monitor'
   scope: group
   dependsOn: [
     foundry
@@ -81,7 +81,7 @@ module monitor 'monitor.bicep' = {
 }
 
 module policy 'policy.bicep' = if (workload == 'foundry') {
-  name: 'wasmagent-policy'
+  name: 'easmagent-policy'
   scope: group
   dependsOn: [
     foundry

@@ -17,10 +17,10 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from openpyxl import load_workbook
 
+from easm_agent.models import load_criteria
+from easm_agent.proposals import DOMAINS, PRODUCTS, TITLES
 from scripts.assessment_descriptions import ITEM_DETAILS
 from scripts.proposal_levels import LEVELS
-from wasm_agent.models import load_criteria
-from wasm_agent.proposals import DOMAINS, PRODUCTS, TITLES
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_SHEET = "4. 질문별 평가 기준"

@@ -432,8 +432,8 @@ def test_entra_reader_assigns_only_missing_graph_application_roles_and_is_idempo
 
 
 def test_default_graph_roles_match_collector_and_do_not_include_retired_diagnostics() -> None:
-    from wasm_agent.collect_agent365 import Agent365Collector
-    from wasm_agent.collect_entra import EntraCollector
+    from easm_agent.collect_agent365 import Agent365Collector
+    from easm_agent.collect_entra import EntraCollector
 
     assert setup.ENTRA_GRAPH_ROLES == EntraCollector.required_roles + Agent365Collector.required_roles
     assert set(setup.ENTRA_GRAPH_ROLES) == {
@@ -572,7 +572,7 @@ def test_bash_plan_runs_end_to_end_without_azure(config_file: Path, tmp_path: Pa
     script = Path(__file__).parents[1] / "scripts" / "setup.sh"
     output = tmp_path / "result.json"
     environment = os.environ.copy()
-    environment["WASM_AGENT_PYTHON"] = sys.executable
+    environment["EASM_AGENT_PYTHON"] = sys.executable
     environment["PYTHONIOENCODING"] = "utf-8"
     result = subprocess.run([
         bash_executable(), str(script), "plan", "--config-file", str(config_file),
@@ -623,7 +623,7 @@ def test_customer_bash_plan_uses_colocated_setup_without_repository(
     shutil.copyfile(config_file, customer / "setup.json")
     original = (customer / "setup.json").read_bytes()
     environment = {
-        **os.environ, "WASM_AGENT_PYTHON": sys.executable, "PYTHONIOENCODING": "utf-8",
+        **os.environ, "EASM_AGENT_PYTHON": sys.executable, "PYTHONIOENCODING": "utf-8",
         "PYTHONDONTWRITEBYTECODE": "1",
     }
     result = subprocess.run(
@@ -635,7 +635,7 @@ def test_customer_bash_plan_uses_colocated_setup_without_repository(
     assert payload["subscription_roles"] == list(setup.DEFAULT_ROLES)
     assert payload["graph_application_roles"] == list(setup.ENTRA_GRAPH_ROLES)
     assert (customer / "setup.json").read_bytes() == original
-    assert not (tmp_path / ".wasm-agent").exists()
+    assert not (tmp_path / ".easm-agent").exists()
 
 
 @pytest.mark.parametrize("command", ["login", "apply"])
@@ -646,7 +646,7 @@ def test_customer_bash_modes_forward_colocated_input_and_output(command: str, tm
     (customer / "setup_account.py").write_text(
         "import json,sys\nprint(json.dumps(sys.argv[1:]))\n", encoding="utf-8",
     )
-    environment = {**os.environ, "WASM_AGENT_PYTHON": sys.executable}
+    environment = {**os.environ, "EASM_AGENT_PYTHON": sys.executable}
     result = subprocess.run(
         [bash_executable(), str(customer / "setup.sh"), command],
         cwd=tmp_path, env=environment, capture_output=True, text=True, encoding="utf-8", check=False,

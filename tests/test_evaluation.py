@@ -5,9 +5,9 @@ from functools import cache
 
 import pytest
 
-from wasm_agent.api_grading import Measurement, measurements, targets
-from wasm_agent.evaluation import evaluate, matches
-from wasm_agent.models import (
+from easm_agent.api_grading import Measurement, measurements, targets
+from easm_agent.evaluation import evaluate, matches
+from easm_agent.models import (
     DEFAULT_TAGS,
     AgentEvidence,
     Budget,
@@ -21,7 +21,7 @@ from wasm_agent.models import (
     ModelDeployment,
     ProposalObservation,
 )
-from wasm_agent.models import (
+from easm_agent.models import (
     load_criteria as read_criteria,
 )
 
@@ -103,8 +103,8 @@ def test_incomplete_measurement_keeps_null_counts_and_missing_targets(data: Coll
 def test_evaluation_snapshots_criteria_and_detects_later_tampering(data: Collection) -> None:
     from copy import deepcopy
 
-    from wasm_agent.models import AssessmentProvenance
-    from wasm_agent.provenance import digest
+    from easm_agent.models import AssessmentProvenance
+    from easm_agent.provenance import digest
 
     criteria = deepcopy(load_criteria())
     evaluate(data, criteria, {}, DEFAULT_TAGS, provenance_origin="saved_snapshot_reassessment")
@@ -160,7 +160,7 @@ def data() -> Collection:
             "resource_metrics": [{"resource_id": ACCOUNT, "metrics": [{"timeseries": [{"data": [{"total": 0}]}]}]}],
         },
     )
-    from wasm_agent.models import CostRecord, SecurityRecommendation
+    from easm_agent.models import CostRecord, SecurityRecommendation
 
     value.costs = [CostRecord(subscription_id=SID, resource_id=ACCOUNT, amount=10, currency="USD", usage_date="20261109")]
     value.security = [SecurityRecommendation(subscription_id=SID, resource_id=ACCOUNT,
@@ -201,8 +201,8 @@ def test_complete_api_snapshot_grades_all_22_controls_without_qualitative_inputs
 
 @pytest.mark.parametrize("reason", ["permission_denied", "license_missing", "error"])
 def test_agent365_crosscheck_failures_do_not_change_primary_grades(data: Collection, reason: str) -> None:
-    from wasm_agent.collect_agent365 import crosscheck_agent365
-    from wasm_agent.models import Issue
+    from easm_agent.collect_agent365 import crosscheck_agent365
+    from easm_agent.models import Issue
 
     before = {code: row.model_dump() for code, row in grade(data).items()}
     data.issues.append(Issue(
@@ -214,8 +214,8 @@ def test_agent365_crosscheck_failures_do_not_change_primary_grades(data: Collect
 
 
 def test_administrator_evidence_never_changes_primary_grades(data: Collection) -> None:
-    from wasm_agent.collect_admin_evidence import admin_observations
-    from wasm_agent.models import AdminReadResult
+    from easm_agent.collect_admin_evidence import admin_observations
+    from easm_agent.models import AdminReadResult
 
     before = {code: row.model_dump() for code, row in grade(data).items()}
     data.admin_evidence = [AdminReadResult(
@@ -329,7 +329,7 @@ def test_real_api_field_combinations_reach_every_level_for_all22_controls(
 def test_exact_thresholds_for_every_control(
     data: Collection, code: str, ratio: float, level: str, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from wasm_agent import evaluation
+    from easm_agent import evaluation
 
     original = measurements(data, load_criteria(), DEFAULT_TAGS)
     original[code] = Measurement(total=10000, compliant=ratio * 10000, detail="Boundary API measurement")
@@ -351,7 +351,7 @@ def test_related_collection_error_prevents_any_level(data: Collection, code: str
 def test_empty_denominator_is_not_success_or_l1(
     data: Collection, code: str, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from wasm_agent import evaluation
+    from easm_agent import evaluation
 
     original = measurements(data, load_criteria(), DEFAULT_TAGS)
     original[code] = Measurement(unavailable="대상 없음")

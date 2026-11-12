@@ -6,8 +6,8 @@ from collections import Counter
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from wasm_agent.azure import EvidenceStore
-from wasm_agent.models import AdminEvidenceExport, Collection, ProposalFinding
+from easm_agent.azure import EvidenceStore
+from easm_agent.models import AdminEvidenceExport, Collection, ProposalFinding
 
 ENVIRONMENTS_URL = "https://api.powerplatform.com/environmentmanagement/environments?api-version=2024-10-01"
 COMMANDS = {

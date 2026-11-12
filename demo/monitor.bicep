@@ -7,11 +7,11 @@ var isFoundry = workload == 'foundry'
 
 // 메일/SMS 수신자 없이 존재하지 않는 도메인의 웹훅만 둔다. 실제 사람에게 통지가 가지 않는다.
 resource actionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = {
-  name: 'wasmagent-demo-ag'
+  name: 'easmagent-demo-ag'
   location: 'global'
   tags: tags
   properties: {
-    groupShortName: 'wasmdemo'
+    groupShortName: 'easmdemo'
     enabled: true
     armRoleReceivers: [
       {
@@ -24,7 +24,7 @@ resource actionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = {
 }
 
 resource alert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
-  name: isFoundry ? 'wasmagent-demo-openai-availability' : 'wasmagent-demo-web-5xx'
+  name: isFoundry ? 'easmagent-demo-openai-availability' : 'easmagent-demo-web-5xx'
   location: 'global'
   tags: tags
   properties: {

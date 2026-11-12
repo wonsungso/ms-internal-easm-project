@@ -11,6 +11,8 @@ import pytest
 from openpyxl import load_workbook
 from openpyxl.cell.rich_text import CellRichText, TextBlock
 
+from easm_agent.models import load_criteria
+from easm_agent.proposals import DOMAINS, TITLES
 from scripts.assessment_descriptions import ITEM_DETAILS
 from scripts.merge_assessment import (
     ROOT,
@@ -22,8 +24,6 @@ from scripts.merge_assessment import (
     xml_bytes,
 )
 from scripts.proposal_levels import LEVELS
-from wasm_agent.models import load_criteria
-from wasm_agent.proposals import DOMAINS, TITLES
 
 UNTOUCHED = (
     "xl/worksheets/sheet1.xml", "xl/worksheets/sheet3.xml",

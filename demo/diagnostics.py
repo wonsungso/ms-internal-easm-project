@@ -19,10 +19,11 @@ import yaml
 
 from demo.auth import GraphCertificates, TemporaryCertificate
 from demo.manage import ROOT, save
+from easm_agent.paths import state_path
+from easm_agent.report import RUN_PATTERN, load_result
 from scripts.setup_account import AzureCLI
-from wasm_agent.report import RUN_PATTERN, load_result
 
-WORKSPACE = "/workspaces/ms-internal-wasm-project"
+WORKSPACE = "/workspaces/ms-internal-easm-project"
 
 
 def gh(*arguments: str, allowed: tuple[int, ...] = (0,)) -> subprocess.CompletedProcess[str]:
@@ -35,24 +36,24 @@ def gh(*arguments: str, allowed: tuple[int, ...] = (0,)) -> subprocess.Completed
 def run(codespace: str) -> None:
     if not re.fullmatch(r"[a-z0-9-]+", codespace):
         raise ValueError("유효한 Codespace 이름이 필요합니다.")
-    setup = json.loads((ROOT / ".wasm-agent" / "setup.json").read_text(encoding="utf-8"))
-    lab = json.loads((ROOT / ".wasm-agent" / "demo" / "lab.json").read_text(encoding="utf-8"))
+    setup = json.loads((state_path(ROOT, "setup.json")).read_text(encoding="utf-8"))
+    lab = json.loads((state_path(ROOT, "demo", "lab.json")).read_text(encoding="utf-8"))
     settings = {
         "tenant_id": setup["tenant_id"], "expected_principal_id": setup["principal_id"],
         "subscriptions": [],
-        "evidence_dir": WORKSPACE + "/.wasm-agent/evidence",
+        "evidence_dir": WORKSPACE + "/.easm-agent/evidence",
         "projects": [{"subscription_id": setup["subscription_ids"][0],
                       "resource_id": lab["project_id"], "endpoint": lab["project_endpoint"]}],
         "allowed_models": [{"name": lab["model"], "version": lab["model_version"]}],
     }
     directory = gh("codespace", "ssh", "-c", codespace, "--",
-                   "umask 077; mktemp -d /home/vscode/wasm-agent-auth-XXXXXXXX").stdout.strip()
-    if not re.fullmatch(r"/home/vscode/wasm-agent-auth-[A-Za-z0-9]{8}", directory):
+                   "umask 077; mktemp -d /home/vscode/easm-agent-auth-XXXXXXXX").stdout.strip()
+    if not re.fullmatch(r"/home/vscode/easm-agent-auth-[A-Za-z0-9]{8}", directory):
         raise RuntimeError("Codespace의 보호된 임시 경로를 확인할 수 없습니다.")
     remote_cleanup = False
     code = None
     try:
-        with tempfile.TemporaryDirectory(prefix="wasm-agent-config-") as local:
+        with tempfile.TemporaryDirectory(prefix="easm-agent-config-") as local:
             config = Path(local) / "collection.yaml"
             config.write_text(yaml.safe_dump(settings, allow_unicode=True), encoding="utf-8")
             with TemporaryCertificate(setup) as environment:
@@ -68,13 +69,13 @@ def run(codespace: str) -> None:
                         f"AZURE_TENANT_ID={shlex.quote(setup['tenant_id'])} "
                         f"AZURE_CLIENT_ID={shlex.quote(setup['client_id'])} "
                         f"AZURE_CLIENT_CERTIFICATE_PATH={directory}/credential.pem "
-                        f".venv/bin/wasm-agent collect --config {directory}/collection.yaml "
+                        f".venv/bin/easm-agent collect --config {directory}/collection.yaml "
                         "--all-subscriptions --output-dir output; "
-                        'code=$?; printf "\\nWASM_COLLECTION_EXIT=%s\\n" "$code"; '
+                        'code=$?; printf "\\nEASM_COLLECTION_EXIT=%s\\n" "$code"; '
                         'test "$code" -eq 0 || test "$code" -eq 2'
                     )
                     result = gh("codespace", "ssh", "-c", codespace, "--", command)
-                    marker = re.search(r"^WASM_COLLECTION_EXIT=([02])$", result.stdout, re.MULTILINE)
+                    marker = re.search(r"^EASM_COLLECTION_EXIT=([02])$", result.stdout, re.MULTILINE)
                     if marker is None:
                         raise RuntimeError("Codespaces 수집 종료 상태를 확인하지 못했습니다.")
                     code = int(marker[1])
@@ -84,7 +85,7 @@ def run(codespace: str) -> None:
                        f"rm -f {directory}/credential.pem {directory}/collection.yaml; rmdir {directory}")
                     remote_cleanup = True
         script = (
-            "from pathlib import Path; import json; from wasm_agent.report import latest_raw; "
+            "from pathlib import Path; import json; from easm_agent.report import latest_raw; "
             "p=latest_raw(Path('output')); "
             "assert p is not None, 'No collection result'; "
             "print(json.dumps([str(p.with_name(p.name.replace('raw-data-', 'report-').replace('.json', '.xlsx'))), str(p)]))"
@@ -122,7 +123,7 @@ def run(codespace: str) -> None:
             elif json.loads(payload).get("schema_version") != 1:
                 raise RuntimeError("Codespaces에서 받은 raw-data JSON 구성 검사 실패")
             (destination / name).write_bytes(payload)
-        save(ROOT / ".wasm-agent" / "demo" / "codespace-e2e-verification.json", {
+        save(state_path(ROOT, "demo", "codespace-e2e-verification.json"), {
             "codespace": codespace, "collection_exit_code": code, "all_subscriptions": True,
             "remote_private_key_cleaned": remote_cleanup, "temporary_certificate_cleaned": True,
             "files": [str(source) for source in sources], "administrator_collection_fallback": False,
@@ -171,7 +172,7 @@ def ready_health(url: str) -> dict:
 
 
 def summary_main() -> int:
-    state = ROOT / ".wasm-agent"
+    state = state_path(ROOT)
     setup = json.loads((state / "setup.json").read_text(encoding="utf-8"))
     lab = json.loads((state / "demo" / "lab.json").read_text(encoding="utf-8"))
     run = json.loads((state / "demo" / "runthrough.json").read_text(encoding="utf-8"))

@@ -54,7 +54,7 @@ _DOC_REL = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships
 
 def assessment_template_path() -> Path:
     source = Path(__file__).resolve().parents[2] / "docs" / TEMPLATE_NAME
-    installed = Path(sysconfig.get_path("data")) / "share" / "wasm-agent" / TEMPLATE_NAME
+    installed = Path(sysconfig.get_path("data")) / "share" / "easm-agent" / TEMPLATE_NAME
     path = source if source.is_file() else installed
     if not path.is_file():
         raise FileNotFoundError(f"평가 결과 템플릿을 찾을 수 없습니다: {path}")

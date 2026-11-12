@@ -9,7 +9,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from wasm_agent.azure import (
+from easm_agent.azure import (
     ARM,
     GRAPH_URL,
     AccessError,
@@ -18,7 +18,7 @@ from wasm_agent.azure import (
     redact,
     rejects_broad_permissions,
 )
-from wasm_agent.models import AgentEvidence, Collection
+from easm_agent.models import AgentEvidence, Collection
 
 HOSTS = {
     "microsoft.web/sites", "microsoft.app/containerapps",

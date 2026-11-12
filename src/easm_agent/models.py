@@ -373,7 +373,7 @@ class AssessmentProvenance(EvidenceModel):
 
     @model_validator(mode="after")
     def verify_snapshots(self) -> AssessmentProvenance:
-        from wasm_agent.provenance import digest
+        from easm_agent.provenance import digest
 
         for field in ("criteria", "conventions"):
             if digest(getattr(self, f"{field}_snapshot")) != getattr(self, f"{field}_sha256"):
@@ -508,7 +508,7 @@ class Settings(BaseModel):
     subscriptions: list[str] = Field(default_factory=list)
     workers: int = Field(default=3, ge=1, le=16)
     criteria_file: Path | None = None
-    evidence_dir: Path = Path(".wasm-agent/evidence")
+    evidence_dir: Path = Path(".easm-agent/evidence")
     foundry_profile: Literal["agents_v1", "classic_v1"] = "agents_v1"
     projects: list[ProjectSettings] = Field(default_factory=list)
     manual_agents: Path | None = None
@@ -581,7 +581,7 @@ def load_criteria(settings: Settings | None = None) -> dict[str, Any]:
     elif CRITERIA_FILE.is_file():
         path = CRITERIA_FILE
     else:
-        path = Path(sysconfig.get_path("data")) / "share" / "wasm-agent" / "criteria.yaml"
+        path = Path(sysconfig.get_path("data")) / "share" / "easm-agent" / "criteria.yaml"
     criteria = load_yaml(path)
     if settings is None:
         return criteria
